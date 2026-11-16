@@ -13,14 +13,17 @@ export interface MatchSummary {
   kills: number; deaths: number; assists: number; cs: number;
   durationSec: number; queue: string; playedAt: string; // ISO date
 }
+/** What a player ran in one game: final items (empty slots dropped, at most 6), the trinket, the two summoner spells, and the rune choices Riot reports (keystone and secondary tree). */
+export interface Loadout { items: number[]; trinket: number | null; spells: number[]; keystone: number | null; secondaryStyle: number | null }
 export interface Participant {
-  name: string; champion: string; team: "blue" | "red"; kills: number; deaths: number; assists: number;
+  name: string; loadout: Loadout; champion: string; team: "blue" | "red"; kills: number; deaths: number; assists: number;
   cs: number; damage: number; gold: number; vision: number; isYou?: boolean;
 }
 export interface MatchDetail { id: string; blueWon: boolean; participants: Participant[] }
 export interface MatchPage { items: MatchSummary[]; nextCursor: number | null }
 
-export interface StatLine { name: string; games: number; wins: number }
+/** One row of a stats table. `id` is the game id of what the row is (item id, keystone id, or champion id for matchups) so the UI can show its icon. */
+export interface StatLine { name: string; games: number; wins: number; id?: number | string }
 export interface ChampionSummary { id: string; name: string; roles: Role[]; tags: string[]; games: number; wins: number; bans: number }
 export interface ChampionList { patch: string; totalGames: number; champions: ChampionSummary[] }
 export interface ChampionDetail extends ChampionSummary {
@@ -36,7 +39,7 @@ export interface SpellPairStat { ids: [number, number]; games: number; wins: num
 /** Skill priority ("max order", e.g. Q, E, W: the order the three basic skills reach rank 5) plus the most common first 9 skill points among games with that priority. */
 export interface SkillOrderStat { max: string[]; levels: string[]; games: number; wins: number }
 export interface PathItem { id: number; name: string; count: number }
-/** A sequence of items as bought: starting items (any order), or the first three finished items in order. */
+/** A sequence of items as bought: starting items (any order), or the three core items in their usual build order. */
 export interface ItemPathStat { items: PathItem[]; games: number; wins: number }
 /**
  * What strong collected games used for one champion (optionally in one role). Items are the FINAL inventories at game end:
@@ -47,6 +50,8 @@ export interface ChampionBuild {
   runePages: RunePageStat[]; spells: SpellPairStat | null; itemBlocks: BuildItemBlock[];
   /** Games of this champion that have timeline data (only a share of collected games do). The three fields below come from those. */
   timelineGames: number; skillOrder: SkillOrderStat | null; startItems: ItemPathStat | null; corePath: ItemPathStat | null;
+  /** Fewest games that must have kept the same three core items before corePath is shown (it is null below that). */
+  minPathGames: number;
 }
 
 export interface MasteryEntry { champion: string; name: string; level: number; points: number }
@@ -76,7 +81,7 @@ export interface RecapMetric {
 export interface PostGameRecap {
   matchId: string; queue: string; win: boolean; durationSec: number; playedAt: string;
   champion: string; championName: string; role: Role | null; kills: number; deaths: number; assists: number;
-  killParticipation: number; damageShare: number; metrics: RecapMetric[];
+  killParticipation: number; damageShare: number; loadout: Loadout; metrics: RecapMetric[];
   baseline: { label: string; games: number } | null; personal: { games: number } | null;
 }
 

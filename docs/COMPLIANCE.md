@@ -9,6 +9,6 @@ This is an engineering checklist, not legal advice. Review current Riot Develope
 | 3 | No gameplay automation or input injection | None. Auto-import is OFF by default and, when on, only writes the "Apex: <champion>" rune page and your summoner spells. Auto-accept and auto-pick are not built. Re-check each against current policy before enabling. |
 | 4 | No harassment or doxxing | Notes (later) stay local. No smurf score yet; it must be labelled an estimate. |
 | 5 | Monetization rules | Decision pending (Phase 0). |
-| 6 | Data Dragon asset rules | Icons and splash art load from Riot's CDN at runtime, are not bundled or redistributed, and fall back to initials offline. |
+| 6 | Data Dragon asset rules | Icons (champions, items, summoner spells, runes, stat shards, abilities) and splash art load from Riot's CDN at runtime through one component (`GameIcon`), are not bundled or redistributed, and fall back to names/initials offline. Role glyphs are our own original drawings (`RoleIcon`), not Riot artwork. Rank emblems are our own drawings (`TierIcon`), not Riot's; Riot's emblems would need an asset-policy check first. |
 
 Other: the app reads champ select data from the local League client. It writes only your summoner spells in champ select (PATCH my-selection) and rune pages named "Apex: <champion>" (explicit button, or opt-in auto-import which is off by default). The Rust command refuses any other endpoint and any method except GET/POST/PUT; it never touches your own pages. The overlay never intercepts game input (click-through).

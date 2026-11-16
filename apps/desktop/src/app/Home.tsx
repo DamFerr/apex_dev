@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { TierIcon } from "../components/TierIcon";
 import { useChampName } from "../lib/ddragon";
 import { Link } from "react-router-dom";
 import { useUi } from "../lib/store";
@@ -29,7 +30,7 @@ export function Home() {
     <div className="mb-6"><SearchBox /></div>
     <div className="grid grid-cols-3 gap-4">
       <div className="glass rounded-lg p-5 flex items-center gap-4">
-        {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} />
+        {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} /><TierIcon tier={r.tier} division={r.division} size={44} />
           <div><div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
             <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L{sum.data?.platform ? ` · ${sum.data.platform.toUpperCase()}` : ""}</div></div></>
           : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : sum.isError ? <div className="text-sm text-bad">{(sum.error as Error).message}</div> : <Skeleton className="h-20 w-full" />}

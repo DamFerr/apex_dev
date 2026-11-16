@@ -7,12 +7,16 @@ const CHAMPS: [number, string, string][] = [[103, "Ahri", "Mage"], [61, "Orianna
   [238, "Zed", "Assassin"], [893, "Aurora", "Mage"]];
 export const CHAMP_COUNT = CHAMPS.length;
 
-/** Fakes Riot's Data Dragon so tests never depend on the internet. Call BEFORE page.goto. Icons 404 and fall back to initials. */
+/** Fakes Riot's Data Dragon so tests never depend on the internet. Call BEFORE page.goto. Image files 404 on purpose, so icons fall back to their names/initials (which is what the tests look at). */
 export async function fakeDataDragon(page: Page) {
   const data = Object.fromEntries(CHAMPS.map(([key, id, tag]) => [id, { id, key: String(key), name: id, tags: [tag] }]));
   await page.route("https://ddragon.leagueoflegends.com/**", (r) => {
     const u = r.request().url();
     if (u.endsWith("versions.json")) return r.fulfill({ json: ["16.22.1"] });
+    if (u.endsWith("item.json")) return r.fulfill({ json: { data: { 3157: { name: "Zhonya's Hourglass" }, 3020: { name: "Sorcerer's Shoes" }, 3089: { name: "Rabadon's Deathcap" }, 1055: { name: "Doran's Blade" }, 3100: { name: "Lich Bane" }, 3340: { name: "Stealth Ward" } } } });
+    if (u.endsWith("summoner.json")) return r.fulfill({ json: { data: { SummonerFlash: { key: "4", name: "Flash", image: { full: "SummonerFlash.png" } }, SummonerDot: { key: "14", name: "Ignite", image: { full: "SummonerDot.png" } } } } });
+    const ab = u.match(/\/data\/en_US\/champion\/(\w+)\.json$/);   // one champion's abilities
+    if (ab) return r.fulfill({ json: { data: { [ab[1]]: { passive: { name: `${ab[1]} passive`, image: { full: "P.png" } }, spells: ["Q", "W", "E", "R"].map((k) => ({ name: `${ab[1]} ${k}`, image: { full: `${k}.png` } })) } } } });
     if (u.endsWith("champion.json")) return r.fulfill({ json: { data } });
     if (u.includes("runesReforged")) return r.fulfill({ json: [] });
     return r.fulfill({ status: 404, body: "" });

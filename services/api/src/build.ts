@@ -5,6 +5,10 @@ export interface BuildRow { perks: string | null; items: string; spell1: number 
 export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; boots?: boolean }
 
 const FLASH = 4;
+/** A build-order path needs at least this many games that kept the same core items; below it no path is shown (an arbitrary pick of 1-2 games is worse than nothing). */
+export const MIN_PATH_GAMES = 10;
+/** The one rule for a "finished" item (no boots, nothing it upgrades into, costs 2000+). Core items, situational items and the core path all use it, so they always agree. */
+export const isFinished = (it: ItemMeta | undefined): it is ItemMeta => !!it && !it.boots && !it.hasUpgrade && it.total >= 2000;
 /** How many rune pages, boots, core items and situational items are returned. */
 export const LIMITS = { runePages: 3, boots: 2, core: 3, situational: 5 } as const;
 
@@ -71,7 +75,7 @@ export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>): Buil
     let ids: number[]; try { ids = JSON.parse(r.items) as number[]; } catch { continue; }
     for (const id of new Set(ids)) { // a duplicate (two copies) counts once per game
       const it = items.get(id); if (!it || it.hasUpgrade) continue;
-      if (it.boots) bump(boots, String(id), r.win); else if (it.total >= 2000) bump(done, String(id), r.win);
+      if (it.boots) bump(boots, String(id), r.win); else if (isFinished(it)) bump(done, String(id), r.win);
     }
   }
   const take = (m: Map<string, Tally>, from: number, to: number): BuildItem[] => ranked(m).slice(from, to).map(([id, t]) => ({ id: Number(id), name: items.get(Number(id))!.name, games: t.games, wins: t.wins }));
@@ -114,19 +118,34 @@ export function startItems(rows: BuildRow[], items: Map<number, ItemMeta>): Item
   return { items: [...count].map(([id, c]): PathItem => ({ id, name: items.get(id)!.name, count: c })), games: top[1].games, wins: top[1].wins };
 }
 
-/** Most common first three finished items in the order they were bought (boots excluded). Only games that finished three items count. */
-export function corePath(rows: BuildRow[], items: Map<number, ItemMeta>): ItemPathStat | null {
-  const groups = new Map<string, Tally>();
+/**
+ * The three core items in their usual build order, from games with a timeline.
+ * - Only items the player KEPT count (they are in the final inventory), so sold, swapped or misclicked purchases cannot decide the path.
+ * - "Finished" is the shared isFinished rule, the same one the Core items block uses.
+ * - The three items are the most kept finished items among these games (so they match the Core items block); they are then ordered by the
+ *   average position at which they were bought, over the games that kept all three. Order is not part of the grouping, so a few
+ *   players swapping two items do not split the sample.
+ * - games/wins are the games that kept all three. Under `minGames` the result is null: "not enough games", never an arbitrary pick.
+ */
+export function corePath(rows: BuildRow[], items: Map<number, ItemMeta>, minGames: number = MIN_PATH_GAMES): ItemPathStat | null {
+  const seqs: { seq: number[]; win: number }[] = [], kept = new Map<number, number>();
   for (const r of rows) {
-    const seen: number[] = [];
-    for (const id of json<number[]>(r.buys) ?? []) { const it = items.get(id); if (it && !it.boots && !it.hasUpgrade && it.total >= 2000 && !seen.includes(id)) seen.push(id); }
-    if (seen.length >= 3) bump(groups, seen.slice(0, 3).join(","), r.win);
+    const buys = json<number[]>(r.buys), final = json<number[]>(r.items); if (!buys || !final) continue;
+    const owned = new Set(final), seq: number[] = [];
+    for (const id of buys) if (owned.has(id) && isFinished(items.get(id)) && !seq.includes(id)) seq.push(id);
+    if (!seq.length) continue;
+    seqs.push({ seq, win: r.win }); for (const id of seq) kept.set(id, (kept.get(id) ?? 0) + 1);
   }
-  const top = ranked(groups)[0]; if (!top) return null;
-  return { items: top[0].split(",").map(Number).map((id) => ({ id, name: items.get(id)!.name, count: 1 })), games: top[1].games, wins: top[1].wins };
+  const core = [...kept].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 3).map(([id]) => id);
+  if (core.length < 3) return null;
+  const sample = seqs.filter((s) => core.every((id) => s.seq.includes(id)));
+  if (sample.length < Math.max(1, minGames)) return null;
+  const avg = (id: number) => sample.reduce((t, s) => t + s.seq.indexOf(id), 0) / sample.length;
+  const order = [...core].sort((a, b) => avg(a) - avg(b) || a - b);
+  return { items: order.map((id) => ({ id, name: items.get(id)!.name, count: 1 })), games: sample.length, wins: sample.reduce((t, s) => t + s.win, 0) };
 }
 
 export function computeBuild(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>): ChampionBuild {
   return { champion, role, games: rows.length, runePages: runePages(rows), spells: spellPair(rows), itemBlocks: itemBlocks(rows, items),
-    timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: corePath(rows, items) };
+    timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: corePath(rows, items), minPathGames: MIN_PATH_GAMES };
 }

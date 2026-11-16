@@ -91,6 +91,8 @@ describe("champion statistics API", () => {
     expect(d.builds.map((b: { name: string }) => b.name)).not.toContain("Doran's Blade"); // starter items are filtered out
     expect(d.runes.map((x: { name: string }) => x.name)).toContain("Press the Attack");
     expect(d.matchups.length).toBeGreaterThan(0);
+    expect(d.builds.find((b: { name: string }) => b.name === "Zhonya's Hourglass").id).toBe(3157);          // ids let the UI draw icons
+    expect(typeof d.runes[0].id).toBe("number"); expect(typeof d.matchups[0].id).toBe("string");
   });
   it("returns rune pages, spells and items of collected games for a champion, optionally per role", async () => {
     const b = (await get("/v1/champions/Ahri/build?role=TOP")).json();

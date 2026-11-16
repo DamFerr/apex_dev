@@ -46,6 +46,6 @@ test("shows the recommended build (runes, spells, items) with sample sizes on th
   await expect(panel.getByLabel("Max order Q then E then W")).toBeVisible();
   await expect(panel.getByText("First 9 levels: Q W E Q Q R Q E Q")).toBeVisible();
   await expect(panel.getByText(/^Starting items ·/)).toBeVisible();
-  await expect(panel.getByText(/^First three finished items, in order ·/)).toBeVisible();
+  await expect(panel.getByText(/^Core items, usual build order ·/)).toBeVisible();
   await expect(panel.getByText(/collected games/).last()).toContainText("40");
 });

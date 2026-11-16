@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { queueName, toMastery, toMatchDetail, toMatchSummary, toRank } from "./mapping";
+import { queueName, toLoadout, toMastery, toMatchDetail, toMatchSummary, toRank } from "./mapping";
 import { matchFixture, participant } from "./testkit";
 
 describe("mapping", () => {
@@ -67,5 +67,23 @@ describe("toRecap", () => {
   it("computes per-minute numbers and guards against zero deaths", () => {
     const p = participant(0, { kills: 4, assists: 6, deaths: 0, totalMinionsKilled: 200, neutralMinionsKilled: 10, totalDamageDealtToChampions: 21000, goldEarned: 15000 });
     expect(perGame(p, 1800)).toEqual({ kda: 10, cs: 7, damage: 700, gold: 500 });
+  });
+});
+
+describe("toLoadout", () => {
+  it("keeps the six item slots without empty ones, the trinket, the spells and the keystone and secondary tree", () => {
+    const l = toLoadout(participant(0, { item0: 3157, item1: 0, item2: 3089, item3: 0, item4: 0, item5: 3100, item6: 3340 }));
+    expect(l).toEqual({ items: [3157, 3089, 3100], trinket: 3340, spells: [4, 14], keystone: 8005, secondaryStyle: 8200 });
+  });
+  it("uses null for a missing trinket, keystone or secondary tree and tolerates missing fields", () => {
+    const l = toLoadout(participant(0, { item6: 0, perks: undefined, summoner1Id: undefined }));
+    expect(l).toMatchObject({ trinket: null, keystone: null, secondaryStyle: null, spells: [14] });
+    expect(toLoadout(participant(0, { perks: { styles: [{ selections: [] }] } })).keystone).toBeNull();
+  });
+  it("is part of every player of the match detail and of the recap", () => {
+    const d = toMatchDetail(matchFixture("EUW1_9"), "p1");
+    expect(d.participants).toHaveLength(10);
+    expect(d.participants[1].loadout).toMatchObject({ trinket: 3340, keystone: 8112, secondaryStyle: 8300, spells: [4, 14] });
+    expect(d.participants.every((p) => p.loadout.items.length > 0)).toBe(true);
   });
 });

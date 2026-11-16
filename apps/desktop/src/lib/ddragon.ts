@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 /**
  * Data Dragon assets are loaded from Riot's CDN at runtime and never redistributed or bundled
@@ -33,7 +34,7 @@ export function fetchDdChampions(): Promise<DdChampion[]> {
 }
 export const useDdChampions = () => useQuery({ queryKey: ["ddragon-champions"], queryFn: fetchDdChampions, staleTime: Infinity, retry: 1 });
 
-import type { RuneStyle } from "@apex/lcu-core";
+import { parseSummonerSpells, type RuneStyle, type SpellIcon } from "@apex/lcu-core";
 let runeCache: Promise<RuneStyle[]> | null = null;
 export function fetchRunes(): Promise<RuneStyle[]> {
   runeCache ??= (async () => {
@@ -57,3 +58,56 @@ export function useChampName(): (id: string) => string {
 }
 
 export const useRunes = () => useQuery({ queryKey: ["ddragon-runes"], queryFn: fetchRunes, staleTime: Infinity, retry: 1 });
+
+/** Summoner spell icon file (summoner.json `image.full`) and champion ability icon files (spell images, or passive images for the passive). */
+export const spellIconUrl = (v: string, image: string) => `${BASE}/cdn/${v}/img/spell/${image}`;
+export const passiveIconUrl = (v: string, image: string) => `${BASE}/cdn/${v}/img/passive/${image}`;
+
+/** Numeric spell id (as the League client uses it) to name and icon file, from Data Dragon's summoner.json. */
+export const useSummonerSpells = () => useQuery({
+  queryKey: ["ddragon-summoner"], staleTime: Infinity, retry: 1,
+  queryFn: async (): Promise<Map<number, SpellIcon>> => {
+    const vs = await fetch(`${BASE}/api/versions.json`); if (!vs.ok) throw new Error("Data Dragon unavailable");
+    const v = (await vs.json())[0] as string;
+    const r = await fetch(`${BASE}/cdn/${v}/data/en_US/summoner.json`); if (!r.ok) throw new Error("Data Dragon unavailable");
+    return parseSummonerSpells(await r.json());
+  },
+});
+
+export type AbilitySlot = "P" | "Q" | "W" | "E" | "R";
+export interface AbilityIcon { name: string; image: string; passive: boolean }
+/** The five abilities of one champion (passive + QWER) from its Data Dragon champion file. Loaded per champion, only when an ability icon is shown. */
+export const useChampionAbilities = (champion: string, enabled = true) => useQuery({
+  queryKey: ["ddragon-abilities", champion], staleTime: Infinity, retry: 1, enabled,
+  queryFn: async (): Promise<Record<AbilitySlot, AbilityIcon>> => {
+    const vs = await fetch(`${BASE}/api/versions.json`); if (!vs.ok) throw new Error("Data Dragon unavailable");
+    const v = (await vs.json())[0] as string;
+    const r = await fetch(`${BASE}/cdn/${v}/data/en_US/champion/${encodeURIComponent(champion)}.json`); if (!r.ok) throw new Error("Data Dragon unavailable");
+    const c = (await r.json()).data?.[champion] as { passive: { name: string; image: { full: string } }; spells: { name: string; image: { full: string } }[] } | undefined;
+    if (!c || c.spells?.length < 4) throw new Error("Champion data incomplete");
+    const sp = (i: number): AbilityIcon => ({ name: c.spells[i].name, image: c.spells[i].image.full, passive: false });
+    return { P: { name: c.passive.name, image: c.passive.image.full, passive: true }, Q: sp(0), W: sp(1), E: sp(2), R: sp(3) };
+  },
+});
+
+/** Item id to name, from Data Dragon's item.json (used where the backend sends only ids, like the match scoreboard). */
+export const useItemNames = () => useQuery({
+  queryKey: ["ddragon-items"], staleTime: Infinity, retry: 1,
+  queryFn: async (): Promise<Map<number, string>> => {
+    const vs = await fetch(`${BASE}/api/versions.json`); if (!vs.ok) throw new Error("Data Dragon unavailable");
+    const v = (await vs.json())[0] as string;
+    const r = await fetch(`${BASE}/cdn/${v}/data/en_US/item.json`); if (!r.ok) throw new Error("Data Dragon unavailable");
+    const data = (await r.json()).data as Record<string, { name: string }>;
+    return new Map(Object.entries(data).map(([id, i]) => [Number(id), i.name] as const));
+  },
+});
+
+/** Rune or tree id to name and icon path, from runesReforged.json (trees included). Empty until loaded. */
+export function useRuneLookup(): Map<number, { name: string; icon?: string }> {
+  const styles = useRunes().data;
+  return useMemo(() => {
+    const m = new Map<number, { name: string; icon?: string }>();
+    for (const st of styles ?? []) { m.set(st.id, { name: st.name, icon: st.icon }); for (const sl of st.slots) for (const r of sl.runes) m.set(r.id, { name: r.name, icon: r.icon }); }
+    return m;
+  }, [styles]);
+}

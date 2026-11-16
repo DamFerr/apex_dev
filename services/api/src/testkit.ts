@@ -9,7 +9,7 @@ import { extractTimeline } from "./timeline";
 export const memoryCache = (): Cache => makeCache(new DatabaseSync(":memory:"));
 export const participant = (i: number, over: Partial<RiotParticipant> = {}): RiotParticipant => ({ puuid: `p${i}`, riotIdGameName: `Player${i}`, championName: ["Ahri", "Jinx", "Thresh", "Garen", "LeeSin", "Lux", "Zed", "Ashe", "Ornn", "Yasuo"][i], teamId: i < 5 ? 100 : 200,
   teamPosition: ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"][i % 5], win: i < 5, kills: i, deaths: 2, assists: 3, totalMinionsKilled: 100 + i, neutralMinionsKilled: 10, totalDamageDealtToChampions: 10000 + i, goldEarned: 9000, visionScore: 20,
-  item0: 3157, item1: 3020, item2: i % 2 ? 3089 : 3157, item3: 1055, item4: 0, item5: 0, item6: 3340, summoner1Id: 4, summoner2Id: 14,
+  item0: 3157, item1: 3020, item2: i % 2 ? 3089 : 3157, item3: 1055, item4: 3100, item5: 3089, item6: 3340, summoner1Id: 4, summoner2Id: 14,
   perks: { styles: [{ style: i % 2 ? 8100 : 8000, selections: [{ perk: i % 2 ? 8112 : 8005 }, { perk: 8126 }, { perk: 8139 }, { perk: 8135 }] }, { style: i % 2 ? 8300 : 8200, selections: [{ perk: 8304 }, { perk: 8347 }] }], statPerks: { offense: 5008, flex: 5008, defense: 5011 } }, ...over });
 export const matchFixture = (id: string, over: Partial<RiotMatch["info"]> = {}, blueWin = true): RiotMatch => ({ metadata: { matchId: id },
   info: { gameDuration: 1800, gameCreation: 1_700_000_000_000, gameEndTimestamp: 1_700_001_800_000, queueId: 420, gameVersion: "16.22.100.1",

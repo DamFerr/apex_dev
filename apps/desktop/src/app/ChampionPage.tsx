@@ -4,6 +4,8 @@ import { ChampIcon } from "../components/ChampIcon";
 import { FilterBar } from "../components/FilterBar";
 import { StatRows, pct, rate } from "../components/StatRows";
 import { Skeleton, StatCard } from "../components/ui";
+import { GameIcon } from "../components/GameIcon";
+import { RoleIcon } from "../components/RoleIcon";
 import { BuildPanel } from "./BuildPanel";
 import { useChampion } from "../lib/api";
 import { splashUrl } from "../lib/ddragon";
@@ -25,7 +27,7 @@ export function ChampionPage() {
       <div className="absolute bottom-4 left-5 flex items-center gap-4">
         <ChampIcon id={c.id} name={c.name} size={64} />
         <div><h1 className="font-display text-3xl font-semibold">{c.name}</h1>
-          <div className="text-xs text-muted">{c.roles.join(" / ")} · {c.tags.join(", ")}</div></div>
+          <div className="text-xs text-muted flex items-center gap-2">{c.roles.map((r) => <span key={r} className="inline-flex items-center gap-1"><RoleIcon role={r} size={14} decorative />{r}</span>)}<span>· {c.tags.join(", ")}</span></div></div>
       </div>
     </div>
     <div className="grid grid-cols-4 gap-4">
@@ -36,12 +38,12 @@ export function ChampionPage() {
     </div>
     {c.skillOrder.length > 0 && <div className="glass rounded-lg p-5"><div className="text-sm font-medium mb-2">Skill order (max priority)</div>
       <div className="flex items-center gap-2">{c.skillOrder.map((k, i) => <span key={k} className="flex items-center gap-2">
-        {i > 0 && <span className="text-muted">›</span>}<span className="size-9 grid place-items-center rounded-md bg-accent/20 border border-accent/40 font-display font-semibold">{k}</span></span>)}</div></div>}
+        {i > 0 && <span className="text-muted" aria-hidden>›</span>}<GameIcon kind="ability" champion={c.id} slot={k as "Q" | "W" | "E"} size={36} /></span>)}</div></div>}
     <BuildPanel id={c.id} roles={c.roles} />
     <div className="grid grid-cols-2 gap-4">
-      <div className="glass rounded-lg p-5"><StatRows title="Items" rows={c.builds} /></div>
-      <div className="glass rounded-lg p-5"><StatRows title="Keystone runes" rows={c.runes} /></div>
+      <div className="glass rounded-lg p-5"><StatRows title="Items" rows={c.builds} icon={(r) => typeof r.id === "number" ? <GameIcon kind="item" id={r.id} name={r.name} size={26} /> : null} /></div>
+      <div className="glass rounded-lg p-5"><StatRows title="Keystone runes" rows={c.runes} icon={(r) => typeof r.id === "number" ? <GameIcon kind="rune" id={r.id} size={26} /> : null} /></div>
     </div>
-    <div className="glass rounded-lg p-5"><StatRows title="Matchups (best to worst)" rows={matchups} /></div>
+    <div className="glass rounded-lg p-5"><StatRows title="Matchups (best to worst)" rows={matchups} icon={(r) => typeof r.id === "string" ? <ChampIcon id={r.id} name={r.name} size={26} /> : null} /></div>
   </div>);
 }

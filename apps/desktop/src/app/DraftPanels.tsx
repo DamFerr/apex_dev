@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { RoleIcon } from "../components/RoleIcon";
 import type { BanSuggestion, Evaluation, Factor, Recommendation } from "@apex/draft-engine";
 import { ChampIcon } from "../components/ChampIcon";
 import { AnimatedNumber, spring } from "../components/ui";
@@ -36,7 +37,7 @@ export function WinProbability({ ev, source, games }: { ev: Evaluation; source: 
 export function Recommendations({ recs, role, source }: { recs: Recommendation[]; role: string; source: string }) {
   return (
     <section className="glass rounded-lg p-4" aria-label="Pick recommendations">
-      <div className="font-display text-lg font-semibold mb-3">Suggested picks <span className="text-xs text-muted font-normal">({role} · {source})</span></div>
+      <div className="font-display text-lg font-semibold mb-3">Suggested picks <span className="text-xs text-muted font-normal inline-flex items-center gap-1.5 align-middle">(<RoleIcon role={role} size={14} decorative />{role} · {source})</span></div>
       <ul className="space-y-2">
         {recs.map((r, i) => (
           <motion.li key={r.champion} layout transition={spring} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 h-11">
@@ -55,7 +56,7 @@ export function Recommendations({ recs, role, source }: { recs: Recommendation[]
 export function BanSuggestions({ bans, role, source, pool }: { bans: BanSuggestion[]; role: string; source: string; pool: string }) {
   return (
     <section className="glass rounded-lg p-4 border border-bad/40" aria-label="Ban suggestions">
-      <div className="font-display text-lg font-semibold mb-3">Your ban turn <span className="text-xs text-muted font-normal">({role} · {pool} · {source})</span></div>
+      <div className="font-display text-lg font-semibold mb-3">Your ban turn <span className="text-xs text-muted font-normal inline-flex items-center gap-1.5 align-middle">(<RoleIcon role={role} size={14} decorative />{role} · {pool} · {source})</span></div>
       <ul className="space-y-2">
         {bans.map((b, i) => (
           <motion.li key={b.champion} layout transition={spring} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 h-11">

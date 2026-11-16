@@ -8,6 +8,15 @@ export const RUNE_PAGE_PREFIX = "Apex: ";
 export const SHARDS = [5008, 5008, 5011];
 /** Stat shard ids (not part of Data Dragon's rune trees) and their in-game names. */
 export const SHARD_NAMES: Record<number, string> = { 5001: "Scaling Health", 5002: "Armor", 5003: "Magic Resist", 5005: "Attack Speed", 5007: "Ability Haste", 5008: "Adaptive Force", 5010: "Move Speed", 5011: "Health", 5013: "Tenacity and Slow Resist" };
+/**
+ * Stat shard icon files under Data Dragon's `cdn/img/` (shard ids are not in runesReforged.json). Keyed like SHARD_NAMES.
+ * If a file is ever missing the UI falls back to the shard's name, so a wrong entry degrades to text and never breaks a screen.
+ */
+export const SHARD_ICONS: Record<number, string> = {
+  5001: "perk-images/StatMods/StatModsHealthScalingIcon.png", 5002: "perk-images/StatMods/StatModsArmorIcon.png", 5003: "perk-images/StatMods/StatModsMagicResIcon.png",
+  5005: "perk-images/StatMods/StatModsAttackSpeedIcon.png", 5007: "perk-images/StatMods/StatModsCDRScalingIcon.png", 5008: "perk-images/StatMods/StatModsAdaptiveForceIcon.png",
+  5010: "perk-images/StatMods/StatModsMovementSpeedIcon.png", 5011: "perk-images/StatMods/StatModsHealthPlusIcon.png", 5013: "perk-images/StatMods/StatModsTenacityIcon.png",
+};
 const PRIMARY_BY_TAG: Record<string, string> = { Mage: "Sorcery", Marksman: "Precision", Assassin: "Domination", Fighter: "Precision", Tank: "Resolve", Support: "Resolve" };
 
 /**

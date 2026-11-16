@@ -1,4 +1,8 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { TierIcon } from "../components/TierIcon";
+import { RoleIcon } from "../components/RoleIcon";
+import { ChampIcon } from "../components/ChampIcon";
+import { LoadoutIcons } from "../components/LoadoutIcons";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -21,18 +25,20 @@ function Detail({ id, riotId }: { id: string; riotId: string }) {
   if (!q.data) return <div className="p-4 space-y-2"><Skeleton className="h-6" /><Skeleton className="h-6" /><Skeleton className="h-6" /></div>;
   const maxDmg = Math.max(...q.data.participants.map((p) => p.damage));
   return (
-    <div className="p-4 pt-1 grid grid-cols-2 gap-6">
+    <div className="p-4 pt-1 grid grid-cols-1 gap-5">
       {(["blue", "red"] as const).map((team) => (
-        <table key={team} className="w-full text-xs">
+        <table key={team} className="w-full text-xs table-fixed">
+          <colgroup><col style={{ width: 210 }} /><col style={{ width: 320 }} /><col style={{ width: 70 }} /><col style={{ width: 50 }} /><col /></colgroup>
           <caption className={`text-left font-medium pb-2 ${(team === "blue") === q.data.blueWon ? "text-good" : "text-bad"}`}>
             {team === "blue" ? "Blue team" : "Red team"} · {(team === "blue") === q.data.blueWon ? "Victory" : "Defeat"}</caption>
-          <thead className="text-muted"><tr><th className="text-left font-normal">Player</th><th className="font-normal">KDA</th><th className="font-normal">CS</th><th className="text-left font-normal pl-3">Damage</th></tr></thead>
+          <thead className="text-muted"><tr><th className="text-left font-normal">Player</th><th className="text-left font-normal">Loadout</th><th className="font-normal">KDA</th><th className="font-normal">CS</th><th className="text-left font-normal pl-3">Damage</th></tr></thead>
           <tbody>{q.data.participants.filter((p) => p.team === team).map((p) => (
             <tr key={p.name} className={`h-8 ${p.isYou ? "text-gold" : ""}`}>
-              <td>{p.name} <span className="text-muted">{champName(p.champion)}</span></td>
+              <td><span className="inline-flex items-center gap-2"><ChampIcon id={p.champion} name={champName(p.champion)} size={24} /><span>{p.name} <span className="text-muted">{champName(p.champion)}</span></span></span></td>
+              <td className="pr-3"><LoadoutIcons loadout={p.loadout} size={22} /></td>
               <td className="text-center tabular-nums">{p.kills}/{p.deaths}/{p.assists}</td>
               <td className="text-center tabular-nums">{p.cs}</td>
-              <td className="pl-3 w-24"><div className="h-1.5 rounded-full bg-line/10"><motion.div className="h-full rounded-full bg-accent origin-left"
+              <td className="pl-3"><div className="h-1.5 rounded-full bg-line/10"><motion.div className="h-full rounded-full bg-accent origin-left"
                 initial={{ scaleX: 0 }} animate={{ scaleX: p.damage / maxDmg }} style={{ width: "100%" }} /></div></td>
             </tr>))}</tbody>
         </table>))}
@@ -47,7 +53,7 @@ function MatchRow({ m, open, onToggle, riotId }: { m: MatchSummary; open: boolea
       <button aria-expanded={open} onClick={onToggle}
         className={`focus-ring w-full h-14 px-4 flex items-center gap-4 border-l-2 text-left ${m.win ? "border-l-good" : "border-l-bad"}`}>
         <span className="w-28 font-medium truncate" title={champName(m.champion)}>{champName(m.champion)}</span>
-        <span className="text-xs text-muted w-16">{m.role ?? "—"}</span>
+        <span className="w-16 grid place-items-start text-muted"><RoleIcon role={m.role} size={20} /></span>
         <span className="tabular-nums text-sm w-24">{m.kills}/{m.deaths}/{m.assists}</span>
         <span className="text-xs text-muted flex-1">{m.queue} · {Math.round(m.durationSec / 60)} min · {m.cs} CS · {new Date(m.playedAt).toLocaleDateString()}</span>
         <span className={`text-sm font-medium ${m.win ? "text-good" : "text-bad"}`}>{m.win ? "Win" : "Loss"}</span>
@@ -99,7 +105,7 @@ export function Profile() {
     </div>
     {sum.isError ? <div className="glass rounded-lg p-8 text-sm text-bad">{(sum.error as Error).message}</div> : <>
       <div className="glass rounded-lg p-5 flex items-center gap-5 max-w-md">
-        {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} /><div>
+        {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} /><TierIcon tier={r.tier} division={r.division} size={44} /><div>
           <div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
           <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L · Level {sum.data!.level}{sum.data!.platform ? ` · ${sum.data!.platform.toUpperCase()}` : ""}</div></div></> : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : <Skeleton className="h-20 w-full" />}
       </div>

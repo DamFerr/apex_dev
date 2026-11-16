@@ -26,3 +26,16 @@ export function placeFlash(pair: [number, number], slot: FlashSlot): [number, nu
   const other = a === SPELLS.Flash ? b : a;
   return slot === "D" ? [SPELLS.Flash, other] : [other, SPELLS.Flash];
 }
+
+/** One summoner spell from Data Dragon's summoner.json: the client's numeric id, display name and icon file (img/spell/<image>). */
+export interface SpellIcon { id: number; name: string; image: string }
+/** summoner.json -> numeric spell id (the `key` field) to name and icon file. Entries that are malformed are skipped. Pure, so it is unit tested. */
+export function parseSummonerSpells(json: unknown): Map<number, SpellIcon> {
+  const out = new Map<number, SpellIcon>();
+  const data = (json as { data?: Record<string, { key?: string; name?: string; image?: { full?: string } }> } | null)?.data ?? {};
+  for (const s of Object.values(data)) {
+    const id = Number(s?.key); if (!Number.isInteger(id) || !s.name || !s.image?.full) continue;
+    out.set(id, { id, name: s.name, image: s.image.full });
+  }
+  return out;
+}

@@ -1,4 +1,5 @@
 import { buildTierList, GRADE_CUTS, minListedGames, type Grade } from "@apex/stats-core";
+import { RoleIcon } from "../components/RoleIcon";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -36,7 +37,7 @@ export function TierList() {
     </p>
     <FilterBar />
     <div className="flex flex-wrap items-center gap-2 mb-4" role="group" aria-label="Role">
-      {ROLES.map((r) => <Chip key={r} active={role === r} onClick={() => setRole(r)}>{roleName(r)}</Chip>)}
+      {ROLES.map((r) => <Chip key={r} active={role === r} onClick={() => setRole(r)}><span className="inline-flex items-center gap-1.5"><RoleIcon role={r} size={16} decorative />{roleName(r)}</span></Chip>)}
     </div>
     <div className="glass rounded-lg p-2 divide-y divide-line/5">
       {isError && <div role="alert" className="p-8 text-sm text-bad text-center">{(error as Error).message}</div>}

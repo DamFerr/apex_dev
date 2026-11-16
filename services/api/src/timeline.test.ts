@@ -56,9 +56,35 @@ describe("starting items and core path", () => {
     expect(s.games).toBe(2); expect(s.wins).toBe(1);
     expect(s.items).toEqual([{ id: 1055, name: "Doran's Blade", count: 1 }, { id: 2003, name: "Health Potion", count: 2 }]);
   });
-  it("core path: first three finished items in buying order, no boots, components or repeats", () => {
-    const c = corePath([row([], [3020, 1055, 3157, 3157, 3089, 3100]), row([], [3157, 3089, 3100, 3020]), row([], [3089, 3157, 3100])], items)!;
-    expect(c.items.map((i) => i.id)).toEqual([3157, 3089, 3100]); expect(c.games).toBe(2);
+  // A row: final inventory (what the player kept) and purchases after the start, in order.
+  const game = (buys: number[], final: number[], win = 1) => ({ ...row([], buys, win), items: JSON.stringify(final) });
+  const many = (n: number, make: (i: number) => ReturnType<typeof game>) => Array.from({ length: n }, (_, i) => make(i));
+  const meta = new Map<number, ItemMeta>([...items, [6653, { name: "Liandry's Torment", total: 3000, hasUpgrade: false }], [3020, { name: "Sorcerer's Shoes", total: 1100, hasUpgrade: false, boots: true }]]);
+
+  it("core path: the three core items in build order, no boots, components or repeats", () => {
+    const c = corePath(many(12, () => game([3020, 1055, 3157, 3157, 3089, 3100], [3157, 3089, 3100, 3020])), meta)!;
+    expect(c.items.map((i) => i.id)).toEqual([3157, 3089, 3100]); expect(c.games).toBe(12);
   });
-  it("core path ignores games that finished fewer than three items", () => expect(corePath([row([], [3157, 3089])], items)).toBeNull());
+  it("core path is null with too few games instead of picking an arbitrary triple (the Naafiri bug: every triple had 1 game, the lowest id won)", () => {
+    const rows = [game([6653, 3100, 3089], [6653, 3100, 3089]), game([3157, 3089, 3100], [3157, 3089, 3100]), game([3089, 3157, 6653], [3089, 3157, 6653])];
+    expect(corePath(rows, meta)).toBeNull();
+    expect(corePath(rows, meta, 1)).not.toBeNull();   // the minimum is a parameter; below it nothing is shown
+  });
+  it("core path ignores items that were bought but not kept (sold, swapped)", () => {
+    const c = corePath(many(12, () => game([6653, 3157, 3089, 3100], [3157, 3089, 3100])), meta)!;   // Liandry's bought first, sold before the end
+    expect(c.items.map((i) => i.id)).toEqual([3157, 3089, 3100]);
+  });
+  it("core path orders by typical position, so players who swap two items do not split the sample", () => {
+    const rows = [...many(8, () => game([3157, 3089, 3100], [3157, 3089, 3100])), ...many(4, () => game([3089, 3157, 3100], [3157, 3089, 3100], 0))];
+    const c = corePath(rows, meta)!;
+    expect(c.items.map((i) => i.id)).toEqual([3157, 3089, 3100]); expect(c.games).toBe(12); expect(c.wins).toBe(8);
+  });
+  it("core path counts only games that kept all three core items", () => {
+    const rows = [...many(10, () => game([3157, 3089, 3100], [3157, 3089, 3100])), game([3157, 3089], [3157, 3089]), game([3157], [3157])];
+    expect(corePath(rows, meta)!.games).toBe(10);
+  });
+  it("core path ignores games without usable data and fewer than three finished items", () => {
+    expect(corePath([game([3157, 3089], [3157, 3089]), row([], [3157, 3089, 3100])], meta, 1)).toBeNull();   // second row has no final inventory
+    expect(corePath([{ ...row([], []), buys: "oops" }], meta, 1)).toBeNull();
+  });
 });

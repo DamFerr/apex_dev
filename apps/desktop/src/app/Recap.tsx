@@ -1,4 +1,6 @@
 import { perfGrade, performanceScore, type PerfGrade } from "@apex/stats-core";
+import { RoleIcon } from "../components/RoleIcon";
+import { LoadoutIcons } from "../components/LoadoutIcons";
 import { motion } from "framer-motion";
 import { Link, useParams } from "react-router-dom";
 import type { PostGameRecap, RecapMetric } from "@apex/schema";
@@ -56,8 +58,9 @@ export function Recap() {
         <ChampIcon id={r.champion} name={r.championName} size={64} />
         <div className="flex-1 min-w-0">
           <div className={`font-display text-2xl font-semibold ${r.win ? "text-good" : "text-bad"}`}>{r.win ? "Victory" : "Defeat"}</div>
-          <div className="text-sm">{r.championName}{r.role ? ` · ${r.role}` : ""} · <span className="tabular-nums" aria-label="Score">{r.kills}/{r.deaths}/{r.assists}</span></div>
+          <div className="text-sm">{r.championName}{r.role && <> · <span className="inline-flex items-center gap-1 align-middle"><RoleIcon role={r.role} size={14} decorative />{r.role}</span></>} · <span className="tabular-nums" aria-label="Score">{r.kills}/{r.deaths}/{r.assists}</span></div>
           <div className="text-xs text-muted">{r.queue} · {Math.round(r.durationSec / 60)} min · {new Date(r.playedAt).toLocaleString()}</div>
+          <div className="mt-2"><LoadoutIcons loadout={r.loadout} size={26} /></div>
         </div>
         <div className="text-xs text-muted text-right"><div>Kill participation <span className="text-text tabular-nums">{pct(r.killParticipation, 0)}</span></div><div>Team damage share <span className="text-text tabular-nums">{pct(r.damageShare, 0)}</span></div></div>
         {s && <div className="flex items-center gap-3" title="Average of your four stats against the comparison average, 50 = exactly average">

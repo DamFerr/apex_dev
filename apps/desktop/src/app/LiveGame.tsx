@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { TierIcon } from "../components/TierIcon";
 import { Radio, RefreshCw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -31,11 +32,12 @@ function PlayerCard({ p }: { p: LivePlayer }) {
         </div>
         <div className="text-xs text-muted truncate">{p.championName}</div>
       </div>
-      <div className="text-right text-xs shrink-0 w-36">
+      <div className="flex items-center justify-end gap-2 text-right text-xs shrink-0 w-44">
+        {p.rank && <TierIcon tier={p.rank.tier} division={p.rank.division} size={28} />}<div>
         <div className="font-medium text-sm">{rankText(p.rank)}</div>
         <div className="text-muted tabular-nums" title={season ? `Raw ${pct(season.raw)} over ${p.rank!.wins + p.rank!.losses} ranked games. Adjusted for sample size.` : undefined}>
           {season && p.rank ? `${p.rank.wins}W ${p.rank.losses}L · ${pct(season.adj, 0)}` : "no ranked games"}</div>
-      </div>
+      </div></div>
       <div className="text-right text-xs shrink-0 w-24" title="Win rate of everyone on this champion in the games Apex has collected (current patch)">
         {champ ? <><div className={`tabular-nums font-medium text-sm ${champ.adj >= 0.5 ? "text-good" : "text-bad"}`}>{pct(champ.adj)}<LowBadge games={p.champGames} /></div><div className="text-muted">champion</div></>
           : <div className="text-muted">no champion data</div>}
