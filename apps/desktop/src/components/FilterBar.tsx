@@ -6,13 +6,12 @@ type Opt = { value: string; label: string };
 const sel = "focus-ring h-8 px-2 rounded-md bg-raised border border-line/10 text-sm";
 
 /**
- * One filter bar for every stats view, so all pages agree on region, patch and rank. Only shown for real (collected) data.
+ * One filter bar for every stats view, so all pages agree on region, patch and rank.
  * Every region and rank is always offered, like the big stats sites; options the collector has not filled in yet say so.
  * Ranks are cumulative: "Emerald+" is Emerald IV and everything above it.
  */
 export function FilterBar() {
-  const source = useUi((s) => s.dataSource), f = useUi((s) => s.statsFilter), patch = useUi((s) => s.patch), o = useFilterOptions().data;
-  if (source !== "backend") return null;
+  const f = useUi((s) => s.statsFilter), patch = useUi((s) => s.patch), o = useFilterOptions().data;
   const n = (c: number) => (c > 0 ? ` · ${c.toLocaleString()} games` : " · no data yet");
   const regionList = [...(o?.platforms ?? [])].sort((a, b) => b.matches - a.matches || platformName(a.id).localeCompare(platformName(b.id)));
   const regions: Opt[] = [{ value: "all", label: "All regions (global)" }, ...regionList.map((p) => ({ value: p.id, label: platformName(p.id) + n(p.matches) }))];

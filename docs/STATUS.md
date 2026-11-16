@@ -3,10 +3,10 @@
 ## Current state (Phase 1 complete, Phase 2 data engine in progress)
 - Desktop app (Tauri 2, React, TS, Vite, Tailwind, Zustand, TanStack Query): shell, design system, Home, Profile + match detail, Champions, Champion page, Tier List, Live Game, Post-game recap, Draft (mock LCU + real connector), Settings.
 - Local backend `services/api` (Fastify + Node SQLite): Riot client with rate limiter, retries and cache; data collector (all regions x ranks); stats endpoints; draft data; live game; recap.
-- Mock data source still exists in the app (Settings > Data > Mock). **Removal is the next step** (see below).
+- The mock data source is gone: the app only uses the local backend. Mocks that remain on purpose: the mock League client (`pnpm lcu-mock`, to test champ select without the game), the fake-Riot test API (`services/api/src/fake-server.ts`, used by the e2e tests) and a synthetic draft fixture used only by draft-engine unit tests.
 
 ## How to run
-`copy services\api\.env.example services\api\.env`, put your key in `RIOT_API_KEY`, then `pnpm install`, `pnpm api`, `pnpm tauri dev` (Settings > Data > Local backend).
+`copy services\api\.env.example services\api\.env`, put your key in `RIOT_API_KEY`, then `pnpm install`, `pnpm api`, `pnpm tauri dev`, and set your Riot ID in Settings (there is no demo player; Home, Profile, Recap and Live Game ask for it).
 
 ## Decisions
 - Ranks are cumulative: "Emerald+" = Emerald IV and above. Collector reads every division ladder (I-IV) of every tier. A match is filed under the tier of the seed player it was found through.
@@ -22,6 +22,6 @@
 - LP history, skill orders: not collected yet (need timelines / snapshots). Draft engine falls back to synthetic data without collected games.
 
 ## Next steps
-1. Remove the Mock data source and sample data from the app (keep the mock LCU for champ select testing); make Local backend the only source; rewrite the e2e tests onto the fake-Riot test API (`services/api/src/fake-server.ts`).
-2. Item sets and real rune pages from collected data; skill order from timelines.
+1. Run `pnpm --filter desktop test:e2e` locally (the specs were rewritten onto the fake-Riot backend without being run in the build environment) and fix anything that fails.
+2. Item sets and real rune pages from collected data; skill order from timelines; LP history needs rank snapshots.
 3. Roadmap P2: matchup/synergy tables, patch deltas, overlay v1.

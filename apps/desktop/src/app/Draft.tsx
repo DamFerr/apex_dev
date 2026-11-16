@@ -6,7 +6,7 @@ import { applyCompact } from "../lib/compact";
 import { isTauri } from "../lib/tauri";
 import { useUi } from "../lib/store";
 import { useMemo, useState } from "react";
-import { createMockData, createRealData, evaluate, personalZ, recommend, recommendBans } from "@apex/draft-engine";
+import { createRealData, evaluate, personalZ, recommend, recommendBans } from "@apex/draft-engine";
 import { FilterBar } from "../components/FilterBar";
 import { useDraftStats, usePool } from "../lib/api";
 import { useDdChampions } from "../lib/ddragon";
@@ -30,20 +30,20 @@ function SlotCard({ s }: { s: Slot }) {
 
 export function Draft() {
   const champsQ = useDdChampions(), champs = champsQ.data; // also re-renders once the full champion list has loaded
-  // Real data when the local backend has collected games for the current filters; otherwise synthetic data (clearly labelled).
-  const stats = useDraftStats().data, myId = useUi((s) => s.myRiotId), backend = useUi((s) => s.dataSource === "backend");
+  // Suggestions come only from the games the collector has stored for the current filters. Without games there is nothing to suggest (no made-up numbers).
+  const statsQ = useDraftStats(), stats = statsQ.data, myId = useUi((s) => s.myRiotId);
   const real = !!stats && stats.games > 0;
   const data = useMemo(() => {
-    if (!champs) return null;
-    if (stats && real) { const tags = new Map(champs.map((c) => [c.key, c.tags])); return createRealData(stats, new Map(champs.map((c) => [c.id, c.key])), (k) => tags.get(k) ?? []); }
-    return createMockData(champs.map((c) => ({ key: c.key, tags: c.tags })));
+    if (!champs || !stats || !real) return null;
+    const tags = new Map(champs.map((c) => [c.key, c.tags]));
+    return createRealData(stats, new Map(champs.map((c) => [c.id, c.key])), (k) => tags.get(k) ?? []);
   }, [champs, stats, real]);
-  const source = real ? `${stats!.games.toLocaleString()} collected games` : "synthetic data";
-  const poolSource = backend ? "your recent games" : "demo pool";
+  const source = real ? `${stats!.games.toLocaleString()} collected games` : "no collected games";
+  const poolSource = "your recent games";
   const { draft, autoImport, setAutoImport, log, spells, setSpells } = useDraft();
   const src = useUi((s) => s.lcuSource), mock = src === "mock", compact = useUi((s) => s.compact);
   const me = draft.slots.find((x) => x.isLocal), myKey = me ? (me.locked ? me.championId : me.hoverId) : 0;
-  const [personalize, setPersonalize] = useState(true), poolQ = usePool(backend ? myId : undefined);
+  const [personalize, setPersonalize] = useState(true), poolQ = usePool(myId);
   // Your pool (recent games plus mastery with the local backend, a demo player otherwise), keyed by numeric champion key.
   const pool = useMemo(() => {
     if (!poolQ.data || !champs) return null;
@@ -98,6 +98,7 @@ export function Draft() {
             <div className="text-sm font-medium">{t === "ally" ? "Your team" : "Enemy team"}</div>{team(t).map((s) => <SlotCard key={s.cellId} s={s} />)}</div>)}</div>
         </div>
         <aside aria-label="Draft assistant" className={compact ? "order-1 space-y-4" : "space-y-4"}>
+          {draft.active && !real && !statsQ.isLoading && <div className="glass rounded-lg p-4 text-sm text-muted">{statsQ.isError ? (statsQ.error as Error).message : "No collected games for these filters yet, so there are no suggestions. The collector fills this in over time: try “All regions”, “All patches” or a lower rank."}</div>}
           {champsQ.isError && <div className="glass rounded-lg p-4 text-sm text-muted">Win probability and suggestions need champion data from Riot’s Data Dragon, which couldn’t be loaded (offline?).</div>}
           {banSuggestions.length > 0 && me?.role && <BanSuggestions bans={banSuggestions} role={me.role} source={source} pool={poolSource} />}
           {ev && <WinProbability ev={ev} source={source} real={real} games={stats?.games ?? 0} />}

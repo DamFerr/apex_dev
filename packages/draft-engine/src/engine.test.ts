@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createMockData, evaluate, recommend, type Pick } from "./index";
+import { createMockData } from "./fixture";
+import { evaluate, recommend, type Pick } from "./index";
 
 const CLASSES = ["Mage", "Marksman", "Tank", "Assassin", "Fighter", "Support"];
 const champs = Array.from({ length: 170 }, (_, i) => ({ key: i + 1, tags: [CLASSES[i % 6]] }));

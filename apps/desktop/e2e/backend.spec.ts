@@ -1,12 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
-import { fakeDataDragon } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { useFakeBackend } from "./helpers";
 
 /** Full stack: the real app -> the real local API (with a fake Riot behind it). Also proves the browser's CORS rules allow the app. */
-async function useBackend(page: Page, url = "http://127.0.0.1:8788", riotId = "Test Player#EUW") {
-  await fakeDataDragon(page);
-  // Only on first load: a reload must keep whatever the app saved (filters, settings).
-  await page.addInitScript(([u, id]) => { if (!localStorage.getItem("apex-ui")) localStorage.setItem("apex-ui", JSON.stringify({ state: { dataSource: "backend", backendUrl: u, myRiotId: id, platform: "euw1" }, version: 0 })); }, [url, riotId]);
-}
+const useBackend = useFakeBackend;
 
 test("Home shows the real rank and games from the backend", async ({ page }) => {
   await useBackend(page); await page.goto("/#/");
@@ -33,7 +29,7 @@ test("profile: match detail marks you, mastery works, LP history explains itself
 });
 
 test("an unreachable backend explains how to fix it", async ({ page }) => {
-  await useBackend(page, "http://127.0.0.1:9");
+  await useBackend(page, { url: "http://127.0.0.1:9" });
   await page.goto("/#/");
   await expect(page.getByText(/Local backend not reachable/).first()).toBeVisible({ timeout: 15_000 });
 });
@@ -42,21 +38,6 @@ test("Settings can test the backend connection", async ({ page }) => {
   await useBackend(page); await page.goto("/#/settings");
   await page.getByRole("button", { name: "Test connection" }).click();
   await expect(page.getByText("Local backend is running and has an API key")).toBeVisible();
-});
-
-test("switching the data source in Settings never mixes mock and real data", async ({ page }) => {
-  await fakeDataDragon(page);
-  await page.addInitScript(() => { if (!localStorage.getItem("apex-ui")) localStorage.setItem("apex-ui", JSON.stringify({ state: { backendUrl: "http://127.0.0.1:8788", myRiotId: "Test Player#EUW" }, version: 0 })); });
-  await page.goto("/#/profile");
-  await expect(page.getByText(/Level 412/)).toBeVisible();          // mock player
-  await page.goto("/#/settings");
-  await page.getByRole("button", { name: "Local backend" }).click();
-  await page.evaluate(() => (location.hash = "#/profile"));
-  await expect(page.getByText(/Level 321/)).toBeVisible();          // fake-Riot player via the backend
-  await page.evaluate(() => (location.hash = "#/settings"));
-  await page.getByRole("button", { name: "Mock", exact: true }).click();
-  await page.evaluate(() => (location.hash = "#/profile"));
-  await expect(page.getByText(/Level 412/)).toBeVisible();          // and back, with no stale backend data
 });
 
 test("Champions page shows real collected statistics with their sample size", async ({ page }) => {

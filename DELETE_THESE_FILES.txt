@@ -1,0 +1,6 @@
+Delete these two files from your local repo before running anything:
+apps/desktop/src/lib/api/mock.ts
+packages/draft-engine/src/mock.ts
+
+PowerShell:
+Remove-Item apps\desktop\src\libpi\mock.ts, packages\draft-engine\src\mock.ts

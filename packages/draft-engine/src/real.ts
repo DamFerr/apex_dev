@@ -1,7 +1,7 @@
 import { shrink } from "@apex/stats-core";
 import type { DraftStats, Role } from "@apex/schema";
 import { logit, sigmoid, type DraftData } from "./engine";
-import { guessRoles } from "./mock";
+import { guessRoles } from "./roles";
 
 export type { DraftStats };
 const STRENGTH_PRIOR = 50; // virtual games pulling a champion's win rate toward 50%

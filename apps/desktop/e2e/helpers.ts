@@ -8,7 +8,9 @@ export const CHAMP_COUNT = CHAMPS.length;
 
 /** Fakes Riot's Data Dragon so tests never depend on the internet. Call BEFORE page.goto. Icons 404 and fall back to initials. */
 export async function fakeDataDragon(page: Page) {
-  const data = Object.fromEntries(CHAMPS.map(([key, id, tag]) => [id, { id, key: String(key), name: id, tags: [tag] }]));
+  // Display names differ from ids for some champions ("LeeSin" is "Lee Sin"), like the real Data Dragon.
+  const NAMES: Record<string, string> = { LeeSin: "Lee Sin", Khazix: "Kha'Zix" };
+  const data = Object.fromEntries(CHAMPS.map(([key, id, tag]) => [id, { id, key: String(key), name: NAMES[id] ?? id, tags: [tag] }]));
   await page.route("https://ddragon.leagueoflegends.com/**", (r) => {
     const u = r.request().url();
     if (u.endsWith("versions.json")) return r.fulfill({ json: ["16.22.1"] });
@@ -31,4 +33,14 @@ export function collectErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   return errors;
+}
+
+/**
+ * Points the app at the fake-Riot test API (services/api/src/fake-server.ts, port 8788) and fakes Data Dragon. Call BEFORE page.goto.
+ * Settings are only written on the first load, so a reload keeps whatever the app saved (filters, theme, ...).
+ */
+export async function useFakeBackend(page: Page, o: { url?: string; riotId?: string } = {}) {
+  await fakeDataDragon(page);
+  const url = o.url ?? "http://127.0.0.1:8788", riotId = o.riotId ?? "Test Player#EUW";
+  await page.addInitScript(([u, id]) => { if (!localStorage.getItem("apex-ui")) localStorage.setItem("apex-ui", JSON.stringify({ state: { backendUrl: u, myRiotId: id }, version: 1 })); }, [url, riotId]);
 }

@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { collectErrors, expectContentVisible, fakeDataDragon } from "./helpers";
+import { collectErrors, expectContentVisible, useFakeBackend } from "./helpers";
 
 const ROUTES = ["/", "/draft", "/champions", "/tierlist", "/profile", "/live", "/recap", "/analysis", "/pro", "/settings"];
 
-test.beforeEach(async ({ page }) => { await fakeDataDragon(page); });
+test.beforeEach(async ({ page }) => { await useFakeBackend(page); });
 
 test("every page renders its content", async ({ page }) => {
   const errors = collectErrors(page);

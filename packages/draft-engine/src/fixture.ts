@@ -1,11 +1,8 @@
-import type { Role } from "@apex/schema";
 import type { DraftData } from "./engine";
+import { guessRoles } from "./roles";
 
+/** TEST FIXTURE ONLY (not exported from the package): synthetic draft data for unit tests. The app only ever uses collected games. */
 export interface ChampMeta { key: number; tags: string[] }
-/** Guesses roles from Riot's class tags. Mock only; real role data comes from match data. */
-export const guessRoles = (tags: string[]): Role[] =>
-  ({ Marksman: ["ADC"], Support: ["SUPPORT"], Tank: ["TOP", "SUPPORT"], Fighter: ["TOP", "JUNGLE"], Assassin: ["MID", "JUNGLE"], Mage: ["MID"] } as Record<string, Role[]>)[tags[0]] ?? ["MID"];
-
 function rand(seed: number) { let s = seed | 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 // Class-vs-class edges (log-odds), so the synthetic data has believable structure instead of pure noise.
 const EDGE: Record<string, Record<string, number>> = {

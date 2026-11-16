@@ -1,8 +1,8 @@
 # Apex (Phase 1: Core Desktop MVP)
 
 Desktop League of Legends companion built with Tauri 2, React, TypeScript, Vite, Tailwind, Zustand and TanStack Query.
-All data currently comes from a typed mock API behind one interface (`packages/schema` `ApexApi`), so a real backend
-can replace it by changing one line in `apps/desktop/src/lib/api/index.ts`. No API key is ever stored in the client.
+All data comes from the local backend (`services/api`) behind one typed interface (`packages/schema` `ApexApi`). There is no sample
+data in the app: until games are collected, screens say so. No API key is ever stored in the client.
 
 ## Run
 ```
@@ -13,7 +13,7 @@ pnpm lcu-mock             # fake League client (second terminal), then open Draf
 pnpm tauri dev            # native window (first run compiles Rust)
 pnpm build                # type-check + production web build
 pnpm --filter desktop exec playwright install chromium   # once
-pnpm --filter desktop test:e2e                            # 37 end-to-end tests (starts the app and mock client itself)
+pnpm --filter desktop test:e2e                            # end-to-end tests (start the app, the mock League client and a fake-Riot backend themselves)
 ```
 Prerequisites: Node 20+, pnpm, Rust (MSVC), Visual Studio C++ Build Tools, WebView2.
 
@@ -24,18 +24,18 @@ Tests: unit tests for the maths and logic (`pnpm test`) and end-to-end browser t
 - `apps/desktop/src` React UI: `app/` screens and shell, `components/` design system, `lib/` api, stores, Data Dragon, LCU transport.
 - `apps/desktop/src-tauri/src` Rust: `lcu.rs` (real League client connector), `overlay.rs` (overlay window).
 - `packages/schema` shared types and the `ApexApi` contract. `packages/stats-core` Wilson, shrinkage, z-score (tested).
-- `packages/lcu-core` champ select reducer, event parsing, import trigger (tested). `packages/lcu-mock` mock League client. `packages/draft-engine` win probability + recommendations behind a `DraftData` interface (tested; mock data now, backend later).
+- `packages/lcu-core` champ select reducer, event parsing, import trigger (tested). `packages/lcu-mock` mock League client. `packages/draft-engine` win probability + recommendations behind a `DraftData` interface (tested; fed by collected games).
 
 ## Status
 | Area | State |
 |---|---|
 | Shell, design system, themes, command palette, compact mode | Built |
-| Home, Profile + match detail, Champions + champion page, Draft, Settings | Built (mock data) |
+| Home, Profile + match detail, Champions + champion page, Draft, Settings | Built (collected and live Riot data) |
 | Mock LCU, real LCU connector (Rust) | Built; real connector needs testing on your machine |
 | Overlay window (transparent, on top, click-through) | Groundwork; placeholder content |
-| Tier List (per-role grades S+ to D, Bayesian-adjusted, low-data champions hidden) | Built (mock and collected data) |
-| Live Game scouting (Spectator-v5: all 10 players, rank, season record, champion win rate, bans, 30 s refresh) | Built (mock and real; real needs a Riot key and a game in progress) |
-| Post-game recap (latest or chosen game vs collected rank averages, your own games and the lobby; grade S-D) | Built (mock and real; real baseline needs enough collected games) |
+| Tier List (per-role grades S+ to D, Bayesian-adjusted, low-data champions hidden) | Built (collected data) |
+| Live Game scouting (Spectator-v5: all 10 players, rank, season record, champion win rate, bans, 30 s refresh) | Built (needs a Riot key and a game in progress) |
+| Post-game recap (latest or chosen game vs collected rank averages, your own games and the lobby; grade S-D) | Built (the rank baseline needs enough collected games) |
 | Real rune import (placeholder runes by champion class) | Built; needs testing on your machine |
 | Summoner spell import (placeholder by role) | Built; needs testing on your machine |
 | Item set import | Deferred to Phase 2 (needs real build data) |
@@ -59,10 +59,10 @@ The app never sees the key. It listens on 127.0.0.1 only (this laptop).
 ```
 copy services\api\.env.example services\api\.env     # then edit .env: set RIOT_API_KEY and RIOT_PLATFORM
 pnpm api                                              # terminal 1: starts on http://127.0.0.1:8787
-pnpm tauri dev                                        # terminal 2; Settings > Data > Local backend, set your Riot ID and region
+pnpm tauri dev                                        # terminal 2; set your Riot ID in Settings
 ```
 Works with real data now: rank, match history, match detail, mastery, and champion statistics (win/pick/ban rates, items, keystone runes, matchups)
-from the data collector. Still mock/synthetic: LP history, skill orders, and the draft engine's numbers.
+from the data collector, and the draft engine's numbers. Not available yet (they say so instead of showing made-up data): LP history, skill orders.
 
 ### Filters (region, patch, rank)
 Every stats screen shares one filter bar. Every region (17), every patch seen, and every rank is always offered, so filtering is instant;

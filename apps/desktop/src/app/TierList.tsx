@@ -18,7 +18,7 @@ const GRADE_STYLE: Record<Grade, string> = {
 
 export function TierList() {
   const [role, setRole] = useState<Role>("MID");
-  const { data } = useChampions(role);
+  const { data, isError, error } = useChampions(role);
   const rows = useMemo(() => {
     if (!data) return [];
     const names = new Map(data.champions.map((c) => [c.id, c.name]));
@@ -39,7 +39,8 @@ export function TierList() {
       {ROLES.map((r) => <Chip key={r} active={role === r} onClick={() => setRole(r)}>{roleName(r)}</Chip>)}
     </div>
     <div className="glass rounded-lg p-2 divide-y divide-line/5">
-      {!data && Array.from({ length: 4 }, (_, i) => <div key={i} className="p-2"><Skeleton className="h-14" /></div>)}
+      {!data && !isError && Array.from({ length: 4 }, (_, i) => <div key={i} className="p-2"><Skeleton className="h-14" /></div>)}
+      {isError && <div role="alert" className="p-8 text-sm text-bad text-center">{(error as Error).message}</div>}
       {data && rows.length === 0 && <div className="p-8 text-sm text-muted text-center">Not enough collected games for this role and these filters yet. Try “All regions” or a lower rank, or check back once the collector has more games.</div>}
       {data && bands.map((g) => {
         const band = rows.filter((r) => r.grade === g);

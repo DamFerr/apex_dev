@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Link, useParams } from "react-router-dom";
 import type { PostGameRecap, RecapMetric } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
+import { NeedRiotId } from "../components/NeedRiotId";
 import { pct } from "../components/StatRows";
 import { ProgressRing, Skeleton, spring } from "../components/ui";
 import { useRecap } from "../lib/api";
@@ -43,8 +44,9 @@ export function Recap() {
   const q = useRecap(id, matchId ? decodeURIComponent(matchId) : undefined), r = q.data, s = r ? scoreOf(r) : null;
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Game recap</h1>
-    <p className="text-sm text-muted mt-1 mb-5">{id} · {matchId ? "the game you picked" : "latest game"}. Comparisons use collected Ranked Solo games and your own recent games.</p>
-    {q.isLoading && <div className="grid gap-4"><Skeleton className="h-28" /><div className="grid grid-cols-4 gap-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-36" />)}</div></div>}
+    <p className="text-sm text-muted mt-1 mb-5">{id ? `${id} · ` : ""}{matchId ? "the game you picked" : "latest game"}. Comparisons use collected Ranked Solo games and your own recent games.</p>
+    {!id && <NeedRiotId what="your last game" />}
+    {id && q.isLoading && <div className="grid gap-4"><Skeleton className="h-28" /><div className="grid grid-cols-4 gap-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-36" />)}</div></div>}
     {q.isError && <div role="alert" className="glass rounded-lg p-6 text-sm text-bad max-w-xl">{(q.error as Error).message}</div>}
     {r && <>
       <div className={`glass rounded-lg p-5 flex items-center gap-5 border-l-4 ${r.win ? "border-l-good" : "border-l-bad"}`}>

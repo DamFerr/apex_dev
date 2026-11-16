@@ -1,7 +1,7 @@
 import { Search } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { RIOT_ID_RE } from "../lib/api/mock";
+import { RIOT_ID_RE } from "../lib/riotId";
 import { useUi } from "../lib/store";
 import { toast } from "../lib/toast";
 

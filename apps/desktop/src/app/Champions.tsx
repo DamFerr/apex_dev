@@ -15,7 +15,7 @@ type SortKey = "name" | "win" | "pick" | "ban" | "games";
 export function Champions() {
   const [role, setRole] = useState<Role | undefined>(); const [q, setQ] = useState("");
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: "win", dir: -1 });
-  const { data } = useChampions(role), nav = useNavigate();
+  const { data, isError, error } = useChampions(role), nav = useNavigate();
   const rows = useMemo(() => {
     if (!data) return [];
     const v = (c: (typeof data.champions)[number]) => ({ name: c.name, win: rate(c.wins, c.games).adj, pick: c.games / data.totalGames, ban: c.bans / data.totalGames, games: c.games })[sort.k];
@@ -27,9 +27,9 @@ export function Champions() {
       <button className="focus-ring hover:text-text" onClick={() => setSort({ k, dir: sort.k === k ? (-sort.dir as 1 | -1) : -1 })}>{label}{sort.k === k ? (sort.dir === 1 ? " ↑" : " ↓") : ""}</button></th>);
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Champions</h1>
-    <p className="text-sm text-muted mt-1 mb-5">{data && data.patch !== "mock"
+    <p className="text-sm text-muted mt-1 mb-5">{data
       ? `Collected data: ${data.totalGames.toLocaleString()} games, ${data.patch === "all" ? "all patches" : `patch ${data.patch}`}. ${data.totalGames < 500 ? "Small sample, so expect noisy numbers. " : ""}Win rates are Bayesian-adjusted; hover one for the raw value.`
-      : "Mock aggregates. Win rates are Bayesian-adjusted; hover one for the raw value."}</p>
+      : "Win rates are Bayesian-adjusted; hover one for the raw value."}</p>
     <FilterBar />
     <div className="flex flex-wrap items-center gap-2 mb-4">
       <Chip active={!role} onClick={() => setRole(undefined)}>All</Chip>
@@ -41,7 +41,7 @@ export function Champions() {
       <table className="w-full text-sm">
         <thead className="text-xs text-muted"><tr className="h-9">{th("name", "Champion", true)}<th className="text-left font-normal">Roles</th>{th("win", "Win rate")}{th("pick", "Pick")}{th("ban", "Ban")}{th("games", "Games")}</tr></thead>
         <motion.tbody key={`${role}-${!!data}`} initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.02 } } }}>
-          {!data && Array.from({ length: 8 }, (_, i) => <tr key={i}><td colSpan={6} className="py-1"><Skeleton className="h-9" /></td></tr>)}
+          {!data && !isError && Array.from({ length: 8 }, (_, i) => <tr key={i}><td colSpan={6} className="py-1"><Skeleton className="h-9" /></td></tr>)}
           {rows.map((c) => { const s = rate(c.wins, c.games); return (
             <motion.tr key={c.id} variants={{ h: { opacity: 0, y: 6 }, s: { opacity: 1, y: 0 } }} onClick={() => nav(`/champions/${c.id}`)}
               className="h-12 border-t border-line/5 cursor-pointer hover:bg-line/5">
@@ -54,6 +54,7 @@ export function Champions() {
             </motion.tr>); })}
         </motion.tbody>
       </table>
+      {isError && <div role="alert" className="p-8 text-sm text-bad text-center">{(error as Error).message}</div>}
       {data && data.champions.length === 0 && <div className="p-8 text-sm text-muted text-center">No collected games match these filters yet. The collector gathers every region and rank in the background, so try “All regions” or a lower rank, or check back soon.</div>}
     </div>
   </>);

@@ -4,10 +4,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { LiveGame as Game, LivePlayer } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
+import { NeedRiotId } from "../components/NeedRiotId";
 import { LowBadge, pct, rate } from "../components/StatRows";
 import { Button, Skeleton, spring } from "../components/ui";
 import { useLiveGame } from "../lib/api";
-import { RIOT_ID_RE } from "../lib/api/mock";
+import { RIOT_ID_RE } from "../lib/riotId";
 import { tierName } from "../lib/platforms";
 import { useUi } from "../lib/store";
 import { toast } from "../lib/toast";
@@ -73,7 +74,8 @@ export function LiveGame() {
       <Button type="submit"><Radio size={15} />Look up</Button>
       <Button type="button" variant="ghost" onClick={() => void q.refetch()} disabled={q.isFetching}><RefreshCw size={15} className={q.isFetching ? "animate-spin" : ""} />Refresh</Button>
     </form>
-    {q.isLoading && <div className="grid grid-cols-2 gap-6">{[0, 1].map((c) => <div key={c} className="grid gap-2">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[66px]" />)}</div>)}</div>}
+    {!id && <NeedRiotId what="your live game" />}
+    {id && q.isLoading && <div className="grid grid-cols-2 gap-6">{[0, 1].map((c) => <div key={c} className="grid gap-2">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[66px]" />)}</div>)}</div>}
     {q.isError && <div role="alert" className="glass rounded-lg p-6 text-sm text-bad max-w-xl">{(q.error as Error).message}</div>}
     {g && !g.inGame && <div className="glass rounded-lg p-8 text-sm max-w-xl"><div className="font-medium mb-1">{id.split("#")[0]} is not in a game right now.</div>
       <div className="text-muted">Spectator data appears a minute or two after a game starts. Press Refresh, or scout another Riot ID.</div></div>}

@@ -6,7 +6,7 @@ import { combo } from "../lib/hotkeys";
 import { useFilterOptions } from "../lib/api";
 import { collectorCommand, useCollector } from "../lib/collector";
 import { platformName } from "../lib/platforms";
-import { RIOT_ID_RE } from "../lib/api/mock";
+import { RIOT_ID_RE } from "../lib/riotId";
 import { toast } from "../lib/toast";
 import { useUi, type Theme } from "../lib/store";
 import { isTauri } from "../lib/tauri";
@@ -74,13 +74,11 @@ export function Settings() {
           <div className="flex gap-2"><Chip active={u.lcuSource === "mock"} onClick={() => u.setLcuSource("mock")}>Mock (dev)</Chip><Chip active={u.lcuSource === "real"} onClick={() => u.setLcuSource("real")}>Real client</Chip></div></Row>
       </Card>
       <Card title="Data">
-        <Row label="Source" hint="Mock = built-in sample data. Local backend = real Riot data through the service in services/api (start it with “pnpm api”). Searches work across all regions, and champion statistics come from the games the collector has gathered.">
-          <div className="flex gap-2"><Chip active={u.dataSource === "mock"} onClick={() => u.patch({ dataSource: "mock" })}>Mock</Chip><Chip active={u.dataSource === "backend"} onClick={() => u.patch({ dataSource: "backend" })}>Local backend</Chip></div></Row>
-        <Row label="Your Riot ID" hint="Home and Profile use this. Your region is found automatically. Example: Name#EUW">
+        <Row label="Your Riot ID" hint="Home, Recap, Live Game and Draft use this. Your region is found automatically. Example: Name#EUW">
           <input aria-label="Your Riot ID" defaultValue={u.myRiotId} key={u.myRiotId} className="focus-ring h-8 w-52 px-3 rounded-md bg-raised/60 border border-line/10 text-sm"
             onBlur={(e) => { const v = e.target.value.trim(); if (v === u.myRiotId) return; if (RIOT_ID_RE.test(v)) u.patch({ myRiotId: v }); else { toast("Riot ID must look like Name#TAG", "error"); e.target.value = u.myRiotId; } }}
             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} /></Row>
-        {u.dataSource === "backend" && <CollectorRow />}
+        <CollectorRow />
         <Row label="Backend" hint={u.backendUrl}><Button variant="ghost" onClick={() => void testBackend(u.backendUrl)}>Test connection</Button></Row>
       </Card>
       <Card title="Overlay">

@@ -2,9 +2,9 @@ import type { ApexApi } from "@apex/schema";
 
 /**
  * Talks to your local Apex backend (services/api). The Riot API key lives only there, never in the app.
- * Anything the backend can't provide yet falls back to the mock, except where mock data would mislead.
+ * Things it cannot provide yet (LP history) say so instead of showing made-up numbers.
  */
-export function createHttpApi(base: () => string, fallback: ApexApi): ApexApi {
+export function createHttpApi(base: () => string): ApexApi {
   async function get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
     const q = new URLSearchParams(params);
     let res: Response;
@@ -17,7 +17,6 @@ export function createHttpApi(base: () => string, fallback: ApexApi): ApexApi {
   const player = (id: string) => `/v1/players/${encodeURIComponent(id)}`;
   const page = (id: string, cursor: number, limit: number) => get<import("@apex/schema").MatchPage>(`${player(id)}/matches`, { cursor: String(cursor), limit: String(limit) });
   return {
-    ...fallback,
     getSummoner: (id) => get(player(id)),
     getMatchPage: page,
     getRecentMatches: async (id, limit = 10) => (await page(id, 0, limit)).items,
