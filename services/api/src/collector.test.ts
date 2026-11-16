@@ -2,7 +2,7 @@ import { DatabaseSync } from "./sqlite";
 import { describe, expect, it } from "vitest";
 import { Collector, type CollectorConfig } from "./collector";
 import { HttpError } from "./riot";
-import { fakeRiot } from "./testkit";
+import { fakeRiot, matchFixture } from "./testkit";
 import { makeStore } from "./store";
 
 const base: CollectorConfig = { platforms: ["euw1"], tiers: ["EMERALD"], pages: 1, matchesPerPlayer: 5, recrawlMs: 1000, concurrency: 1 };
@@ -13,6 +13,25 @@ function setup(over: Partial<CollectorConfig> = {}) {
   return { riot, store, c, advance: (ms: number) => { t += ms; } };
 }
 const own = (riot: ReturnType<typeof fakeRiot>) => { riot.ladder = async (pf, tier, div) => [{ puuid: `${pf}-${tier}-${div}`, tier, rank: div, leaguePoints: 1 }]; }; // players are unique per ladder, like real life
+
+describe("Collector and patches", () => {
+  it("does not store a game older than the 5 newest patches, and does not download it again on the next crawl", async () => {
+    const { c, riot, store } = setup(); own(riot);
+    const versions = ["16.13", "16.12", "16.11", "16.10", "16.9", "16.8"];           // newest first, like Riot's match list; 16.8 is the 6th newest
+    let fetched = 0;
+    riot.matchIds = async () => versions.map((_, i) => `EUW1_${i}`);
+    riot.match = async (id) => { fetched++; const i = Number(id.split("_")[1]); return matchFixture(id, { gameVersion: `${versions[i]}.1.1`, gameEndTimestamp: 1_700_000_000_000 - i }); };
+    store.addSeeds(["p0"], "EMERALD", "euw1");
+    const crawl = () => (c as unknown as { crawlOne(): Promise<boolean> }).crawlOne();
+    await crawl();
+    expect(fetched).toBe(6);
+    expect(store.recentPatches()).toEqual(["16.13", "16.12", "16.11", "16.10", "16.9"]);
+    expect(store.counts().matches).toBe(5);
+    expect(store.hasMatch("EUW1_5")).toBe(false);                                     // the 16.8 game was refused
+    store.markCrawled("p0", 0); await crawl();                                        // the same player again
+    expect(fetched).toBe(6);                                                          // nothing was downloaded twice, not even the refused game
+  });
+});
 
 describe("Collector", () => {
   it("sends parallel workers to different regional clusters, because Riot limits each cluster separately", async () => {

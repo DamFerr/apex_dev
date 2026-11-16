@@ -22,6 +22,8 @@ export class Collector {
   private busy = new Map<string, number>();
   private stopping = false; private loops: Promise<void>[] = []; private tick = 0;
   private inFlight = new Set<string>(); private failedUntil = new Map<string, number>();
+  /** Matches that were downloaded but not stored (older than the 5 kept patches, remakes), so the next crawl does not download them again. Emptied when large; it only saves requests. */
+  private skipped = new Set<string>();
   constructor(private riot: RiotApi, private store: Store, public cfg: CollectorConfig, private now = () => Date.now(),
     private sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))) {}
 
@@ -77,8 +79,9 @@ export class Collector {
       try {
         for (const id of await this.riot.matchIds(seed.puuid, region, 0, this.cfg.matchesPerPlayer, 420, true)) {
           if (this.stopping) break;
-          if (this.store.hasMatch(id)) continue;
+          if (this.store.hasMatch(id) || this.skipped.has(id)) continue;
           if (this.store.saveMatch(await this.riot.match(id, region, true), seed.tier, seed.platform)) { this.status.savedThisRun++; await this.saveTimeline(id, region); }
+          else { if (this.skipped.size >= 50_000) this.skipped.clear(); this.skipped.add(id); }
         }
       } finally { this.busy.set(region, (this.busy.get(region) ?? 1) - 1); }
       return true;

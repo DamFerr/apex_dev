@@ -157,6 +157,17 @@ describe("filters API", () => {
     const none = await fget("/v1/champions/Ahri?region=na1");        // na1 games are on an older patch
     expect(none.statusCode).toBe(404); expect(none.json().error).toMatch(/these filters/);
   });
+  it("'all patches' means the last 5 patches: older data is gone and the menu lists only those", async () => {
+    const six = makeStore(new DatabaseSync(":memory:"));
+    for (const [i, p] of ["16.9", "16.10", "16.11", "16.12", "16.13", "16.14"].entries()) for (let n = 0; n < 2; n++) six.saveMatch(matchFixture(`S${i}_${n}`, { gameVersion: `${p}.1.1`, gameEndTimestamp: 1_700_000_000_000 + i * 10 + n }), "EMERALD", "euw1");
+    const sapp = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: six, collector: idleCollector(riot, six), defaultPlatform: "euw1" });
+    const sget = (url: string) => sapp.inject({ method: "GET", url });
+    expect((await sget("/v1/filters")).json().patches).toEqual([16.14, 16.13, 16.12, 16.11, 16.10].map((p, i) => ({ id: p.toFixed(2), matches: 2 })));
+    expect((await sget("/v1/champions?patch=all")).json()).toMatchObject({ patch: "all", totalGames: 10 });   // 6 patches were stored, 5 are kept
+    expect((await sget("/v1/champions")).json()).toMatchObject({ patch: "16.14", totalGames: 2 });
+    expect((await sget("/v1/champions?patch=16.9")).json().totalGames).toBe(0);                                // a removed patch has no data
+    expect((await sget("/v1/draft/data?patch=all")).json()).toMatchObject({ patch: "all", games: 10 });
+  });
   it("rejects an unknown rank", async () => { expect((await fget("/v1/champions?rank=PLASTIC")).statusCode).toBe(400); });
 });
 

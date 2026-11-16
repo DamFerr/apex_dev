@@ -4,9 +4,25 @@ import { roleOf } from "./mapping";
 import type { RiotMatch } from "./riot";
 import type { PlayerTimeline } from "./timeline";
 
-export interface Filter { patch?: string; brackets?: string[]; platform?: string }
+/** `patches` undefined = no patch restriction (only used below the API; the API always passes a list); an empty list matches nothing. */
+export interface Filter { patches?: string[]; brackets?: string[]; platform?: string }
 export interface Row { name: string; games: number; wins: number }
 const RANKED_SOLO = 420, MIN_SECONDS = 300; // remakes and early surrenders are ignored
+
+/** Apex keeps data for the newest KEEP_PATCHES patches only (the newest one seen in the collected games, never decided by the clock). */
+export const KEEP_PATCHES = 5;
+const PATCH_RE = /^(\d+)\.(\d+)$/;
+/** "16.22" style patch (major.minor). Anything else, like the "unknown" of a match without a version, is not a patch. */
+export const isPatch = (p: string) => PATCH_RE.test(p);
+/** Numeric comparison, negative when `a` is older than `b`: 16.9 is older than 16.10 (a string sort gets this wrong). */
+export function comparePatch(a: string, b: string): number {
+  const [a1, a2] = a.split(".").map(Number), [b1, b2] = b.split(".").map(Number);
+  return a1 - b1 || a2 - b2;
+}
+/** The valid, distinct patches among `patches`, newest first. The one place that defines patch order. */
+export const patchOrder = (patches: string[]): string[] => [...new Set(patches.filter(isPatch))].sort((a, b) => comparePatch(b, a));
+/** The newest `n` patches among `patches`, newest first. */
+export const lastPatches = (patches: string[], n = KEEP_PATCHES): string[] => patchOrder(patches).slice(0, n);
 
 /** The whole rune page of one player as JSON: styles, the 4 + 2 selected runes and the 3 stat shards. null when Riot sent no (or an incomplete) page. */
 export function perksJson(p: RiotMatch["info"]["participants"][number]): string | null {
@@ -20,7 +36,7 @@ export function makeStore(db: DatabaseSync) {
   db.exec(`CREATE TABLE IF NOT EXISTS matches (id TEXT PRIMARY KEY, patch TEXT NOT NULL, bracket TEXT, platform TEXT, ended_at INTEGER NOT NULL, duration INTEGER NOT NULL, blue_win INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS participants (match_id TEXT NOT NULL, puuid TEXT, team INTEGER NOT NULL, champion TEXT NOT NULL, role TEXT, win INTEGER NOT NULL, keystone INTEGER,
       items TEXT NOT NULL, spell1 INTEGER, spell2 INTEGER, kills INTEGER, deaths INTEGER, assists INTEGER, cs INTEGER, damage INTEGER, gold INTEGER);
-    CREATE INDEX IF NOT EXISTS p_champ ON participants(champion); CREATE INDEX IF NOT EXISTS p_match ON participants(match_id);
+    CREATE INDEX IF NOT EXISTS p_champ ON participants(champion); CREATE INDEX IF NOT EXISTS p_match ON participants(match_id); CREATE INDEX IF NOT EXISTS m_patch ON matches(patch);
     CREATE TABLE IF NOT EXISTS bans (match_id TEXT NOT NULL, champion_key INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS seeds (puuid TEXT PRIMARY KEY, tier TEXT NOT NULL, platform TEXT, crawled_at INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS rank_snapshots (puuid TEXT NOT NULL, at INTEGER NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, lp INTEGER NOT NULL, wins INTEGER NOT NULL, losses INTEGER NOT NULL, PRIMARY KEY (puuid, at));
@@ -31,10 +47,35 @@ export function makeStore(db: DatabaseSync) {
   const pcols = (db.prepare("PRAGMA table_info(participants)").all() as { name: string }[]).map((c) => c.name);
   for (const c of ["perks", "skills", "start", "buys"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} TEXT`);
   const q = <T,>(sql: string, ...args: (string | number)[]) => db.prepare(sql).all(...args) as T[];
-  const filt = (f: Filter) => { const c: string[] = [], a: string[] = []; if (f.patch) { c.push("m.patch = ?"); a.push(f.patch); } if (f.platform) { c.push("m.platform = ?"); a.push(f.platform); } if (f.brackets?.length) { c.push(`m.bracket IN (${f.brackets.map(() => "?").join(",")})`); a.push(...f.brackets); } return { sql: c.map((x) => ` AND ${x}`).join(""), args: a }; };
+  const filt = (f: Filter) => { const c: string[] = [], a: string[] = []; if (f.patches) { if (f.patches.length) { c.push(`m.patch IN (${f.patches.map(() => "?").join(",")})`); a.push(...f.patches); } else c.push("1 = 0"); } if (f.platform) { c.push("m.platform = ?"); a.push(f.platform); } if (f.brackets?.length) { c.push(`m.bracket IN (${f.brackets.map(() => "?").join(",")})`); a.push(...f.brackets); } return { sql: c.map((x) => ` AND ${x}`).join(""), args: a }; };
   const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
 
+  // The distinct patches in the database, read once and kept up to date by saveMatch and pruneOldPatches (this process is the only writer).
+  let known: Set<string> | undefined;
+  const knownPatches = () => (known ??= new Set((db.prepare("SELECT DISTINCT patch FROM matches").all() as { patch: string }[]).map((r) => r.patch)));
+
   return {
+    /** The newest `n` patches that have collected games, newest first. These are the only patches Apex keeps and shows. */
+    recentPatches: (n = KEEP_PATCHES): string[] => lastPatches([...knownPatches()], n),
+    /**
+     * Deletes every game (with its players and bans) whose patch is not one of the newest `keep`. Rank snapshots (LP history) and the
+     * player seeds are not patch data and stay. Does nothing when no valid patch is stored. Returns what was removed.
+     */
+    pruneOldPatches(keep = KEEP_PATCHES): { kept: string[]; removedMatches: number } {
+      const kept = lastPatches([...knownPatches()], keep);
+      if (!kept.length) return { kept, removedMatches: 0 };
+      const ph = kept.map(() => "?").join(","), old = `SELECT id FROM matches WHERE patch NOT IN (${ph})`;
+      let removedMatches = 0;
+      db.exec("BEGIN");
+      try {
+        db.prepare(`DELETE FROM participants WHERE match_id IN (${old})`).run(...kept); // children first, while the matches still tell which ones are old
+        db.prepare(`DELETE FROM bans WHERE match_id IN (${old})`).run(...kept);
+        removedMatches = Number(db.prepare(`DELETE FROM matches WHERE patch NOT IN (${ph})`).run(...kept).changes);
+        db.exec("COMMIT");
+      } catch (e) { db.exec("ROLLBACK"); throw e; }
+      known = new Set(kept);
+      return { kept, removedMatches };
+    },
     /**
      * Remembers a player's Ranked Solo rank (LP history). A snapshot identical to the latest one is not stored again, so the history only
      * grows when the rank, LP or win/loss counters changed. Returns true when a row was added.
@@ -59,11 +100,16 @@ export function makeStore(db: DatabaseSync) {
       return n;
     },
     hasMatch: (id: string) => !!db.prepare("SELECT 1 FROM matches WHERE id = ?").get(id),
-    /** Returns true if the match was stored. Only Ranked Solo games longer than 5 minutes count. */
+    /**
+     * Returns true if the match was stored. Only Ranked Solo games longer than 5 minutes count, and only on one of the newest
+     * KEEP_PATCHES patches: a game from an older (or unreadable) patch is refused. The first game of a new patch also removes the data of
+     * the patch that falls out of the window.
+     */
     saveMatch(m: RiotMatch, bracket: string, platform: string): boolean {
       const i = m.info;
       if (i.queueId !== RANKED_SOLO || i.gameDuration < MIN_SECONDS || this.hasMatch(m.metadata.matchId)) return false;
-      const id = m.metadata.matchId, patch = (i.gameVersion ?? "unknown").split(".").slice(0, 2).join(".");
+      const id = m.metadata.matchId, patch = (i.gameVersion ?? "unknown").split(".").slice(0, 2).join("."), seen = knownPatches();
+      if (!lastPatches([...seen, patch]).includes(patch)) return false;
       db.exec("BEGIN");
       try {
         insM.run(id, patch, bracket, platform, i.gameEndTimestamp ?? i.gameCreation + i.gameDuration * 1000, i.gameDuration, i.participants.find((p) => p.teamId === 100)?.win ? 1 : 0);
@@ -73,8 +119,10 @@ export function makeStore(db: DatabaseSync) {
             p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p));
         }
         for (const t of i.teams ?? []) for (const b of t.bans) if (b.championId > 0) insB.run(id, b.championId);
-        db.exec("COMMIT"); return true;
+        db.exec("COMMIT");
       } catch (e) { db.exec("ROLLBACK"); throw e; }
+      if (!seen.has(patch)) { seen.add(patch); this.pruneOldPatches(); } // a new patch: the oldest one leaves the window
+      return true;
     },
     addSeeds(puuids: string[], tier: string, platform: string) { const s = db.prepare("INSERT OR IGNORE INTO seeds (puuid, tier, platform) VALUES (?, ?, ?)"); for (const p of puuids) s.run(p, tier, platform); },
     seedCount: () => (db.prepare("SELECT COUNT(*) n FROM seeds").get() as { n: number }).n,
@@ -100,7 +148,8 @@ export function makeStore(db: DatabaseSync) {
     /** What the collected data contains, for the filter menus. */
     facets() {
       const g = (col: string) => q<{ id: string; matches: number }>(`SELECT ${col} id, COUNT(*) matches FROM matches WHERE ${col} IS NOT NULL GROUP BY ${col} ORDER BY matches DESC`);
-      return { platforms: g("platform"), ranks: g("bracket"), patches: q<{ id: string; matches: number }>("SELECT patch id, COUNT(*) matches FROM matches GROUP BY patch ORDER BY MAX(ended_at) DESC") };
+      const per = new Map(q<{ id: string; matches: number }>("SELECT patch id, COUNT(*) matches FROM matches GROUP BY patch").map((r) => [r.id, r.matches]));
+      return { platforms: g("platform"), ranks: g("bracket"), patches: this.recentPatches().map((id) => ({ id, matches: per.get(id) ?? 0 })) }; // the kept patches, newest first (numerically)
     },
     /** Everything the draft engine needs, as compact arrays. Pairs with fewer than `min` games are left out. */
     draftStats(f: Filter, min = 3) {
@@ -115,7 +164,8 @@ export function makeStore(db: DatabaseSync) {
     markCrawled: (puuid: string, at: number) => void db.prepare("UPDATE seeds SET crawled_at = ? WHERE puuid = ?").run(at, puuid),
     counts: () => ({ matches: (db.prepare("SELECT COUNT(*) n FROM matches").get() as { n: number }).n, seeds: (db.prepare("SELECT COUNT(*) n FROM seeds").get() as { n: number }).n,
       crawled: (db.prepare("SELECT COUNT(*) n FROM seeds WHERE crawled_at > 0").get() as { n: number }).n }),
-    latestPatch: () => (db.prepare("SELECT patch FROM matches ORDER BY ended_at DESC LIMIT 1").get() as { patch: string } | undefined)?.patch,
+    /** The newest patch seen in the collected games (numeric order, not by the clock or by the last game stored). */
+    latestPatch(): string | undefined { return this.recentPatches(1)[0]; },
     matchCount: (f: Filter) => { const w = filt(f); return (db.prepare(`SELECT COUNT(*) n FROM matches m WHERE 1=1${w.sql}`).get(...w.args) as { n: number }).n; },
     championRows(f: Filter, role?: Role) { const w = filt(f); return q<{ champion: string; role: string | null; games: number; wins: number }>(
       `SELECT p.champion, p.role, COUNT(*) games, SUM(p.win) wins FROM participants p JOIN matches m ON m.id = p.match_id WHERE 1=1${w.sql}${role ? " AND p.role = ?" : ""} GROUP BY p.champion, p.role`, ...w.args, ...(role ? [role] : [])); },

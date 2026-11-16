@@ -62,7 +62,7 @@ See `docs/COMPLIANCE.md` for the Riot policy checklist.
 The backend listens on 127.0.0.1 only. Rank, match history, match detail, mastery and champion statistics (win/pick/ban rates, items, keystone runes, matchups) all come from Riot and the data collector.
 
 ### Filters (region, patch, rank)
-Every stats screen shares one filter bar. Every region (17), every patch seen, and every rank is always offered, so filtering is instant;
+Every stats screen shares one filter bar. Every region (17) and every rank is always offered, so filtering is instant; the patch menu lists the 5 newest patches that have data (plus "Latest patch" and "Last 5 patches", which combines them);
 options the collector has not filled in yet say "no data yet". Ranks are cumulative everywhere: **Emerald+ means Emerald IV and everything
 above it** (there is no "exactly Emerald"); "All ranks" is Iron and up.
 
@@ -71,6 +71,11 @@ Starts by itself with `pnpm api` and covers every region and every rank (all lad
 workers at low priority (80% of each region's rate limit, which Riot enforces per region; set `COLLECT_SHARE` to change). Workers are spread over the four Riot clusters so every limit stays in use. A development key caps this at roughly 3 games per second in total. Pause or resume it in Settings. Optional
 `.env` settings: `COLLECT_DISABLED=1`, `COLLECT_CONCURRENCY`, `COLLECT_SHARE`, `COLLECT_PAGES`, `COLLECT_TIMELINES`, `COLLECT_ONLY_PLATFORMS`, `COLLECT_ONLY_TIERS`. The service reads the key's real
 rate limits from Riot's responses, so a production key runs faster automatically.
+
+### Patch retention (last 5 patches)
+Apex keeps, collects and shows only the 5 newest patches. The newest patch is the highest one seen in the collected games (compared numerically, so 16.10 is newer than 16.9), never decided by the clock. Games of older patches are refused by the collector, and
+the games of the patch that falls out of the window (with their players, runes, timelines and bans) are deleted when the first game of a new patch arrives and again on every start of `pnpm api`. LP history is not patch data and is never deleted.
+"All patches" no longer exists: the "Last 5 patches" option is the widest view.
 
 ### Players and drafts
 Searching a Riot ID needs no region: the backend finds where the player plays (from the region prefix of a recent match id).

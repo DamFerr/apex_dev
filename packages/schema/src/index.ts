@@ -60,10 +60,10 @@ export interface DraftStats {
   matchups: [string, string, number, number][];   // lane opponents: same role, opposite teams
   synergies: [string, string, number, number][];  // same team
 }
-/** Filters shared by every stats screen. platform: "all" or a region id; patch: "latest", "all" or e.g. "16.22"; rank: "all" or a tier such as "EMERALD", which always means that tier AND ABOVE (Emerald IV and up). */
+/** Filters shared by every stats screen. platform: "all" or a region id; patch: "latest", "all" (= the last 5 patches, the only ones Apex keeps) or e.g. "16.22"; rank: "all" or a tier such as "EMERALD", which always means that tier AND ABOVE (Emerald IV and up). */
 export interface StatsFilter { platform: string; patch: string; rank: string }
 export interface FilterOption { id: string; matches: number }
-/** What the collected data actually contains, so the UI only offers filters that have data. */
+/** What the collected data actually contains, so the UI only offers filters that have data. `patches` is at most the 5 newest, newest first. */
 export interface FilterOptions { platforms: FilterOption[]; ranks: FilterOption[]; patches: FilterOption[] }
 
 /** Post-game recap: one finished game compared with collected averages, the player's own recent games, and the lobby. */

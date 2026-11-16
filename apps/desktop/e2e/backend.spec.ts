@@ -40,8 +40,9 @@ test("champion page shows collected items, keystones and matchups", async ({ pag
 test("filters: region, patch and rank change the numbers, persist, and reset", async ({ page }) => {
   await page.goto("/#/champions");
   await expect(page.getByText(/Collected data: 40 games, patch 16\.22/)).toBeVisible();   // default: latest patch, all regions and ranks
+  await expect(page.getByLabel("Patch").locator("option")).toHaveText([/Latest patch/, /Last 5 patches/, /Patch 16\.22/, /Patch 16\.21/]);   // only the kept patches, newest first
   await page.getByLabel("Patch").selectOption("all");
-  await expect(page.getByText(/Collected data: 60 games, all patches/)).toBeVisible();
+  await expect(page.getByText(/Collected data: 60 games, last 5 patches/)).toBeVisible();
   await page.getByLabel("Region").selectOption("na1");
   await expect(page.getByText(/Collected data: 20 games/)).toBeVisible();
   await page.getByLabel("Rank").selectOption("DIAMOND");                                    // Diamond and above

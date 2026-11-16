@@ -11,7 +11,7 @@ const lcu = <T,>(method: string, path: string, body?: unknown) => invoke<T>("lcu
 export const MIN_BUILD_GAMES = 10;
 
 /**
- * What collected games say about this champion. Tries your current filters and role first, then all patches, then all roles,
+ * What collected games say about this champion. Tries your current filters and role first, then the last 5 patches, then all roles,
  * and returns the first result that has enough games for a rune page. null = nothing usable (offline, unknown champion, no data yet).
  */
 export async function fetchBuild(championKey: number, role: Role | null): Promise<ChampionBuild | null> {

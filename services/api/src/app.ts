@@ -108,9 +108,14 @@ export async function buildApp(deps: Deps) {
 
   // ---- Champion statistics, computed from the games the collector has stored ----
   const ROLES = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
-  /** patch: latest (default) | all | 16.22. region: all | euw1 ... rank: all | EMERALD. A rank always means that tier AND ABOVE ("EMERALD+" is accepted too). */
-  function filterOf(q: { patch?: string; region?: string; rank?: string }): Filter {
-    const patch = q.patch === "all" ? undefined : q.patch && q.patch !== "latest" ? q.patch : store.latestPatch();
+  /**
+   * patch: latest (default) | all | 16.22. "all" means the last 5 patches, the only ones Apex keeps. region: all | euw1 ... rank: all | EMERALD.
+   * A rank always means that tier AND ABOVE ("EMERALD+" is accepted too). `label` is what the response reports as its patch ("all" or one patch).
+   */
+  function filterOf(q: { patch?: string; region?: string; rank?: string }): Filter & { label: string } {
+    const recent = store.recentPatches();
+    const patches = q.patch === "all" ? recent : q.patch && q.patch !== "latest" ? [q.patch] : recent.slice(0, 1);
+    const label = q.patch === "all" ? "all" : q.patch && q.patch !== "latest" ? q.patch : recent[0] ?? "all";
     const platform = q.region && q.region !== "all" ? q.region.toLowerCase() : undefined;
     let brackets: string[] | undefined;
     if (q.rank && q.rank !== "all") {
@@ -118,7 +123,7 @@ export async function buildApp(deps: Deps) {
       if (i < 0) throw new HttpError(400, `Unknown rank "${q.rank}"`);
       brackets = TIERS.slice(i); // Emerald means Emerald IV and everything above it
     }
-    return { patch, platform, brackets };
+    return { patches, platform, brackets, label };
   }
   const roleOfQuery = (r?: string) => (r && ROLES.includes(r) ? (r as Role) : undefined);
 
@@ -148,7 +153,7 @@ export async function buildApp(deps: Deps) {
 
   app.get<{ Querystring: { role?: string; patch?: string; region?: string; rank?: string } }>("/v1/champions", async (req): Promise<ChampionList> => {
     const f = filterOf(req.query), { list, total } = await summaries(f, roleOfQuery(req.query.role));
-    return { patch: f.patch ?? "all", totalGames: total, champions: list };
+    return { patch: f.label, totalGames: total, champions: list };
   });
 
   app.get<{ Params: { id: string }; Querystring: { patch?: string; region?: string; rank?: string } }>("/v1/champions/:id", async (req): Promise<ChampionDetail> => {
@@ -178,7 +183,7 @@ export async function buildApp(deps: Deps) {
   });
   app.get<{ Querystring: { patch?: string; region?: string; rank?: string } }>("/v1/draft/data", async (req) => {
     const f = filterOf(req.query);
-    return cached(`draft:${JSON.stringify(f)}`, 10 * MIN, async () => ({ ...store.draftStats(f), patch: f.patch ?? "all" }));
+    return cached(`draft:${JSON.stringify(f)}`, 10 * MIN, async () => ({ ...store.draftStats(f), patch: f.label }));
   });
   /** Your own recent champion pool (last 20 games) plus top mastery, for personalised draft suggestions. */
   app.get<{ Params: { riotId: string } }>("/v1/players/:riotId/pool", async (req): Promise<PoolEntry[]> => {
@@ -244,7 +249,7 @@ export async function buildApp(deps: Deps) {
         entries.set(puuid, await cached(`league:${platform}:${puuid}`, 10 * MIN, () => riot.league(puuid, platform)).catch(() => []));
       }));
       const pop = new Map<string, { games: number; wins: number }>();
-      for (const r of store.championRows({ patch: store.latestPatch() })) { const e = pop.get(r.champion) ?? { games: 0, wins: 0 }; e.games += r.games; e.wins += r.wins; pop.set(r.champion, e); }
+      for (const r of store.championRows({ patches: store.recentPatches(1) })) { const e = pop.get(r.champion) ?? { games: 0, wins: 0 }; e.games += r.games; e.wins += r.wins; pop.set(r.champion, e); }
       return toLiveGame(game, { youPuuid: acct.puuid, champs: data.champs, entries, pop });
     });
   });
