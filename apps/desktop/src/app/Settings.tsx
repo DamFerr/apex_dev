@@ -67,6 +67,10 @@ export function Settings() {
         <Row label="Reduce motion" hint="Turns animations off. Also follows your system setting."><Toggle on={u.reduceMotion} onChange={u.setReduceMotion} label="Reduce motion" /></Row>
         <Row label="Auto compact in champ select" hint="Shrinks the window to a narrow panel when champ select starts, and restores it after."><Toggle on={u.autoCompact} onChange={(v) => u.patch({ autoCompact: v })} label="Auto compact" /></Row>
       </Card>
+      <Card title="Champ select">
+        <Row label="Flash key" hint="Which summoner spell slot Flash goes on when Apex sets your spells: left (D) or right (F). Pairs without Flash are left as they are.">
+          <div className="flex gap-2" role="group" aria-label="Flash key">{(["D", "F"] as const).map((k) => <Chip key={k} active={u.flashSlot === k} onClick={() => u.patch({ flashSlot: k })}>{k === "D" ? "D (left)" : "F (right)"}</Chip>)}</div></Row>
+      </Card>
       <Card title="League client">
         <Row label="Status" hint="Apex finds the client by itself. If League isn’t in C:\Riot Games\League of Legends, set the LOL_LOCKFILE environment variable.">
           <span className="flex items-center gap-2 text-sm"><span className={`size-1.5 rounded-full ${connected ? "bg-good" : "bg-gold"}`} />{connected ? "Connected" : "Not detected"}</span></Row>

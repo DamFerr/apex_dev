@@ -5,6 +5,9 @@ export type Tier = "IRON" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "EMERALD
 export interface RankInfo { tier: Tier; division: "I" | "II" | "III" | "IV"; lp: number; wins: number; losses: number }
 /** rank is null for players who are unranked in Ranked Solo/Duo. */
 export interface Summoner { riotId: string; level: number; rank: RankInfo | null; /** Region the player plays on, found automatically (e.g. "euw1"). */ platform?: string }
+/** Your Ranked Solo rank as Apex saw it at one moment. Apex only knows LP at the moments it checked, never per game. */
+export interface RankSnapshot { at: string; rank: RankInfo }
+export interface RankHistory { snapshots: RankSnapshot[] }
 export interface MatchSummary {
   id: string; champion: string; role: Role | null; win: boolean;
   kills: number; deaths: number; assists: number; cs: number;
@@ -98,6 +101,8 @@ export interface ApexApi {
   getMatchDetail(matchId: string, riotId?: string): Promise<MatchDetail>;
   getChampionPool(riotId: string): Promise<PoolEntry[]>;
   getMastery(riotId: string): Promise<MasteryEntry[]>;
+  /** Rank snapshots Apex recorded for this player, oldest first. History starts the first time Apex looked the player up. */
+  getRankHistory(riotId: string): Promise<RankHistory>;
   getChampions(role?: Role, filter?: StatsFilter): Promise<ChampionList>;
   getChampion(id: string, filter?: StatsFilter): Promise<ChampionDetail>;
   /** Most played rune pages, summoner spells and final items for a champion (role optional). */

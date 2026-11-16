@@ -14,6 +14,15 @@ test("theme and reduce-motion apply and persist across reloads", async ({ page }
   await expect(page.getByRole("switch", { name: "Reduce motion" })).toHaveAttribute("aria-checked", "true");
 });
 
+test("the Flash key setting defaults to F and persists across reloads", async ({ page }) => {
+  await page.goto("/#/settings");
+  const group = page.getByRole("group", { name: "Flash key" });
+  await expect(group.getByRole("button", { name: "F (right)" })).toHaveAttribute("aria-pressed", "true");
+  await group.getByRole("button", { name: "D (left)" }).click();
+  await page.reload();
+  await expect(page.getByRole("group", { name: "Flash key" }).getByRole("button", { name: "D (left)" })).toHaveAttribute("aria-pressed", "true");
+});
+
 test("the compact-mode hotkey can be re-bound", async ({ page }) => {
   await page.goto("/#/settings");
   await page.getByRole("button", { name: "Ctrl+Shift+M" }).click();

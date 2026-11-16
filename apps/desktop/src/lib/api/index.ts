@@ -18,6 +18,7 @@ export const useChampion = (id: string) => { const f = useFilter(); return useQu
 export const useChampionBuild = (id: string, role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "build", id, role ?? "any", f], queryFn: () => api.getChampionBuild(id, role, f) }); };
 export const useFilterOptions = () => useQuery({ queryKey: [useScope(), "filters"], queryFn: () => api.getFilterOptions(), staleTime: 10_000 });
 export const useMastery = (id: string) => useQuery({ queryKey: [useScope(), "mastery", id], queryFn: () => api.getMastery(id), enabled: !!id });
+export const useRankHistory = (id: string) => useQuery({ queryKey: [useScope(), "lphistory", id], queryFn: () => api.getRankHistory(id), enabled: !!id });
 export const usePool = (id: string) => useQuery({ queryKey: [useScope(), "pool", id], queryFn: () => api.getChampionPool(id), enabled: !!id });
 export const useDraftStats = () => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "draftstats", f], queryFn: () => api.getDraftStats(f), staleTime: 60_000 }); };
 /** Refreshes every 30 s while a game is running (the backend caches for 45 s, so this is cheap). retry is off so "not found" shows at once. */

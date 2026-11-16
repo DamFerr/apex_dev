@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ChampionBuild, Role, StatsFilter } from "@apex/schema";
-import { buildItemSet, buildRunePage, mergeItemSets, recommendSpells, runePageFromStat, RUNE_PAGE_PREFIX, SPELL_NAMES } from "@apex/lcu-core";
+import { buildItemSet, buildRunePage, mergeItemSets, placeFlash, recommendSpells, runePageFromStat, RUNE_PAGE_PREFIX, SPELL_NAMES } from "@apex/lcu-core";
 import { api } from "./api";
 import { champIndex, fetchDdChampions, fetchRunes } from "./ddragon";
 import { useUi } from "./store";
@@ -47,7 +47,8 @@ export async function importRunes(championKey: number, build: ChampionBuild | nu
 /** Sets your two summoner spells during champ select. Only possible while a champion select session exists. */
 export async function importSpells(role: Role | null, build: ChampionBuild | null): Promise<{ text: string; source: string }> {
   const s = build?.spells, data = s && s.games >= MIN_BUILD_GAMES ? s : null;
-  const [spell1Id, spell2Id] = data ? data.ids : recommendSpells(role);
+  // The backend stays slot-agnostic (Flash second); the swap to your Flash key (Settings) happens here, on the client only.
+  const [spell1Id, spell2Id] = placeFlash(data ? data.ids : recommendSpells(role), useUi.getState().flashSlot);
   await lcu("PATCH", "/lol-champ-select/v1/session/my-selection", { spell1Id, spell2Id });
   return { text: `${SPELL_NAMES[spell1Id] ?? spell1Id} + ${SPELL_NAMES[spell2Id] ?? spell2Id}`, source: data ? `${data.games} collected games` : "defaults by role" };
 }

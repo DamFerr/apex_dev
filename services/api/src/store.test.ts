@@ -129,3 +129,37 @@ describe("averages", () => {
   it("returns zeros, not NaN, when nothing matches", () => expect(seededStore().averages({ role: "TOP", champion: "Nobody" })).toEqual({ games: 0, kda: 0, cs: 0, damage: 0, gold: 0 }));
 });
 
+describe("rank snapshots (LP history)", () => {
+  const r = (lp: number, wins = 10, losses = 10) => ({ tier: "EMERALD", division: "II", lp, wins, losses });
+  it("stores a snapshot only when the rank, LP or counters changed", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    expect(s.saveRankSnapshot("p1", r(40), 1000)).toBe(true);
+    expect(s.saveRankSnapshot("p1", r(40), 2000)).toBe(false);          // identical: nothing new to remember
+    expect(s.saveRankSnapshot("p1", r(60, 11), 3000)).toBe(true);
+    expect(s.saveRankSnapshot("p1", { ...r(60, 11), division: "I" }, 4000)).toBe(true);
+    expect(s.rankHistory("p1").map((x) => x.at)).toEqual([1000, 3000, 4000]);
+  });
+  it("keeps players apart and returns the history oldest first", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    s.saveRankSnapshot("a", r(10), 3000); s.saveRankSnapshot("b", r(99), 1000); s.saveRankSnapshot("a", r(30, 11), 5000);
+    expect(s.rankHistory("a").map((x) => x.lp)).toEqual([10, 30]);
+    expect(s.rankHistory("b")).toHaveLength(1);
+    expect(s.rankHistory("nobody")).toEqual([]);
+  });
+  it("never writes a snapshot older than the latest one", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    s.saveRankSnapshot("a", r(10), 5000);
+    expect(s.saveRankSnapshot("a", r(30, 11), 4000)).toBe(false);
+    expect(s.rankHistory("a")).toHaveLength(1);
+  });
+  it("returns only the most recent snapshots when limited, still oldest first", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    for (let i = 1; i <= 5; i++) s.saveRankSnapshot("a", r(i, 10 + i), i * 1000);
+    expect(s.rankHistory("a", 3).map((x) => x.lp)).toEqual([3, 4, 5]);
+  });
+  it("survives reopening an existing database (table is created if missing)", () => {
+    const db = new DatabaseSync(":memory:"); makeStore(db); const again = makeStore(db);
+    expect(again.rankHistory("a")).toEqual([]);
+  });
+});
+

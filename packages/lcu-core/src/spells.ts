@@ -12,3 +12,17 @@ export function recommendSpells(role: Role | null): [number, number] {
   const other = { TOP: SPELLS.Teleport, JUNGLE: SPELLS.Smite, MID: SPELLS.Ignite, ADC: SPELLS.Heal, SUPPORT: SPELLS.Ignite }[role ?? "MID"];
   return [other, SPELLS.Flash];
 }
+
+/** Which key your Flash is bound to: "D" is the left (first) summoner spell slot, "F" the right (second) one. */
+export type FlashSlot = "D" | "F";
+
+/**
+ * Puts Flash on the slot you use. Apex's pairs always come with Flash second (F), so "F" returns the pair unchanged and "D" swaps it.
+ * Pairs without Flash are never reordered, so a Smite + Teleport pair keeps whatever order it came in.
+ */
+export function placeFlash(pair: [number, number], slot: FlashSlot): [number, number] {
+  const [a, b] = pair;
+  if (a !== SPELLS.Flash && b !== SPELLS.Flash) return [a, b];
+  const other = a === SPELLS.Flash ? b : a;
+  return slot === "D" ? [SPELLS.Flash, other] : [other, SPELLS.Flash];
+}

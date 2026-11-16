@@ -23,6 +23,7 @@ export function makeStore(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS p_champ ON participants(champion); CREATE INDEX IF NOT EXISTS p_match ON participants(match_id);
     CREATE TABLE IF NOT EXISTS bans (match_id TEXT NOT NULL, champion_key INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS seeds (puuid TEXT PRIMARY KEY, tier TEXT NOT NULL, platform TEXT, crawled_at INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS rank_snapshots (puuid TEXT NOT NULL, at INTEGER NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, lp INTEGER NOT NULL, wins INTEGER NOT NULL, losses INTEGER NOT NULL, PRIMARY KEY (puuid, at));
     CREATE TABLE IF NOT EXISTS ladder_runs (platform TEXT NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (platform, tier, division));`);
   // Databases created by earlier versions lack the platform columns.
   for (const t of ["matches", "seeds"]) if (!(db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).some((c) => c.name === "platform")) db.exec(`ALTER TABLE ${t} ADD COLUMN platform TEXT`);
@@ -34,6 +35,21 @@ export function makeStore(db: DatabaseSync) {
   const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
 
   return {
+    /**
+     * Remembers a player's Ranked Solo rank (LP history). A snapshot identical to the latest one is not stored again, so the history only
+     * grows when the rank, LP or win/loss counters changed. Returns true when a row was added.
+     */
+    saveRankSnapshot(puuid: string, r: { tier: string; division: string; lp: number; wins: number; losses: number }, at: number): boolean {
+      const last = db.prepare("SELECT at, tier, division, lp, wins, losses FROM rank_snapshots WHERE puuid = ? ORDER BY at DESC LIMIT 1").get(puuid) as { at: number; tier: string; division: string; lp: number; wins: number; losses: number } | undefined;
+      if (last && last.at >= at) return false; // never write out of order
+      if (last && last.tier === r.tier && last.division === r.division && last.lp === r.lp && last.wins === r.wins && last.losses === r.losses) return false;
+      db.prepare("INSERT OR IGNORE INTO rank_snapshots (puuid, at, tier, division, lp, wins, losses) VALUES (?,?,?,?,?,?,?)").run(puuid, at, r.tier, r.division, r.lp, r.wins, r.losses);
+      return true;
+    },
+    /** The most recent `limit` snapshots of a player, oldest first. */
+    rankHistory(puuid: string, limit = 500): { at: number; tier: string; division: string; lp: number; wins: number; losses: number }[] {
+      return (db.prepare("SELECT at, tier, division, lp, wins, losses FROM (SELECT * FROM rank_snapshots WHERE puuid = ? ORDER BY at DESC LIMIT ?) ORDER BY at ASC").all(puuid, limit)) as never;
+    },
     /** Adds timeline data to the already stored players of a match (matched by puuid). Returns how many players were updated. */
     saveTimeline(matchId: string, players: Map<string, PlayerTimeline>): number {
       const up = db.prepare("UPDATE participants SET skills = ?, start = ?, buys = ? WHERE match_id = ? AND puuid = ?"); let n = 0;

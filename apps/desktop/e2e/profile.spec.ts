@@ -29,11 +29,10 @@ test("match history loads more on scroll, filters, and expands a match", async (
   await expect(page.getByText(/Victory|Defeat/).first()).toBeVisible();
 });
 
-test("mastery tab works, and the LP history tab is gone", async ({ page }) => {
+test("mastery tab works, and switching tabs brings the match list back", async ({ page }) => {
   await page.goto("/#/profile");
   await page.getByRole("tab", { name: "Mastery" }).click();
   await expect(page.getByText("M10")).toBeVisible();
-  await expect(page.getByRole("tab", { name: "LP history" })).toHaveCount(0);
   await page.getByRole("tab", { name: "Match history" }).click();
   await expect(page.getByText(/games loaded/)).toBeVisible(); // infinite scroll area comes back after switching tabs
 });
@@ -42,3 +41,24 @@ test("an unknown player shows a clear error", async ({ page }) => {
   await page.goto("/#/profile/Nobody%23EUW");
   await expect(page.getByText("Not found on Riot's servers")).toBeVisible();
 });
+
+test("LP history shows the chart, the promotion and honest totals", async ({ page }) => {
+  await page.goto("/#/profile");
+  await page.getByRole("tab", { name: "LP history" }).click();
+  await expect(page.getByRole("img", { name: /LP history, 5 checks/ })).toBeVisible();
+  await expect(page.getByText("Emerald II · 64 LP").first()).toBeVisible();
+  await expect(page.getByText("+284 LP")).toBeVisible();              // Platinum I 80 LP -> Emerald II 64 LP
+  await expect(page.getByText("46 games (27W 19L)")).toBeVisible();
+  await expect(page.getByText("Promoted")).toHaveCount(3);             // Platinum I -> Emerald IV -> III -> II
+  await expect(page.getByText(/not one game/)).toBeVisible();
+});
+
+test.describe("a player Apex has not seen before", () => {
+  test("LP history starts with a single point and says so", async ({ page }) => {
+    await page.goto("/#/profile/Fresh%20Player%23EUW");
+    await page.getByRole("tab", { name: "LP history" }).click();
+    await expect(page.getByText("No change yet")).toBeVisible();
+    await expect(page.getByText(/Apex started tracking on/)).toBeVisible();
+  });
+});
+

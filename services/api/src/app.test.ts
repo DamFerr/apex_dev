@@ -19,6 +19,23 @@ describe("API", () => {
     const r = await get("/v1/players/Test%20Player%23EUW"); expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual({ riotId: "Test Player#EUW", level: 321, platform: "euw1", rank: { tier: "EMERALD", division: "II", lp: 64, wins: 87, losses: 79 } });
   });
+  it("records rank snapshots for the LP history and returns them oldest first", async () => {
+    let t = 1_000_000; const clock = () => t;
+    const a = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: makeStore(new DatabaseSync(":memory:")), collector: idleCollector(riot, store), defaultPlatform: "euw1", now: clock });
+    const hist = () => a.inject({ method: "GET", url: "/v1/players/Test%20Player%23EUW/lp-history" });
+    const first = (await hist()).json(); expect(first.snapshots).toEqual([{ at: new Date(1_000_000).toISOString(), rank: { tier: "EMERALD", division: "II", lp: 64, wins: 87, losses: 79 } }]);
+    t += 10 * 60_000; expect((await hist()).json().snapshots).toHaveLength(1); // same rank again: no new snapshot
+    const league = riot.league; riot.league = async (p, pl) => (await league(p, pl)).map((e) => (e.queueType === "RANKED_SOLO_5x5" ? { ...e, leaguePoints: 82, wins: 88 } : e));
+    t += 10 * 60_000; const next = (await hist()).json().snapshots; expect(next.map((x: { rank: { lp: number } }) => x.rank.lp)).toEqual([64, 82]);
+  });
+  it("still shows the stored LP history when Riot cannot be reached", async () => {
+    let t = 1_000_000;
+    const a = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: makeStore(new DatabaseSync(":memory:")), collector: idleCollector(riot, store), defaultPlatform: "euw1", now: () => t });
+    const url = "/v1/players/Test%20Player%23EUW/lp-history";
+    await a.inject({ method: "GET", url }); t += 10 * 60_000;
+    riot.league = async () => { throw new HttpError(503, "Riot is down"); };
+    const r = await a.inject({ method: "GET", url }); expect(r.statusCode).toBe(200); expect(r.json().snapshots).toHaveLength(1);
+  });
   it("caches players so repeat requests do not spend Riot calls", async () => {
     await get("/v1/players/Test%23EUW"); await get("/v1/players/Test%23EUW");
     expect(riot.calls).toMatchObject({ account: 1, summoner: 1, league: 1 });

@@ -44,7 +44,7 @@ Test-only tooling, never shown in the app:
 | Rune, summoner spell and item set import | Built; uses collected games (10+ per champion), class/role defaults otherwise. Needs testing against the real client |
 | Champion page "Recommended build" | Built (runes, spells, skill order, starting items, build order, final items; sample sizes shown) |
 | Skill order, starting items, build order | Built from a sample of games with timelines (`COLLECT_TIMELINES`), fills in as games are collected |
-| LP history | Not built yet (needs rank snapshots over time) |
+| LP history (Profile tab) | Built. Apex records your rank each time it looks you up, so history starts when you first open it and changes are totals between checks |
 | In-game overlay | Window groundwork only, not reachable from the UI |
 
 ## Performance budgets (plan section 7)

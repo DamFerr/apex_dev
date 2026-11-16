@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { ChampionBuild, ChampionDetail, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, Role, StatLine, Summoner } from "@apex/schema";
+import type { ChampionBuild, ChampionDetail, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
@@ -66,12 +66,22 @@ export async function buildApp(deps: Deps) {
 
   app.get("/health", async () => ({ ok: true, hasKey: deps.hasKey ?? true }));
 
+  /** Profile (level + Ranked Solo rank), cached 5 minutes. Every fresh lookup also records a rank snapshot for the LP history. */
+  const profileOf = (acct: { puuid: string; gameName: string; tagLine: string }, platform: string) => cached<Summoner>(`profile:${platform}:${acct.puuid}`, 5 * MIN, async () => {
+    const [s, entries] = await Promise.all([riot.summoner(acct.puuid, platform), riot.league(acct.puuid, platform)]);
+    const out = { ...toSummoner(`${acct.gameName}#${acct.tagLine}`, s.summonerLevel, entries), platform };
+    if (out.rank) store.saveRankSnapshot(acct.puuid, out.rank, now());
+    return out;
+  });
   app.get<{ Params: { riotId: string } }>("/v1/players/:riotId", async (req) => {
     const acct = await identity(req.params.riotId), platform = await homePlatform(acct.puuid);
-    return cached<Summoner>(`profile:${platform}:${acct.puuid}`, 5 * MIN, async () => {
-      const [s, entries] = await Promise.all([riot.summoner(acct.puuid, platform), riot.league(acct.puuid, platform)]);
-      return { ...toSummoner(`${acct.gameName}#${acct.tagLine}`, s.summonerLevel, entries), platform };
-    });
+    return profileOf(acct, platform);
+  });
+  /** LP history: the rank snapshots Apex has recorded. Opening it also takes a fresh snapshot, but Riot being down must not hide what is already stored. */
+  app.get<{ Params: { riotId: string } }>("/v1/players/:riotId/lp-history", async (req): Promise<RankHistory> => {
+    const acct = await identity(req.params.riotId), platform = await homePlatform(acct.puuid);
+    await profileOf(acct, platform).catch(() => undefined);
+    return { snapshots: store.rankHistory(acct.puuid).map((r) => ({ at: new Date(r.at).toISOString(), rank: { tier: r.tier as never, division: r.division as never, lp: r.lp, wins: r.wins, losses: r.losses } })) };
   });
 
   app.get<{ Params: { riotId: string }; Querystring: { cursor?: string; limit?: string } }>("/v1/players/:riotId/matches", async (req): Promise<MatchPage> => {

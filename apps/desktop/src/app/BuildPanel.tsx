@@ -1,16 +1,20 @@
 import { useState } from "react";
 import type { ItemPathStat, Role, RunePageStat } from "@apex/schema";
-import { SHARD_NAMES, SPELL_NAMES } from "@apex/lcu-core";
+import { placeFlash, SHARD_NAMES, SPELL_NAMES } from "@apex/lcu-core";
 import { Chip, Skeleton } from "../components/ui";
 import { pct, rate, LowBadge } from "../components/StatRows";
 import { useChampionBuild } from "../lib/api";
+import { useUi } from "../lib/store";
 import { itemIconUrl, runeIconUrl, useDdVersion, useRunes } from "../lib/ddragon";
 
 const wr = (wins: number, games: number) => { const s = rate(wins, games); return <span className={`tabular-nums font-medium ${s.adj >= 0.5 ? "text-good" : "text-bad"}`} title={`Raw ${pct(s.raw)} · 95% ${pct(s.lo, 0)}–${pct(s.hi, 0)}`}>{pct(s.adj)}</span>; };
 
+const spellText = (ids: [number, number], slot: "D" | "F") => placeFlash(ids, slot).map((i) => SPELL_NAMES[i] ?? i).join(" + ");
+
 /** Recommended runes, summoner spells and items from collected games. Everything shows its sample size; items are final inventories, not a build order. */
 export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
   const [role, setRole] = useState<Role | undefined>(roles[0]), [pick, setPick] = useState(0);
+  const flashSlot = useUi((s) => s.flashSlot);
   const { data: b, isError, isLoading } = useChampionBuild(id, role), { data: styles } = useRunes(), { data: version } = useDdVersion();
   const names = new Map<number, { name: string; icon?: string }>();
   for (const st of styles ?? []) { names.set(st.id, { name: st.name, icon: st.icon }); for (const sl of st.slots) for (const r of sl.runes) names.set(r.id, { name: r.name, icon: r.icon }); }
@@ -46,7 +50,7 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
           <div className="flex items-center gap-2" aria-label={`Max order ${b.skillOrder.max.join(" then ")}`}>{b.skillOrder.max.map((k, i) => <span key={k} className="flex items-center gap-2">{i > 0 && <span className="text-muted" aria-hidden>›</span>}
             <span className="size-8 grid place-items-center rounded-md bg-accent/20 border border-accent/40 font-display font-semibold">{k}</span></span>)}</div>
           <div className="text-xs text-muted mt-2 tabular-nums" title="First 9 skill points, most common sequence among games with this max order">First 9 levels: {b.skillOrder.levels.join(" ")}</div></div>}
-        {b.spells && <div className="text-sm pt-1">Summoner spells: <span className="font-medium">{SPELL_NAMES[b.spells.ids[0]] ?? b.spells.ids[0]} + {SPELL_NAMES[b.spells.ids[1]] ?? b.spells.ids[1]}</span>{" "}
+        {b.spells && <div className="text-sm pt-1">Summoner spells: <span className="font-medium">{spellText(b.spells.ids, flashSlot)}</span>{" "}
           <span className="text-xs text-muted">({wr(b.spells.wins, b.spells.games)} in {b.spells.games.toLocaleString()} games)</span></div>}
       </div>
       <div className="space-y-3">
