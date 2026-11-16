@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { ChampionDetail, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, Role, StatLine, Summoner } from "@apex/schema";
+import type { ChampionBuild, ChampionDetail, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
@@ -8,6 +8,7 @@ import type { Store } from "./store";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
+import { computeBuild, skillOrder } from "./build";
 import type { Filter } from "./store";
 
 export interface Deps { riot: RiotApi; cache: Cache; dd: () => Promise<DD>; store: Store; collector: Collector; defaultPlatform: string; hasKey?: boolean; now?: () => number }
@@ -149,8 +150,14 @@ export async function buildApp(deps: Deps) {
     return { ...me, totalGames: total,
       builds: completed.slice(0, 6).map((i) => line(data.items.get(i.id)!.name, i)),
       runes: store.keystones(req.params.id, f).map((k) => line(data.runes.get(k.id) ?? `Rune ${k.id}`, k)),
-      skillOrder: [], // needs match timelines, which the collector does not fetch yet
+      skillOrder: skillOrder(store.buildRows(req.params.id, f))?.max ?? [], // from the share of games that have timelines
       matchups: store.matchups(req.params.id, f).map((m) => line(nameOf(m.name), m)) };
+  });
+
+  /** Rune pages, summoner spells and final items of collected games for one champion. role is optional; an empty result means no collected games with these filters. */
+  app.get<{ Params: { id: string }; Querystring: { role?: string; patch?: string; region?: string; rank?: string } }>("/v1/champions/:id/build", async (req): Promise<ChampionBuild> => {
+    const f = filterOf(req.query), role = roleOfQuery(req.query.role), data = await dd();
+    return computeBuild(req.params.id, role ?? null, store.buildRows(req.params.id, f, role), data.items);
   });
 
   /** Every region and rank is always offered (counts may be zero while the collector fills in). Ranks are cumulative: Emerald = Emerald and above. */

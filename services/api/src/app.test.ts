@@ -75,6 +75,25 @@ describe("champion statistics API", () => {
     expect(d.runes.map((x: { name: string }) => x.name)).toContain("Press the Attack");
     expect(d.matchups.length).toBeGreaterThan(0);
   });
+  it("returns rune pages, spells and items of collected games for a champion, optionally per role", async () => {
+    const b = (await get("/v1/champions/Ahri/build?role=TOP")).json();
+    expect(b).toMatchObject({ champion: "Ahri", role: "TOP", games: 40 });
+    expect(b.runePages[0]).toMatchObject({ primaryStyleId: 8000, subStyleId: 8200, games: 40 });
+    expect(b.runePages[0].perkIds).toHaveLength(9);
+    expect(b.spells.ids).toEqual([14, 4]);
+    expect(b.itemBlocks.map((x: { name: string }) => x.name)).toEqual(["Boots", "Core items"]);
+    expect((await get("/v1/champions/Ahri/build?role=MID")).json().games).toBe(0);      // Ahri is only TOP in the fixture
+    const none = (await get("/v1/champions/Teemo/build")).json();                      // no games is an empty build, not an error
+    expect(none).toMatchObject({ games: 0, runePages: [], spells: null, itemBlocks: [] });
+  });
+  it("adds skill order, starting items and the core path from games with timelines", async () => {
+    const b = (await get("/v1/champions/Ahri/build?role=TOP")).json();
+    expect(b.timelineGames).toBe(40);
+    expect(b.skillOrder).toMatchObject({ max: ["Q", "E", "W"], games: 40 }); expect(b.skillOrder.levels.join("")).toBe("QWEQQRQEQ");
+    expect(b.startItems.items).toEqual([{ id: 1055, name: "Doran's Blade", count: 1 }, { id: 2003, name: "Health Potion", count: 2 }]);
+    expect(b.corePath.items.map((i: { id: number }) => i.id)).toEqual([3157, 3089, 3100]);
+    expect((await get("/v1/champions/Ahri")).json().skillOrder).toEqual(["Q", "E", "W"]);     // the champion page's skill order now has data
+  });
   it("404s for a champion without collected games", async () => { expect((await get("/v1/champions/Teemo")).statusCode).toBe(404); });
   it("reports collector status and only accepts start/stop with the X-Apex header", async () => {
     expect((await get("/v1/collector")).json()).toMatchObject({ running: false, matches: 40, ladders: { seeded: 0, total: 4 }, workers: 1, latestPatch: "16.22" });

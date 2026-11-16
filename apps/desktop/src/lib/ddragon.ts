@@ -11,6 +11,10 @@ export const useDdVersion = () => useQuery({
 export const iconUrl = (v: string, id: string) => `${BASE}/cdn/${v}/img/champion/${id}.png`;
 export const splashUrl = (id: string) => `${BASE}/cdn/img/champion/splash/${id}_0.jpg`;
 
+export const itemIconUrl = (v: string, id: number) => `${BASE}/cdn/${v}/img/item/${id}.png`;
+/** Rune and tree icons come with a path ("perk-images/Styles/...") in runesReforged.json. */
+export const runeIconUrl = (icon: string) => `${BASE}/cdn/img/${icon}`;
+
 export interface DdChampion { id: string; key: number; name: string; tags: string[] }
 /** Numeric LCU champion key to champion. Filled from Data Dragon at runtime, so every champion is known. */
 export const champIndex = new Map<number, DdChampion>();
@@ -51,3 +55,5 @@ export function useChampName(): (id: string) => string {
   const byId = new Map(list.map((c) => [c.id, c.name]));
   return (id) => byId.get(id) ?? id;
 }
+
+export const useRunes = () => useQuery({ queryKey: ["ddragon-runes"], queryFn: fetchRunes, staleTime: Infinity, retry: 1 });

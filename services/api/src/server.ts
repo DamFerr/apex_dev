@@ -15,7 +15,7 @@ if (!config.riotKey) {
 const limiters = new HostLimiters([{ limit: config.ratePerSecond, ms: 1000 }, { limit: config.ratePer2Min, ms: 120_000 }], undefined, undefined, config.collectShare);
 const riot = new HttpRiot(config.riotKey, limiters), db = openDatabase(config.dbPath), store = makeStore(db), cache = makeCache(db);
 store.backfillPlatform(config.platform);
-const collector = new Collector(riot, store, { platforms: config.collectPlatforms ?? ALL_PLATFORMS, tiers: config.collectTiers ?? TIERS, pages: config.collectPages, matchesPerPlayer: 20, recrawlMs: 6 * 3600_000, concurrency: config.collectConcurrency });
+const collector = new Collector(riot, store, { platforms: config.collectPlatforms ?? ALL_PLATFORMS, tiers: config.collectTiers ?? TIERS, pages: config.collectPages, matchesPerPlayer: 20, recrawlMs: 6 * 3600_000, concurrency: config.collectConcurrency, timelineShare: config.collectTimelines });
 const app = await buildApp({ riot, cache, dd: ddLoader(), store, collector, defaultPlatform: config.platform });
 await app.listen({ host: "127.0.0.1", port: config.port }); // localhost only: nobody else on your network can reach it
 console.log(`Apex API running on http://127.0.0.1:${config.port} (platform ${config.platform}, limits ${config.ratePerSecond}/s and ${config.ratePer2Min}/2min). The API key is not printed.`);

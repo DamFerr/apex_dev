@@ -41,8 +41,10 @@ Test-only tooling, never shown in the app:
 | Home, Profile + match detail + mastery, Champions + champion page, Tier List, Live Game, Post-game recap | Built, real data |
 | Draft assistant (win probability, pick and ban suggestions, your champion pool) | Built; needs collected games for the current filters |
 | League client connector (Rust) | Built; needs the real client running |
-| Rune and summoner spell import | Built; class- and role-based defaults until build data is collected |
-| Item sets, LP history, skill orders | Not built yet (need collected timelines and snapshots) |
+| Rune, summoner spell and item set import | Built; uses collected games (10+ per champion), class/role defaults otherwise. Needs testing against the real client |
+| Champion page "Recommended build" | Built (runes, spells, skill order, starting items, build order, final items; sample sizes shown) |
+| Skill order, starting items, build order | Built from a sample of games with timelines (`COLLECT_TIMELINES`), fills in as games are collected |
+| LP history | Not built yet (needs rank snapshots over time) |
 | In-game overlay | Window groundwork only, not reachable from the UI |
 
 ## Performance budgets (plan section 7)
@@ -67,7 +69,7 @@ above it** (there is no "exactly Emerald"); "All ranks" is Iron and up.
 ### Data collector
 Starts by itself with `pnpm api` and covers every region and every rank (all ladders: region x tier x division), with 16 parallel
 workers at low priority (80% of each region's rate limit, which Riot enforces per region; set `COLLECT_SHARE` to change). Workers are spread over the four Riot clusters so every limit stays in use. A development key caps this at roughly 3 games per second in total. Pause or resume it in Settings. Optional
-`.env` settings: `COLLECT_DISABLED=1`, `COLLECT_CONCURRENCY`, `COLLECT_SHARE`, `COLLECT_PAGES`, `COLLECT_ONLY_PLATFORMS`, `COLLECT_ONLY_TIERS`. The service reads the key's real
+`.env` settings: `COLLECT_DISABLED=1`, `COLLECT_CONCURRENCY`, `COLLECT_SHARE`, `COLLECT_PAGES`, `COLLECT_TIMELINES`, `COLLECT_ONLY_PLATFORMS`, `COLLECT_ONLY_TIERS`. The service reads the key's real
 rate limits from Riot's responses, so a production key runs faster automatically.
 
 ### Players and drafts

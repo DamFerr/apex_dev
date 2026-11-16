@@ -26,6 +26,7 @@ test("opens a champion page with stats, builds and matchups", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Ahri" })).toBeVisible();
   await expect(page.getByText("Win rate (adjusted)").first()).toBeVisible();
   await expect(page.getByText("Matchups (best to worst)")).toBeVisible();
+  await expect(page.getByText("Skill order (max priority)")).toBeVisible();
 });
 
 test.describe("with the backend not running", () => {
@@ -34,4 +35,17 @@ test.describe("with the backend not running", () => {
     await page.goto("/#/champions");
     await expect(page.getByRole("alert")).toContainText(/Local backend not reachable/, { timeout: 15_000 });
   });
+});
+
+test("shows the recommended build (runes, spells, items) with sample sizes on the champion page", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const panel = page.getByLabel("Recommended build");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("Summoner spells:")).toContainText("Ignite + Flash");
+  await expect(panel.getByText(/^Skill order ·/)).toBeVisible();
+  await expect(panel.getByLabel("Max order Q then E then W")).toBeVisible();
+  await expect(panel.getByText("First 9 levels: Q W E Q Q R Q E Q")).toBeVisible();
+  await expect(panel.getByText(/^Starting items ·/)).toBeVisible();
+  await expect(panel.getByText(/^First three finished items, in order ·/)).toBeVisible();
+  await expect(panel.getByText(/collected games/).last()).toContainText("40");
 });

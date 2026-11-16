@@ -37,7 +37,7 @@ export function Draft() {
   }, [champs, stats]);
   const source = stats && stats.games > 0 ? `${stats.games.toLocaleString()} collected games` : "";
   const poolSource = "your recent games";
-  const { draft, autoImport, setAutoImport, log, spells, setSpells } = useDraft();
+  const { draft, autoImport, setAutoImport, log, spells, setSpells, items, setItems } = useDraft();
   const compact = useUi((s) => s.compact);
   const me = draft.slots.find((x) => x.isLocal), myKey = me ? (me.locked ? me.championId : me.hoverId) : 0;
   const [personalize, setPersonalize] = useState(true), poolQ = usePool(myId);
@@ -75,10 +75,11 @@ export function Draft() {
     {!draft.connected && <div className="glass rounded-lg p-5 mb-5 text-sm">League of Legends client not detected. Start the game client and Apex connects automatically.</div>}
     <FilterBar />
     <div className="flex flex-wrap items-center gap-3 mb-5">
-      {isTauri && <Button variant="ghost" disabled={!draft.connected || !myKey} title={'Writes a rune page named "Apex: <champion>"'} onClick={() => void runImport(myKey, me?.role ?? null)}>Import now</Button>}
+      {isTauri && <Button variant="ghost" disabled={!draft.connected || !myKey} title={'Writes a rune page and an item set named "Apex: <champion>"'} onClick={() => void runImport(myKey, me?.role ?? null)}>Import now</Button>}
       <Button variant="ghost" onClick={() => void applyCompact(!compact)}>{compact ? "Full view" : "Compact view"}</Button>
       <label className="ml-auto flex items-center gap-2 text-sm"><input type="checkbox" checked={personalize} onChange={(e) => setPersonalize(e.target.checked)} className="size-4 accent-[rgb(var(--accent))]" />Use my champion pool ({poolSource})</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={spells} onChange={(e) => setSpells(e.target.checked)} className="size-4 accent-[rgb(var(--accent))]" />Also set summoner spells</label>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={items} onChange={(e) => setItems(e.target.checked)} className="size-4 accent-[rgb(var(--accent))]" />Also import item set</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={autoImport} onChange={(e) => setAutoImport(e.target.checked)} className="size-4 accent-[rgb(var(--accent))]" />Auto-import on lock-in <span className="text-xs text-muted">(off by default)</span></label>
     </div>
     <div className="text-xs text-muted mb-3">Game state: {draft.gameflow}{draft.active ? ` · ${draft.secondsLeft}s left` : ""}</div>

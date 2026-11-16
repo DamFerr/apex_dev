@@ -2,10 +2,18 @@ import type { DatabaseSync } from "./sqlite";
 import type { Role } from "@apex/schema";
 import { roleOf } from "./mapping";
 import type { RiotMatch } from "./riot";
+import type { PlayerTimeline } from "./timeline";
 
 export interface Filter { patch?: string; brackets?: string[]; platform?: string }
 export interface Row { name: string; games: number; wins: number }
 const RANKED_SOLO = 420, MIN_SECONDS = 300; // remakes and early surrenders are ignored
+
+/** The whole rune page of one player as JSON: styles, the 4 + 2 selected runes and the 3 stat shards. null when Riot sent no (or an incomplete) page. */
+export function perksJson(p: RiotMatch["info"]["participants"][number]): string | null {
+  const [a, b] = p.perks?.styles ?? [], sp = p.perks?.statPerks;
+  if (!a || !b || a.style == null || b.style == null || a.selections.length !== 4 || b.selections.length !== 2 || !sp) return null;
+  return JSON.stringify({ p: a.style, s: b.style, r: [...a.selections, ...b.selections].map((x) => x.perk), h: [sp.offense, sp.flex, sp.defense] });
+}
 
 /** Normalised match data (plan section 5.5), one SQLite file. Aggregates are computed with SQL on demand. */
 export function makeStore(db: DatabaseSync) {
@@ -18,11 +26,22 @@ export function makeStore(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS ladder_runs (platform TEXT NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (platform, tier, division));`);
   // Databases created by earlier versions lack the platform columns.
   for (const t of ["matches", "seeds"]) if (!(db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).some((c) => c.name === "platform")) db.exec(`ALTER TABLE ${t} ADD COLUMN platform TEXT`);
+  // Databases created by earlier versions lack these columns (full rune page, and the timeline data: skill order, starting items, purchases). Old rows stay NULL and are ignored by those stats.
+  const pcols = (db.prepare("PRAGMA table_info(participants)").all() as { name: string }[]).map((c) => c.name);
+  for (const c of ["perks", "skills", "start", "buys"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} TEXT`);
   const q = <T,>(sql: string, ...args: (string | number)[]) => db.prepare(sql).all(...args) as T[];
   const filt = (f: Filter) => { const c: string[] = [], a: string[] = []; if (f.patch) { c.push("m.patch = ?"); a.push(f.patch); } if (f.platform) { c.push("m.platform = ?"); a.push(f.platform); } if (f.brackets?.length) { c.push(`m.bracket IN (${f.brackets.map(() => "?").join(",")})`); a.push(...f.brackets); } return { sql: c.map((x) => ` AND ${x}`).join(""), args: a }; };
-  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
+  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
 
   return {
+    /** Adds timeline data to the already stored players of a match (matched by puuid). Returns how many players were updated. */
+    saveTimeline(matchId: string, players: Map<string, PlayerTimeline>): number {
+      const up = db.prepare("UPDATE participants SET skills = ?, start = ?, buys = ? WHERE match_id = ? AND puuid = ?"); let n = 0;
+      db.exec("BEGIN");
+      try { for (const [puuid, t] of players) n += Number(up.run(JSON.stringify(t.skills), JSON.stringify(t.start), JSON.stringify(t.buys), matchId, puuid).changes); db.exec("COMMIT"); }
+      catch (e) { db.exec("ROLLBACK"); throw e; }
+      return n;
+    },
     hasMatch: (id: string) => !!db.prepare("SELECT 1 FROM matches WHERE id = ?").get(id),
     /** Returns true if the match was stored. Only Ranked Solo games longer than 5 minutes count. */
     saveMatch(m: RiotMatch, bracket: string, platform: string): boolean {
@@ -35,7 +54,7 @@ export function makeStore(db: DatabaseSync) {
         for (const p of i.participants) {
           const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6].filter((x): x is number => !!x && x > 0);
           insP.run(id, p.puuid, p.teamId, p.championName, roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
-            p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned);
+            p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p));
         }
         for (const t of i.teams ?? []) for (const b of t.bans) if (b.championId > 0) insB.run(id, b.championId);
         db.exec("COMMIT"); return true;
@@ -95,6 +114,11 @@ export function makeStore(db: DatabaseSync) {
       const r = db.prepare(`SELECT COUNT(*) games, AVG((p.kills + p.assists) * 1.0 / MAX(p.deaths, 1)) kda, AVG(p.cs * 60.0 / m.duration) cs, AVG(p.damage * 60.0 / m.duration) damage, AVG(p.gold * 60.0 / m.duration) gold
         FROM participants p JOIN matches m ON m.id = p.match_id WHERE ${cond.join(" AND ")}`).get(...args) as { games: number; kda: number | null; cs: number | null; damage: number | null; gold: number | null };
       return { games: r.games, kda: r.kda ?? 0, cs: r.cs ?? 0, damage: r.damage ?? 0, gold: r.gold ?? 0 };
+    },
+    /** One row per collected game of this champion (optionally in one role): its rune page, spells and final items. Input for computeBuild. */
+    buildRows(champion: string, f: Filter, role?: Role): { perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills: string | null; start: string | null; buys: string | null }[] {
+      const w = filt(f);
+      return q(`SELECT p.perks, p.items, p.spell1, p.spell2, p.win, p.skills, p.start, p.buys FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.champion = ?${role ? " AND p.role = ?" : ""}${w.sql}`, champion, ...(role ? [role] : []), ...w.args);
     },
     bans(f: Filter) { const w = filt(f); return q<{ k: number; n: number }>(`SELECT b.champion_key k, COUNT(*) n FROM bans b JOIN matches m ON m.id = b.match_id WHERE 1=1${w.sql} GROUP BY k`, ...w.args); },
     /** Lane matchups: same role, opposite team. */

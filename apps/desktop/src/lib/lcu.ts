@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { champIndex } from "./ddragon";
 import type { Role } from "@apex/schema";
-import { importRunes, importSpells } from "./importer";
+import { fetchBuild, importItemSet, importRunes, importSpells } from "./importer";
 import { isTauri } from "./tauri";
 import { initialDraft, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent } from "@apex/lcu-core";
 
@@ -14,21 +14,27 @@ export const champId = (key: number): string | undefined => champIndex.get(key)?
 export const champName = (key: number) => champIndex.get(key)?.name ?? (CHAMPION_KEYS[key] ?? `Champion ${key}`).replace(/([a-z])([A-Z])/g, "$1 $2");
 
 interface DraftStore {
-  draft: DraftState; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; log: { id: number; text: string }[];
+  draft: DraftState; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void; log: { id: number; text: string }[];
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
 const addLog = (text: string) => useDraft.setState((s) => ({ log: [{ id: Date.now() + Math.random(), text }, ...s.log].slice(0, 8) }));
-/** Imports runes (and optionally summoner spells) and reports each outcome in the import log. */
+/** Imports runes (and optionally summoner spells and an item set) and reports each outcome in the import log. */
 export async function runImport(championKey: number, role: Role | null) {
   const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-  try { addLog(`Imported rune page "${await importRunes(championKey)}" (class-based defaults)`); }
+  const build = await fetchBuild(championKey, role).catch(() => null); // null = use defaults, each step says which it used
+  try { const r = await importRunes(championKey, build); addLog(`Imported rune page "${r.name}" (${r.source})`); }
   catch (e) { addLog(`Rune import failed: ${msg(e)}`); }
-  if (!useDraft.getState().spells) return;
-  try { addLog(`Set summoner spells: ${await importSpells(role)} (defaults by role)`); }
-  catch (e) { addLog(`Spell import failed: ${msg(e)}`); }
+  if (useDraft.getState().spells) {
+    try { const r = await importSpells(role, build); addLog(`Set summoner spells: ${r.text} (${r.source})`); }
+    catch (e) { addLog(`Spell import failed: ${msg(e)}`); }
+  }
+  if (useDraft.getState().items) {
+    try { const t = await importItemSet(championKey, build); addLog(t ? `Imported item set "${t}" (final items of ${build!.games} collected games${build!.startItems || build!.corePath ? ", plus starting items and build order from timelines" : ""})` : "Item set skipped: not enough collected games for this champion yet"); }
+    catch (e) { addLog(`Item set import failed: ${msg(e)}`); }
+  }
 }
 export const useDraft = create<DraftStore>((set, get) => ({
-  draft: initialDraft, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), log: [],
+  draft: initialDraft, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }), log: [],
   setAutoImport: (autoImport) => set({ autoImport }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });

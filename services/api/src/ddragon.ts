@@ -1,6 +1,6 @@
 /** Static game data from Data Dragon, loaded once per run. */
 export type Champs = Map<number, { id: string; name: string; tags?: string[] }>;
-export interface DD { champs: Champs; items: Map<number, { name: string; total: number; hasUpgrade: boolean }>; runes: Map<number, string> }
+export interface DD { champs: Champs; items: Map<number, { name: string; total: number; hasUpgrade: boolean; boots?: boolean }>; runes: Map<number, string> }
 
 export function ddLoader(fetchFn: typeof fetch = fetch): () => Promise<DD> {
   let p: Promise<DD> | null = null;
@@ -9,12 +9,12 @@ export function ddLoader(fetchFn: typeof fetch = fetch): () => Promise<DD> {
     const base = "https://ddragon.leagueoflegends.com", v = (await json<string[]>(`${base}/api/versions.json`))[0];
     const [ch, it, ru] = await Promise.all([
       json<{ data: Record<string, { id: string; key: string; name: string; tags: string[] }> }>(`${base}/cdn/${v}/data/en_US/champion.json`),
-      json<{ data: Record<string, { name: string; gold: { total: number }; into?: string[] }> }>(`${base}/cdn/${v}/data/en_US/item.json`),
+      json<{ data: Record<string, { name: string; gold: { total: number }; into?: string[]; tags?: string[] }> }>(`${base}/cdn/${v}/data/en_US/item.json`),
       json<{ slots: { runes: { id: number; name: string }[] }[] }[]>(`${base}/cdn/${v}/data/en_US/runesReforged.json`),
     ]);
     return {
       champs: new Map(Object.values(ch.data).map((c) => [Number(c.key), { id: c.id, name: c.name, tags: c.tags }] as const)),
-      items: new Map(Object.entries(it.data).map(([id, i]) => [Number(id), { name: i.name, total: i.gold.total, hasUpgrade: !!i.into?.length }] as const)),
+      items: new Map(Object.entries(it.data).map(([id, i]) => [Number(id), { name: i.name, total: i.gold.total, hasUpgrade: !!i.into?.length, boots: !!i.tags?.includes("Boots") }] as const)),
       runes: new Map(ru.flatMap((s) => s.slots.flatMap((sl) => sl.runes.map((r) => [r.id, r.name] as const)))),
     };
   })().catch((e) => { p = null; throw e; }));

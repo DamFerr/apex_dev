@@ -9,9 +9,12 @@ export const regionOf = (platform: string) => REGION[platform] ?? (() => { throw
 export interface RiotParticipant { puuid: string; riotIdGameName?: string; summonerName?: string; championName: string; teamId: number; teamPosition: string; win: boolean;
   kills: number; deaths: number; assists: number; totalMinionsKilled: number; neutralMinionsKilled: number; totalDamageDealtToChampions: number; goldEarned: number; visionScore: number;
   championId?: number; individualPosition?: string; item0?: number; item1?: number; item2?: number; item3?: number; item4?: number; item5?: number; item6?: number;
-  summoner1Id?: number; summoner2Id?: number; perks?: { styles: { selections: { perk: number }[] }[] } }
+  summoner1Id?: number; summoner2Id?: number; perks?: { styles: { style?: number; selections: { perk: number }[] }[]; statPerks?: { offense: number; flex: number; defense: number } } }
 export interface RiotMatch { metadata: { matchId: string }; info: { gameDuration: number; gameCreation: number; gameEndTimestamp?: number; queueId: number; gameVersion?: string; participants: RiotParticipant[];
   teams?: { teamId: number; bans: { championId: number }[] }[] } }
+/** Match-v5 timeline, only the parts Apex reads. participantId is the 1-based index into metadata.participants. */
+export interface RiotTimelineEvent { type: string; timestamp: number; participantId?: number; itemId?: number; beforeId?: number; afterId?: number; skillSlot?: number; levelUpType?: string }
+export interface RiotTimeline { metadata: { participants: string[] }; info: { frames: { events?: RiotTimelineEvent[] }[] } }
 export interface LeagueEntry { queueType: string; tier: string; rank: string; leaguePoints: number; wins: number; losses: number; hotStreak?: boolean }
 export interface LadderEntry { puuid?: string; tier: string; rank: string; leaguePoints: number }
 export interface ActiveParticipant { puuid?: string; riotId?: string; teamId: number; championId: number; spell1Id?: number; spell2Id?: number; bot?: boolean }
@@ -26,6 +29,7 @@ export interface RiotApi {
   /** low = background priority (collector). queue filters by queue id, e.g. 420 for Ranked Solo. */
   matchIds(puuid: string, region: string, start: number, count: number, queue?: number, low?: boolean): Promise<string[]>;
   match(id: string, region: string, low?: boolean): Promise<RiotMatch>;
+  timeline(id: string, region: string, low?: boolean): Promise<RiotTimeline>;
   ladder(platform: string, tier: string, division: string, page: number, low?: boolean): Promise<LadderEntry[]>;
   mastery(puuid: string, platform: string, count: number): Promise<RiotMastery[]>;
   /** Spectator-v5. Throws HttpError 404 when the player is not in a game. */
@@ -76,6 +80,7 @@ export class HttpRiot implements RiotApi {
   league = (p: string, pf: string) => this.get<LeagueEntry[]>(pf, `/lol/league/v4/entries/by-puuid/${p}`).catch((e) => { if (e instanceof HttpError && e.status === 404) return []; throw e; });
   matchIds = (p: string, r: string, s: number, c: number, queue?: number, low = false) => this.get<string[]>(r, `/lol/match/v5/matches/by-puuid/${p}/ids?start=${s}&count=${c}${queue ? `&queue=${queue}` : ""}`, low);
   match = (id: string, r: string, low = false) => this.get<RiotMatch>(r, `/lol/match/v5/matches/${id}`, low);
+  timeline = (id: string, r: string, low = false) => this.get<RiotTimeline>(r, `/lol/match/v5/matches/${id}/timeline`, low);
   ladder = (pf: string, tier: string, division: string, page: number, low = false) => this.get<LadderEntry[]>(pf, `/lol/league-exp/v4/entries/RANKED_SOLO_5x5/${tier}/${division}?page=${page}`, low);
   mastery = (p: string, pf: string, c: number) => this.get<RiotMastery[]>(pf, `/lol/champion-mastery/v4/champion-masteries/by-puuid/${p}/top?count=${c}`);
   activeGame = (p: string, pf: string) => this.get<RiotActiveGame>(pf, `/lol/spectator/v5/active-games/by-summoner/${p}`);

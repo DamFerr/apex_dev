@@ -24,6 +24,7 @@ export function createHttpApi(base: () => string): ApexApi {
     // Champion statistics come from the games the collector has stored (Settings > Data > Collector).
     getChampions: (role, f) => get("/v1/champions", { ...(role ? { role } : {}), ...filterParams(f) }),
     getChampion: (id, f) => get(`/v1/champions/${encodeURIComponent(id)}`, filterParams(f)),
+    getChampionBuild: (id, role, f) => get(`/v1/champions/${encodeURIComponent(id)}/build`, { ...(role ? { role } : {}), ...filterParams(f) }),
     getFilterOptions: () => get("/v1/filters"),
     getDraftStats: (f) => get("/v1/draft/data", filterParams(f)),
     getRecap: (id, matchId) => get(`${player(id)}/recap`, matchId ? { matchId } : {}),

@@ -16,4 +16,6 @@ export const config = {
   collectPlatforms: process.env.COLLECT_ONLY_PLATFORMS ? process.env.COLLECT_ONLY_PLATFORMS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) : null,
   collectTiers: process.env.COLLECT_ONLY_TIERS ? process.env.COLLECT_ONLY_TIERS.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean) : null,
   collectPages: num(process.env.COLLECT_PAGES, 1),
+  // Share of collected games that also get their timeline (skill order, starting items, build order). Each costs one extra Riot request, so 0.25 slows collection by about a fifth. 0 = off.
+  collectTimelines: Math.min(1, Math.max(0, num(process.env.COLLECT_TIMELINES, 0.25))),
 };

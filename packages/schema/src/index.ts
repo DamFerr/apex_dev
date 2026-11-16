@@ -24,6 +24,28 @@ export interface ChampionDetail extends ChampionSummary {
   totalGames: number; builds: StatLine[]; runes: StatLine[]; skillOrder: string[]; matchups: StatLine[];
 }
 
+/** A rune page as played in collected games: 4 primary + 2 secondary runes, then 3 stat shards (offense, flex, defense). */
+export interface RunePageStat { primaryStyleId: number; subStyleId: number; perkIds: number[]; games: number; wins: number }
+export interface BuildItem { id: number; name: string; games: number; wins: number }
+/** A titled group of items, e.g. "Boots" or "Core items". */
+export interface BuildItemBlock { name: string; items: BuildItem[] }
+export interface SpellPairStat { ids: [number, number]; games: number; wins: number }
+/** Skill priority ("max order", e.g. Q, E, W: the order the three basic skills reach rank 5) plus the most common first 9 skill points among games with that priority. */
+export interface SkillOrderStat { max: string[]; levels: string[]; games: number; wins: number }
+export interface PathItem { id: number; name: string; count: number }
+/** A sequence of items as bought: starting items (any order), or the first three finished items in order. */
+export interface ItemPathStat { items: PathItem[]; games: number; wins: number }
+/**
+ * What strong collected games used for one champion (optionally in one role). Items are the FINAL inventories at game end:
+ * build order and starting items come from the timeline sample. Empty lists = not enough data.
+ */
+export interface ChampionBuild {
+  champion: string; role: Role | null; games: number;
+  runePages: RunePageStat[]; spells: SpellPairStat | null; itemBlocks: BuildItemBlock[];
+  /** Games of this champion that have timeline data (only a share of collected games do). The three fields below come from those. */
+  timelineGames: number; skillOrder: SkillOrderStat | null; startItems: ItemPathStat | null; corePath: ItemPathStat | null;
+}
+
 export interface MasteryEntry { champion: string; name: string; level: number; points: number }
 
 export interface PoolEntry { champion: string; games: number; wins: number; points: number }
@@ -78,6 +100,8 @@ export interface ApexApi {
   getMastery(riotId: string): Promise<MasteryEntry[]>;
   getChampions(role?: Role, filter?: StatsFilter): Promise<ChampionList>;
   getChampion(id: string, filter?: StatsFilter): Promise<ChampionDetail>;
+  /** Most played rune pages, summoner spells and final items for a champion (role optional). */
+  getChampionBuild(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionBuild>;
   getFilterOptions(): Promise<FilterOptions>;
   /** games is 0 when nothing has been collected for these filters yet. */
   getDraftStats(filter?: StatsFilter): Promise<DraftStats>;

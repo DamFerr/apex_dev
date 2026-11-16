@@ -1,12 +1,14 @@
 import { HttpError, PLATFORM_IDS, regionOf, type RiotApi } from "./riot";
 import type { Store } from "./store";
+import { extractTimeline, inShare } from "./timeline";
 
 export const TIERS = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
 const APEX_TIERS = ["MASTER", "GRANDMASTER", "CHALLENGER"]; // these ladders have a single division
 const DIVISIONS = ["I", "II", "III", "IV"];
 const RESEED_MS = 7 * 24 * 3600_000, RETRY_MS = 10 * 60_000;
 
-export interface CollectorConfig { platforms: string[]; tiers: string[]; pages: number; matchesPerPlayer: number; recrawlMs: number; concurrency: number }
+export interface CollectorConfig { platforms: string[]; tiers: string[]; pages: number; matchesPerPlayer: number; recrawlMs: number; concurrency: number;
+  /** Share (0 to 1) of newly stored games that also get their timeline (skill order, starting items, build order). Each costs one more Riot request. Default 0. */ timelineShare?: number }
 export interface Ladder { platform: string; tier: string; division: string }
 
 /**
@@ -15,7 +17,7 @@ export interface Ladder { platform: string; tier: string; division: string }
  * parallel (Riot limits each region separately), all at low priority so interactive requests always have room.
  */
 export class Collector {
-  status = { running: false, lastError: null as string | null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0 };
+  status = { running: false, lastError: null as string | null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0, timelinesThisRun: 0 };
   /** Workers currently busy per regional cluster (europe, americas, asia, sea). */
   private busy = new Map<string, number>();
   private stopping = false; private loops: Promise<void>[] = []; private tick = 0;
@@ -31,7 +33,7 @@ export class Collector {
 
   start() {
     if (this.loops.length) return;
-    this.stopping = false; this.status = { running: true, lastError: null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0 };
+    this.stopping = false; this.status = { running: true, lastError: null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0, timelinesThisRun: 0 };
     const loops = Array.from({ length: Math.max(1, this.cfg.concurrency) }, () => this.run());
     this.loops = loops;
     void Promise.all(loops).finally(() => { if (this.loops === loops) { this.loops = []; this.status.running = false; } });
@@ -76,12 +78,19 @@ export class Collector {
         for (const id of await this.riot.matchIds(seed.puuid, region, 0, this.cfg.matchesPerPlayer, 420, true)) {
           if (this.stopping) break;
           if (this.store.hasMatch(id)) continue;
-          if (this.store.saveMatch(await this.riot.match(id, region, true), seed.tier, seed.platform)) this.status.savedThisRun++;
+          if (this.store.saveMatch(await this.riot.match(id, region, true), seed.tier, seed.platform)) { this.status.savedThisRun++; await this.saveTimeline(id, region); }
         }
       } finally { this.busy.set(region, (this.busy.get(region) ?? 1) - 1); }
       return true;
     }
     return false;
+  }
+
+  /** Fetches the timeline of a share of the stored games. A failed or missing timeline never loses the game itself; only a bad API key stops the collector. */
+  private async saveTimeline(id: string, region: string) {
+    if (!inShare(id, this.cfg.timelineShare ?? 0)) return;
+    try { this.store.saveTimeline(id, extractTimeline(await this.riot.timeline(id, region, true))); this.status.timelinesThisRun++; }
+    catch (e) { if (e instanceof HttpError && /API key/.test(e.message)) throw e; }
   }
 
   /** One unit of work: mostly crawling, with every third step reading a ladder first so new regions fill in early. */

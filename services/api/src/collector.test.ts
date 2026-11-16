@@ -108,3 +108,24 @@ describe("Collector", () => {
     expect(crawls).toBeGreaterThan(4); expect(overlap).toBe(false);
   });
 });
+
+describe("Collector timelines", () => {
+  const run = async (over: Partial<CollectorConfig>, tweak?: (r: ReturnType<typeof fakeRiot>) => void) => {
+    const { c, riot, store } = setup(over); store.addSeeds(["p0"], "EMERALD", "euw1"); tweak?.(riot);
+    await (c as unknown as { crawlOne(): Promise<boolean> }).crawlOne(); return { c, riot, store };
+  };
+  it("fetches no timelines by default", async () => { const { riot, store } = await run({}); expect(store.counts().matches).toBe(5); expect(riot.calls.timeline).toBeUndefined(); });
+  it("fetches a timeline for every stored game when the share is 1, and stores skill order and items", async () => {
+    const { riot, store, c } = await run({ timelineShare: 1 });
+    expect(riot.calls.timeline).toBe(5); expect(c.status.timelinesThisRun).toBe(5);
+    expect(store.buildRows("Ahri", {}).every((r) => r.skills && r.start && r.buys)).toBe(true);
+  });
+  it("never loses a game when its timeline is missing", async () => {
+    const { store, c } = await run({ timelineShare: 1 }, (r) => { r.timeline = async () => { throw new HttpError(404, "Not found on Riot's servers"); }; });
+    expect(store.counts().matches).toBe(5); expect(c.status.timelinesThisRun).toBe(0);
+  });
+  it("stops on a bad API key even while fetching a timeline", async () => {
+    const { riot, c } = setup({ timelineShare: 1 }); riot.timeline = async () => { throw new HttpError(502, "Riot rejected the API key (expired or invalid)."); };
+    await expect((c as unknown as { saveTimeline(id: string, r: string): Promise<void> }).saveTimeline("EUW1_1", "europe")).rejects.toThrow(/API key/);
+  });
+});

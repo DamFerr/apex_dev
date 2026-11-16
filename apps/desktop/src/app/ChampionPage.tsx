@@ -4,6 +4,7 @@ import { ChampIcon } from "../components/ChampIcon";
 import { FilterBar } from "../components/FilterBar";
 import { StatRows, pct, rate } from "../components/StatRows";
 import { Skeleton, StatCard } from "../components/ui";
+import { BuildPanel } from "./BuildPanel";
 import { useChampion } from "../lib/api";
 import { splashUrl } from "../lib/ddragon";
 
@@ -36,6 +37,7 @@ export function ChampionPage() {
     {c.skillOrder.length > 0 && <div className="glass rounded-lg p-5"><div className="text-sm font-medium mb-2">Skill order (max priority)</div>
       <div className="flex items-center gap-2">{c.skillOrder.map((k, i) => <span key={k} className="flex items-center gap-2">
         {i > 0 && <span className="text-muted">›</span>}<span className="size-9 grid place-items-center rounded-md bg-accent/20 border border-accent/40 font-display font-semibold">{k}</span></span>)}</div></div>}
+    <BuildPanel id={c.id} roles={c.roles} />
     <div className="grid grid-cols-2 gap-4">
       <div className="glass rounded-lg p-5"><StatRows title="Items" rows={c.builds} /></div>
       <div className="glass rounded-lg p-5"><StatRows title="Keystone runes" rows={c.runes} /></div>

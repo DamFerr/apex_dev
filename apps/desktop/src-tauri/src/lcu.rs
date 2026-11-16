@@ -92,15 +92,30 @@ pub async fn lcu_sync(app: AppHandle) -> bool {
     }
 }
 
-/// Limited write access to the League client. Allowed: rune page reads/writes, and setting your own summoner
+/// Limited write access to the League client. Allowed: rune page reads/writes, item set reads/writes for your own summoner id
+/// (plus reading that id), and setting your own summoner
 /// spells in champ select (PATCH my-selection only). Everything else is refused.
 #[tauri::command]
 pub async fn lcu_request(method: String, path: String, body: Option<Value>) -> Result<Value, String> {
     const PERKS: [&str; 2] = ["/lol-perks/v1/pages", "/lol-perks/v1/currentpage"];
     const SELECTION: &str = "/lol-champ-select/v1/session/my-selection";
+    const SUMMONER: &str = "/lol-summoner/v1/current-summoner";
     let perks_path = PERKS.iter().any(|p| path == *p || path.starts_with(&format!("{p}/")));
+    // Item sets: /lol-item-sets/v1/item-sets/<numeric summoner id>/sets, read and write. Nothing else under /lol-item-sets.
+    let item_sets_path = path
+        .strip_prefix("/lol-item-sets/v1/item-sets/")
+        .and_then(|rest| rest.strip_suffix("/sets"))
+        .map_or(false, |id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()));
     let allowed = !path.contains("..")
-        && if path == SELECTION { method == "PATCH" } else { perks_path && matches!(method.as_str(), "GET" | "POST" | "PUT") };
+        && if path == SELECTION {
+            method == "PATCH"
+        } else if path == SUMMONER {
+            method == "GET"
+        } else if item_sets_path {
+            matches!(method.as_str(), "GET" | "PUT")
+        } else {
+            perks_path && matches!(method.as_str(), "GET" | "POST" | "PUT")
+        };
     if !allowed { return Err("request not allowed".into()); }
     let creds = CREDS.lock().ok().and_then(|g| g.clone());
     let Some((port, auth)) = creds else { return Err("League client not connected".into()) };
