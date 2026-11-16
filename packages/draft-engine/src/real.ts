@@ -1,9 +1,11 @@
 import { shrink } from "@apex/stats-core";
 import type { DraftStats, Role } from "@apex/schema";
 import { logit, sigmoid, type DraftData } from "./engine";
-import { guessRoles } from "./roles";
 
 export type { DraftStats };
+/** Guesses roles from Riot's class tags, only for champions the collector has not seen yet. */
+export const guessRoles = (tags: string[]): Role[] =>
+  ({ Marksman: ["ADC"], Support: ["SUPPORT"], Tank: ["TOP", "SUPPORT"], Fighter: ["TOP", "JUNGLE"], Assassin: ["MID", "JUNGLE"], Mage: ["MID"] } as Record<string, Role[]>)[tags[0]] ?? ["MID"];
 const STRENGTH_PRIOR = 50; // virtual games pulling a champion's win rate toward 50%
 const PAIR_PRIOR = 30;     // virtual games pulling a pairing toward what the two strengths predict
 

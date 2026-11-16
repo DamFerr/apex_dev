@@ -4,11 +4,11 @@ import { create } from "zustand";
 import { champIndex } from "./ddragon";
 import type { Role } from "@apex/schema";
 import { importRunes, importSpells } from "./importer";
-import { useUi } from "./store";
 import { isTauri } from "./tauri";
 import { initialDraft, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent } from "@apex/lcu-core";
 
-export const MOCK_HOST = "127.0.0.1:8765";
+/** Address of the local League client simulator (packages/lcu-mock). Only used by the browser dev preview, never in the desktop app. */
+const DEV_LCU_HOST = "127.0.0.1:8765";
 /** Prefers the full Data Dragon list; falls back to the small built-in table when offline. */
 export const champId = (key: number): string | undefined => champIndex.get(key)?.id ?? CHAMPION_KEYS[key];
 export const champName = (key: number) => champIndex.get(key)?.name ?? (CHAMPION_KEYS[key] ?? `Champion ${key}`).replace(/([a-z])([A-Z])/g, "$1 $2");
@@ -21,10 +21,10 @@ const addLog = (text: string) => useDraft.setState((s) => ({ log: [{ id: Date.no
 /** Imports runes (and optionally summoner spells) and reports each outcome in the import log. */
 export async function runImport(championKey: number, role: Role | null) {
   const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-  try { addLog(`Imported rune page "${await importRunes(championKey)}" (placeholder runes by champion class)`); }
+  try { addLog(`Imported rune page "${await importRunes(championKey)}" (class-based defaults)`); }
   catch (e) { addLog(`Rune import failed: ${msg(e)}`); }
   if (!useDraft.getState().spells) return;
-  try { addLog(`Set summoner spells: ${await importSpells(role)} (placeholder by role)`); }
+  try { addLog(`Set summoner spells: ${await importSpells(role)} (defaults by role)`); }
   catch (e) { addLog(`Spell import failed: ${msg(e)}`); }
 }
 export const useDraft = create<DraftStore>((set, get) => ({
@@ -32,17 +32,18 @@ export const useDraft = create<DraftStore>((set, get) => ({
   setAutoImport: (autoImport) => set({ autoImport }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });
-    const real = useUi.getState().lcuSource === "real" && isTauri;
-    if (imp && real) void runImport(imp.championId, imp.role); // real write; the mock source only logs
-    set((s) => ({ draft: next, log: imp && !real ? [{ id: Date.now(), text: `Auto-import (mock): ${champName(imp.championId)} · ${imp.role ?? "?"} → runes, items, spells` }, ...s.log].slice(0, 8) : s.log }));
+    set({ draft: next });
+    if (!imp) return;
+    if (isTauri) void runImport(imp.championId, imp.role);
+    else addLog(`Import skipped for ${champName(imp.championId)}: writing to the League client needs the desktop app.`);
   },
 }));
 
-/** Dev transport: connects to the mock LCU and retries every 3 s. The real Tauri transport replaces this later. */
-export function startMockLcu(): () => void {
+/** Browser dev preview only: connects to the local League client simulator and retries every 3 s. */
+export function startDevLcu(): () => void {
   let ws: WebSocket | null = null, stopped = false, timer = 0;
   const open = () => {
-    ws = new WebSocket(`ws://${MOCK_HOST}`);
+    ws = new WebSocket(`ws://${DEV_LCU_HOST}`);
     ws.onopen = () => useDraft.getState().dispatch({ type: "connected" });
     ws.onmessage = (m) => { const ev = parseLcuMessage(String(m.data)); if (ev) useDraft.getState().dispatch(ev); };
     ws.onclose = () => { useDraft.getState().dispatch({ type: "disconnected" }); if (!stopped) timer = window.setTimeout(open, 3000); };

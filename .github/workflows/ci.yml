@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install
-      - run: pnpm test            # unit tests: stats-core, draft-engine, lcu-core
+      - run: pnpm test            # unit tests: stats-core, draft-engine, lcu-core, api
       - run: pnpm build           # type-check + production build
       - run: pnpm --filter desktop exec playwright install --with-deps chromium
       - run: pnpm --filter desktop test:e2e

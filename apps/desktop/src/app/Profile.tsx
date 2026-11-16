@@ -9,8 +9,8 @@ import { api, useScope, useSummoner } from "../lib/api";
 import { useChampName } from "../lib/ddragon";
 import { useUi } from "../lib/store";
 import { Tabs } from "../components/Tabs";
-import { LpTab, MasteryTab } from "./ProfileTabs";
-import { NeedRiotId } from "../components/NeedRiotId";
+import { MasteryTab } from "./ProfileTabs";
+import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { SearchBox } from "../components/SearchBox";
 
 function Detail({ id, riotId }: { id: string; riotId: string }) {
@@ -67,7 +67,7 @@ export function Profile() {
   const sum = useSummoner(id);
   const [filter, setFilter] = useState<"all" | "win" | "loss">("all");
   const [open, setOpen] = useState<string | null>(null);
-  const [tab, setTab] = useState<"matches" | "mastery" | "lp">("matches");
+  const [tab, setTab] = useState<"matches" | "mastery">("matches");
   const q = useInfiniteQuery({
     queryKey: [useScope(), "matchpages", id], initialPageParam: 0,
     queryFn: ({ pageParam }) => api.getMatchPage(id, pageParam, 10),
@@ -83,22 +83,27 @@ export function Profile() {
     io.observe(el); return () => io.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, tab]);
   const r = sum.data?.rank;
+  if (!id) return (<>
+    <h1 className="font-display text-3xl font-semibold tracking-tight mb-1">Profile</h1>
+    <p className="text-sm text-muted mb-6">Search any Name#TAG, or add your own Riot ID.</p>
+    <div className="mb-6"><SearchBox /></div>
+    <RiotIdPrompt />
+  </>);
   return (<>
     <div className="flex items-start justify-between gap-6 mb-6">
-      <div><h1 className="font-display text-3xl font-semibold tracking-tight">{id || "Profile"}</h1>
+      <div><h1 className="font-display text-3xl font-semibold tracking-tight">{id}</h1>
         <p className="text-sm text-muted mt-1">{riotId ? "Profile data." : "Showing your Riot ID (set it in Settings). Search any Name#TAG."}</p></div>
       <div className="space-y-2"><SearchBox />
         <div className="flex gap-2 flex-wrap">{recent.map((x) => <Chip key={x} onClick={() => nav(`/profile/${encodeURIComponent(x)}`)}>{x}</Chip>)}</div></div>
     </div>
-    {!id ? <NeedRiotId what="your profile" /> : sum.isError ? <div className="glass rounded-lg p-8 text-sm text-bad">{(sum.error as Error).message}</div> : <>
+    {sum.isError ? <div className="glass rounded-lg p-8 text-sm text-bad">{(sum.error as Error).message}</div> : <>
       <div className="glass rounded-lg p-5 flex items-center gap-5 max-w-md">
         {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} /><div>
           <div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
           <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L · Level {sum.data!.level}{sum.data!.platform ? ` · ${sum.data!.platform.toUpperCase()}` : ""}</div></div></> : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : <Skeleton className="h-20 w-full" />}
       </div>
-      <div className="mt-6"><Tabs id="profile" value={tab} onChange={setTab} tabs={[{ key: "matches", label: "Match history" }, { key: "mastery", label: "Mastery" }, { key: "lp", label: "LP history" }]} /></div>
+      <div className="mt-6"><Tabs id="profile" value={tab} onChange={setTab} tabs={[{ key: "matches", label: "Match history" }, { key: "mastery", label: "Mastery" }] } /></div>
       {tab === "mastery" && <MasteryTab id={id} />}
-      {tab === "lp" && <LpTab id={id} />}
       {tab === "matches" && <>
       <div className="flex items-center gap-2 mt-4 mb-3" role="group" aria-label="Result filter">
         {(["all", "win", "loss"] as const).map((f) => <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>{f === "all" ? "All" : f === "win" ? "Wins" : "Losses"}</Chip>)}

@@ -1,10 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
-/** End-to-end tests run against the browser build with the mock League client. Data Dragon is faked (see e2e/helpers.ts). */
+/** End-to-end tests run against the browser build, the test backend (real API, fake Riot, port 8788) and the League client simulator. Data Dragon is faked (see e2e/helpers.ts). */
 export default defineConfig({
   testDir: "./e2e",
   timeout: 90_000,
-  workers: 1, // the mock League client is shared state
+  workers: 1, // the League client simulator is shared state
   use: { baseURL: "http://localhost:1420", viewport: { width: 1280, height: 900 }, trace: "retain-on-failure" },
   webServer: [
     { command: "pnpm dev", cwd: "../..", url: "http://localhost:1420", reuseExistingServer: true, timeout: 60_000 },

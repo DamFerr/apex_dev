@@ -1,6 +1,6 @@
 import type { Role } from "@apex/schema";
 
-/** Where numbers come from. The mock implements it today; the backend (ClickHouse aggregates) replaces it in Phase 2. */
+/** Where numbers come from. createRealData implements it from the games the collector has stored. */
 export interface DraftData {
   strength(champion: number): number;            // win rate 0..1 for the champion on its own
   matchup(a: number, b: number): number;         // log-odds edge of a over b (must satisfy matchup(a,b) = -matchup(b,a))

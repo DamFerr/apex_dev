@@ -66,10 +66,10 @@ function Sidebar() {
 }
 
 function StatusArea() {
-  const connected = useDraft((s) => s.draft.connected), src = useUi((s) => s.lcuSource), ver = useDdVersion().data;
+  const connected = useDraft((s) => s.draft.connected), ver = useDdVersion().data;
   return (
     <footer className="h-7 flex items-center justify-between px-4 text-[11px] text-muted border-t border-line/10 bg-surface/60">
-      <span className="flex items-center gap-2"><span className={`size-1.5 rounded-full ${connected ? "bg-good" : "bg-gold"}`} /> League client ({src}): {connected ? "connected" : "not connected"}</span>
+      <span className="flex items-center gap-2"><span className={`size-1.5 rounded-full ${connected ? "bg-good" : "bg-gold"}`} /> League client: {connected ? "connected" : "not connected"}</span>
       <span title={ver ? `Data Dragon ${ver}` : undefined}>{ver ? `Patch ${ver.split(".").slice(0, 2).join(".")}` : "Patch unavailable (offline)"}</span>
     </footer>
   );
@@ -114,7 +114,7 @@ function CommandPalette() {
                   <n.icon size={16} className="text-muted" /> {n.label}
                 </li>
               ))}
-              {!items.length && <li className="px-3 py-6 text-sm text-muted">No pages match “{q}”. Champion and player search arrive with the data screens.</li>}
+              {!items.length && <li className="px-3 py-6 text-sm text-muted">No pages match “{q}”.</li>}
             </ul>
           </motion.div>
         </motion.div>

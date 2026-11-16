@@ -4,8 +4,8 @@ import { Link } from "react-router-dom";
 import { useUi } from "../lib/store";
 import { shrink, wilson, sampleBadge } from "@apex/stats-core";
 import { Skeleton, StatCard, ProgressRing } from "../components/ui";
-import { NeedRiotId } from "../components/NeedRiotId";
 import { SearchBox } from "../components/SearchBox";
+import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { useMatches, useSummoner } from "../lib/api";
 
 export function Home() {
@@ -17,12 +17,17 @@ export function Home() {
   const kda = ms.length ? (ms.reduce((a, m) => a + m.kills + m.assists, 0) / Math.max(1, ms.reduce((a, m) => a + m.deaths, 0))) : 0;
   const csm = ms.length ? ms.reduce((a, m) => a + m.cs / (m.durationSec / 60), 0) / ms.length : 0;
   const r = sum.data?.rank;
+  if (!me) return (<>
+    <h1 className="font-display text-3xl font-semibold tracking-tight">Home</h1>
+    <p className="text-sm text-muted mt-1 mb-6">Search any player, or add your own Riot ID to see your rank and recent games here.</p>
+    <div className="mb-6"><SearchBox /></div>
+    <RiotIdPrompt />
+  </>);
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Home</h1>
     <p className="text-sm text-muted mt-1 mb-6">Your recent games. Win rates show their uncertainty.</p>
     <div className="mb-6"><SearchBox /></div>
-    {!me && <NeedRiotId />}
-    {me && <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-3 gap-4">
       <div className="glass rounded-lg p-5 flex items-center gap-4">
         {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} />
           <div><div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
@@ -34,8 +39,7 @@ export function Home() {
           hint={`95% range ${(lo * 100).toFixed(0)}–${(hi * 100).toFixed(0)}% · ${sampleBadge(ms.length)} data · adjusted ${(shrink(wins, ms.length, 0.5) * 100).toFixed(1)}%`} />
         <StatCard label="KDA · CS/min" value={kda} decimals={2} hint={`${csm.toFixed(1)} CS per minute`} />
       </> : games.data ? <div className="glass rounded-lg p-5 text-sm text-muted col-span-2">No recent games found.</div> : <><Skeleton className="h-28" /><Skeleton className="h-28" /></>}
-    </div>}
-    {me && <>
+    </div>
     <div className="flex items-baseline justify-between mt-8 mb-3"><h2 className="font-display text-lg font-semibold">Recent games</h2>
       <Link to="/recap" className="focus-ring text-sm text-accent hover:underline rounded">Last game recap →</Link></div>
     <motion.ul className="space-y-2" initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }}>
@@ -50,6 +54,5 @@ export function Home() {
           <span className={`text-sm font-medium ${m.win ? "text-good" : "text-bad"}`}>{m.win ? "Win" : "Loss"}</span>
         </motion.li>))}
     </motion.ul>
-    </>}
   </>);
 }

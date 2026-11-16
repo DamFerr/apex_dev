@@ -13,7 +13,7 @@ export function describe(f: Factor): string {
 
 
 /** Win probability bar: scaleX only (GPU friendly), eased with a spring as picks lock in. */
-export function WinProbability({ ev, source, real, games }: { ev: Evaluation; source: string; real: boolean; games: number }) {
+export function WinProbability({ ev, source, games }: { ev: Evaluation; source: string; games: number }) {
   const p = ev.winProb;
   return (
     <section className="glass rounded-lg p-4" aria-label="Win probability">
@@ -26,7 +26,7 @@ export function WinProbability({ ev, source, real, games }: { ev: Evaluation; so
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-muted">
         <span>±{(ev.band * 100).toFixed(1)} pts (heuristic, narrows as picks lock)</span>
-        <span>Based on {source}{real && games < 300 ? ". Few games for these filters, so numbers are rough" : ""}</span>
+        <span>Based on {source}{games < 300 ? ". Few games for these filters, so numbers are rough" : ""}</span>
         {ev.factors.slice(0, 3).map((f, i) => <span key={i} className={f.pp >= 0 ? "text-good" : "text-bad"}>{sign(f.pp)}% {describe(f)}</span>)}
       </div>
     </section>

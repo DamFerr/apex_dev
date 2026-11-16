@@ -1,15 +1,21 @@
-import { expect, test } from "@playwright/test";
-import { collectErrors, expectContentVisible, useFakeBackend } from "./helpers";
+import { expect, test, collectErrors, expectContentVisible } from "./helpers";
 
-const ROUTES = ["/", "/draft", "/champions", "/tierlist", "/profile", "/live", "/recap", "/analysis", "/pro", "/settings"];
+const ROUTES = ["/", "/draft", "/champions", "/tierlist", "/profile", "/live", "/recap", "/settings"];
 
-test.beforeEach(async ({ page }) => { await useFakeBackend(page); });
 
 test("every page renders its content", async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto("/#/");
   for (const r of ROUTES) { await page.evaluate((h) => (location.hash = h), r); await expectContentVisible(page); }
   expect(errors).toEqual([]);
+});
+
+test("no screen shows test or sample-data wording", async ({ page }) => {
+  await page.goto("/#/");
+  for (const r of ROUTES) {
+    await page.evaluate((h) => (location.hash = h), r); await expectContentVisible(page);
+    expect(await page.locator("body").innerText(), r).not.toMatch(/mock|demo|synthetic|placeholder|coming soon/i);
+  }
 });
 
 test("rapid page switching never leaves a blank page (regression)", async ({ page }) => {
@@ -22,11 +28,10 @@ test("rapid page switching never leaves a blank page (regression)", async ({ pag
   expect(errors).toEqual([]);
 });
 
-test("switching between 'coming soon' pages keeps hooks stable (regression)", async ({ page }) => {
-  const errors = collectErrors(page);
-  await page.goto("/#/pro");
-  for (const r of ["/analysis", "/pro", "/analysis"]) { await page.evaluate((h) => (location.hash = h), r); await expectContentVisible(page); }
-  expect(errors).toEqual([]);
+test("unknown addresses go back to Home", async ({ page }) => {
+  await page.goto("/#/analysis");
+  await expect(page).toHaveURL(/#\/$/);
+  await expectContentVisible(page);
 });
 
 test("command palette opens with Ctrl+K and navigates", async ({ page }) => {

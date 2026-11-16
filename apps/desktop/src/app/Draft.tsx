@@ -11,9 +11,7 @@ import { FilterBar } from "../components/FilterBar";
 import { useDraftStats, usePool } from "../lib/api";
 import { useDdChampions } from "../lib/ddragon";
 import { BanSuggestions, Recommendations, WinProbability } from "./DraftPanels";
-import { champId, champName, MOCK_HOST, runImport, useDraft } from "../lib/lcu";
-
-const post = (s: string) => fetch(`http://${MOCK_HOST}/scenario/${s}`, { method: "POST" }).catch(() => undefined);
+import { champId, champName, runImport, useDraft } from "../lib/lcu";
 
 function SlotCard({ s }: { s: Slot }) {
   const id = s.locked ? s.championId : s.hoverId, key = champId(id);
@@ -30,21 +28,20 @@ function SlotCard({ s }: { s: Slot }) {
 
 export function Draft() {
   const champsQ = useDdChampions(), champs = champsQ.data; // also re-renders once the full champion list has loaded
-  // Suggestions come only from the games the collector has stored for the current filters. Without games there is nothing to suggest (no made-up numbers).
+  // Suggestions come only from games the collector has stored for the current filters.
   const statsQ = useDraftStats(), stats = statsQ.data, myId = useUi((s) => s.myRiotId);
-  const real = !!stats && stats.games > 0;
   const data = useMemo(() => {
-    if (!champs || !stats || !real) return null;
+    if (!champs || !stats || stats.games === 0) return null;
     const tags = new Map(champs.map((c) => [c.key, c.tags]));
     return createRealData(stats, new Map(champs.map((c) => [c.id, c.key])), (k) => tags.get(k) ?? []);
-  }, [champs, stats, real]);
-  const source = real ? `${stats!.games.toLocaleString()} collected games` : "no collected games";
+  }, [champs, stats]);
+  const source = stats && stats.games > 0 ? `${stats.games.toLocaleString()} collected games` : "";
   const poolSource = "your recent games";
   const { draft, autoImport, setAutoImport, log, spells, setSpells } = useDraft();
-  const src = useUi((s) => s.lcuSource), mock = src === "mock", compact = useUi((s) => s.compact);
+  const compact = useUi((s) => s.compact);
   const me = draft.slots.find((x) => x.isLocal), myKey = me ? (me.locked ? me.championId : me.hoverId) : 0;
   const [personalize, setPersonalize] = useState(true), poolQ = usePool(myId);
-  // Your pool (recent games plus mastery with the local backend, a demo player otherwise), keyed by numeric champion key.
+  // Your pool (recent games plus mastery), keyed by numeric champion key.
   const pool = useMemo(() => {
     if (!poolQ.data || !champs) return null;
     const key = new Map(champs.map((c) => [c.id, c.key]));
@@ -74,14 +71,11 @@ export function Draft() {
   const team = (t: Slot["team"]) => draft.slots.filter((x) => x.team === t);
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Draft</h1>
-    <p className="text-sm text-muted mt-1 mb-5">Champ select assistant. Source: {src} League client (change in Settings).</p>
-    {!draft.connected && <div className="glass rounded-lg p-5 mb-5 text-sm">{mock ? <>Mock League client not running. In a second terminal run <code className="rounded bg-raised px-1.5 py-0.5">pnpm lcu-mock</code>, and this page connects automatically.</> : "League of Legends client not detected. Start the game client (native Apex window only); Apex retries every few seconds."}</div>}
+    <p className="text-sm text-muted mt-1 mb-5">Champ select assistant. Suggestions use the games Apex has collected.</p>
+    {!draft.connected && <div className="glass rounded-lg p-5 mb-5 text-sm">League of Legends client not detected. Start the game client and Apex connects automatically.</div>}
     <FilterBar />
     <div className="flex flex-wrap items-center gap-3 mb-5">
-      <Button disabled={!draft.connected || !mock} onClick={() => post("normal")}>Start mock champ select</Button>
-      <Button variant="ghost" disabled={!draft.connected || !mock} onClick={() => post("dodge")}>Start dodge scenario</Button>
-      <Button variant="ghost" disabled={!draft.connected || !mock} onClick={() => post("reset")}>Reset</Button>
-      <Button variant="ghost" disabled={mock || !isTauri || !draft.connected || !myKey} title={'Real client only. Writes a rune page named "Apex: <champion>"'} onClick={() => void runImport(myKey, me?.role ?? null)}>Import now</Button>
+      {isTauri && <Button variant="ghost" disabled={!draft.connected || !myKey} title={'Writes a rune page named "Apex: <champion>"'} onClick={() => void runImport(myKey, me?.role ?? null)}>Import now</Button>}
       <Button variant="ghost" onClick={() => void applyCompact(!compact)}>{compact ? "Full view" : "Compact view"}</Button>
       <label className="ml-auto flex items-center gap-2 text-sm"><input type="checkbox" checked={personalize} onChange={(e) => setPersonalize(e.target.checked)} className="size-4 accent-[rgb(var(--accent))]" />Use my champion pool ({poolSource})</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={spells} onChange={(e) => setSpells(e.target.checked)} className="size-4 accent-[rgb(var(--accent))]" />Also set summoner spells</label>
@@ -98,10 +92,10 @@ export function Draft() {
             <div className="text-sm font-medium">{t === "ally" ? "Your team" : "Enemy team"}</div>{team(t).map((s) => <SlotCard key={s.cellId} s={s} />)}</div>)}</div>
         </div>
         <aside aria-label="Draft assistant" className={compact ? "order-1 space-y-4" : "space-y-4"}>
-          {draft.active && !real && !statsQ.isLoading && <div className="glass rounded-lg p-4 text-sm text-muted">{statsQ.isError ? (statsQ.error as Error).message : "No collected games for these filters yet, so there are no suggestions. The collector fills this in over time: try “All regions”, “All patches” or a lower rank."}</div>}
           {champsQ.isError && <div className="glass rounded-lg p-4 text-sm text-muted">Win probability and suggestions need champion data from Riot’s Data Dragon, which couldn’t be loaded (offline?).</div>}
           {banSuggestions.length > 0 && me?.role && <BanSuggestions bans={banSuggestions} role={me.role} source={source} pool={poolSource} />}
-          {ev && <WinProbability ev={ev} source={source} real={real} games={stats?.games ?? 0} />}
+          {!data && !champsQ.isError && <div role="status" className="glass rounded-lg p-4 text-sm text-muted">{statsQ.isError ? (statsQ.error as Error).message : statsQ.isLoading ? "Loading collected statistics…" : "No collected games for these filters yet, so there are no suggestions. The collector gathers them in the background; check its progress in Settings."}</div>}
+          {ev && <WinProbability ev={ev} source={source} games={stats?.games ?? 0} />}
           {recs.length > 0 && me?.role && <Recommendations recs={recs} role={me.role} source={source} />}
         </aside>
       </div>)}

@@ -1,5 +1,5 @@
 //! Overlay window groundwork: transparent, always on top, no taskbar entry, and click-through
-//! (mouse events pass to the game). Content is a React placeholder for now.
+//! (mouse events pass to the game). Not reachable from the UI yet; it returns when the overlay has real content.
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 // async so window creation does not block the main thread (a known deadlock risk on Windows).

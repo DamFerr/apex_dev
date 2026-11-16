@@ -9,8 +9,8 @@ export const SHARDS = [5008, 5008, 5011];
 const PRIMARY_BY_TAG: Record<string, string> = { Mage: "Sorcery", Marksman: "Precision", Assassin: "Domination", Fighter: "Precision", Tank: "Resolve", Support: "Resolve" };
 
 /**
- * PLACEHOLDER recommendation: a valid page chosen by champion class (first rune of each row).
- * Real, win-rate-based pages replace this in Phase 2; the write path to the client stays the same.
+ * Default recommendation: a valid page chosen by champion class (first rune of each row).
+ * Win-rate-based pages will replace this once build data is collected; the write path to the client stays the same.
  */
 export function buildRunePage(styles: RuneStyle[], tags: string[], champion: string): RunePage {
   const byKey = (k: string) => styles.find((s) => s.key === k);

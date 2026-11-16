@@ -1,21 +1,20 @@
-import type { ApexApi } from "@apex/schema";
+import type { ApexApi, MatchPage } from "@apex/schema";
 
 /**
  * Talks to your local Apex backend (services/api). The Riot API key lives only there, never in the app.
- * Things it cannot provide yet (LP history) say so instead of showing made-up numbers.
  */
 export function createHttpApi(base: () => string): ApexApi {
   async function get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
     const q = new URLSearchParams(params);
     let res: Response;
     try { res = await fetch(`${base()}${path}?${q}`); }
-    catch { throw new Error(`Local backend not reachable at ${base()}. Start it with "pnpm api", or switch the data source to Mock in Settings.`); }
+    catch { throw new Error(`Local backend not reachable at ${base()}. Start it with "pnpm api".`); }
     if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? `Backend error ${res.status}`);
     return (await res.json()) as T;
   }
   const filterParams = (f?: { platform: string; patch: string; rank: string }): Record<string, string> => (f ? { region: f.platform, patch: f.patch, rank: f.rank } : {});
   const player = (id: string) => `/v1/players/${encodeURIComponent(id)}`;
-  const page = (id: string, cursor: number, limit: number) => get<import("@apex/schema").MatchPage>(`${player(id)}/matches`, { cursor: String(cursor), limit: String(limit) });
+  const page = (id: string, cursor: number, limit: number) => get<MatchPage>(`${player(id)}/matches`, { cursor: String(cursor), limit: String(limit) });
   return {
     getSummoner: (id) => get(player(id)),
     getMatchPage: page,
@@ -30,7 +29,5 @@ export function createHttpApi(base: () => string): ApexApi {
     getRecap: (id, matchId) => get(`${player(id)}/recap`, matchId ? { matchId } : {}),
     getLiveGame: (id) => get(`/v1/live/${encodeURIComponent(id)}`),
     getChampionPool: (id) => get(`${player(id)}/pool`),
-    // LP history needs the data collector (snapshots over time); Riot has no history endpoint.
-    getLpHistory: async () => { throw new Error("LP history needs the data collector, which comes in a later step."); },
   };
 }

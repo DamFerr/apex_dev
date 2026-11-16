@@ -1,4 +1,4 @@
-/** Shared contract between the UI, the mock API and the future backend. */
+/** Shared contract between the desktop app and the local backend (services/api). */
 export type Role = "TOP" | "JUNGLE" | "MID" | "ADC" | "SUPPORT";
 export type Tier = "IRON" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "EMERALD" | "DIAMOND" | "MASTER" | "GRANDMASTER" | "CHALLENGER";
 
@@ -25,7 +25,6 @@ export interface ChampionDetail extends ChampionSummary {
 }
 
 export interface MasteryEntry { champion: string; name: string; level: number; points: number }
-export interface LpPoint { label: string; lp: number }
 
 export interface PoolEntry { champion: string; games: number; wins: number; points: number }
 
@@ -68,7 +67,7 @@ export interface LiveBan { champion: string; championName: string; team: "blue" 
 export interface LiveGame { inGame: true; queue: string; mode: string; lengthSec: number; bans: LiveBan[]; players: LivePlayer[] }
 export type LiveResult = LiveGame | { inGame: false };
 
-/** Every screen talks to this interface only. Mock now, HTTP backend later. */
+/** Every screen talks to this interface only; the local backend implements it over HTTP. */
 export interface ApexApi {
   getSummoner(riotId: string): Promise<Summoner>;
   getRecentMatches(riotId: string, limit?: number): Promise<MatchSummary[]>;
@@ -77,12 +76,11 @@ export interface ApexApi {
   getMatchDetail(matchId: string, riotId?: string): Promise<MatchDetail>;
   getChampionPool(riotId: string): Promise<PoolEntry[]>;
   getMastery(riotId: string): Promise<MasteryEntry[]>;
-  getLpHistory(riotId: string): Promise<LpPoint[]>;
   getChampions(role?: Role, filter?: StatsFilter): Promise<ChampionList>;
   getChampion(id: string, filter?: StatsFilter): Promise<ChampionDetail>;
   getFilterOptions(): Promise<FilterOptions>;
-  /** null when there is no collected data (mock source). */
-  getDraftStats(filter?: StatsFilter): Promise<DraftStats | null>;
+  /** games is 0 when nothing has been collected for these filters yet. */
+  getDraftStats(filter?: StatsFilter): Promise<DraftStats>;
   /** One finished game (the latest when matchId is omitted) compared with averages. */
   getRecap(riotId: string, matchId?: string): Promise<PostGameRecap>;
   /** Is this player in a game right now? If so, all ten players. */

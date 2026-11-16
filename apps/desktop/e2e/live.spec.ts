@@ -1,8 +1,7 @@
-import { expect, test } from "@playwright/test";
-import { collectErrors, expectContentVisible, useFakeBackend } from "./helpers";
+import { expect, test, collectErrors, expectContentVisible } from "./helpers";
 
-test("shows both teams, marks you, bans, ranks, champion win rate and the jungler", async ({ page }) => {
-  await useFakeBackend(page);
+
+test("shows both teams, marks you, bans, the jungler, ranks and the hot streak", async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto("/#/live");
   await expectContentVisible(page);
@@ -21,17 +20,11 @@ test("shows both teams, marks you, bans, ranks, champion win rate and the jungle
 });
 
 test("a player who is not in a game gets a clear message; bad Riot IDs are rejected", async ({ page }) => {
-  await useFakeBackend(page);
   await page.goto("/#/live");
   const box = page.getByLabel("Riot ID to scout");
   await box.fill("nohashtag"); await page.getByRole("button", { name: "Look up" }).click();
-  await expect(page).toHaveURL(/#\/live\/?$/);                          // rejected, did not navigate
+  await expect(page).toHaveURL(/#\/live\/?$/); // rejected, did not navigate
   await box.fill("Offline#EUW"); await page.getByRole("button", { name: "Look up" }).click();
   await expect(page).toHaveURL(/#\/live\/Offline/);
   await expect(page.getByText(/is not in a game right now/)).toBeVisible();
-});
-
-test("without a Riot ID, Live Game asks for one", async ({ page }) => {
-  await useFakeBackend(page, { riotId: "" }); await page.goto("/#/live");
-  await expect(page.getByText("Set your Riot ID to see your live game.")).toBeVisible();
 });

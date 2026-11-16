@@ -29,7 +29,7 @@ export function Champions() {
     <h1 className="font-display text-3xl font-semibold tracking-tight">Champions</h1>
     <p className="text-sm text-muted mt-1 mb-5">{data
       ? `Collected data: ${data.totalGames.toLocaleString()} games, ${data.patch === "all" ? "all patches" : `patch ${data.patch}`}. ${data.totalGames < 500 ? "Small sample, so expect noisy numbers. " : ""}Win rates are Bayesian-adjusted; hover one for the raw value.`
-      : "Win rates are Bayesian-adjusted; hover one for the raw value."}</p>
+      : "Statistics from the games Apex has collected. Win rates are Bayesian-adjusted; hover one for the raw value."}</p>
     <FilterBar />
     <div className="flex flex-wrap items-center gap-2 mb-4">
       <Chip active={!role} onClick={() => setRole(undefined)}>All</Chip>

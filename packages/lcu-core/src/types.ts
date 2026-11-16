@@ -7,7 +7,7 @@ export interface ChampSelectSession {
   bans: { myTeamBans: number[]; theirTeamBans: number[] };
   actions: LcuAction[][]; timer: { phase: string; adjustedTimeLeftInPhase: number };
 }
-/** Transport-independent events. Both the mock WebSocket and the real Rust connector produce these. */
+/** Transport-independent events. Both the dev simulator's WebSocket and the real Rust connector produce these. */
 export type LcuEvent =
   | { type: "connected" } | { type: "disconnected" }
   | { type: "gameflow"; phase: GameflowPhase }

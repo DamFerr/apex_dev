@@ -1,4 +1,3 @@
-import { emit } from "@tauri-apps/api/event";
 import { motion } from "framer-motion";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, Chip, spring } from "../components/ui";
@@ -9,7 +8,7 @@ import { platformName } from "../lib/platforms";
 import { RIOT_ID_RE } from "../lib/riotId";
 import { toast } from "../lib/toast";
 import { useUi, type Theme } from "../lib/store";
-import { isTauri } from "../lib/tauri";
+import { useDraft } from "../lib/lcu";
 
 const Card = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="glass rounded-lg p-5 space-y-4"><h2 className="font-display text-lg font-semibold">{title}</h2>{children}</section>);
@@ -27,7 +26,7 @@ function HotkeyField({ id, label }: { id: string; label: string }) {
   const { hotkeys, patch } = useUi(), [rec, setRec] = useState(false);
   useEffect(() => {
     if (!rec) return;
-    const h = (e: KeyboardEvent) => { e.preventDefault(); if (e.key === "Escape") return setRec(false);
+    const h = (e: KeyboardEvent) => { e.preventDefault(); e.stopImmediatePropagation(); /* recording must not also trigger the hotkey */ if (e.key === "Escape") return setRec(false);
       const c = combo(e); if (c) { patch({ hotkeys: { ...hotkeys, [id]: c } }); setRec(false); } };
     window.addEventListener("keydown", h, true); return () => window.removeEventListener("keydown", h, true);
   }, [rec, id, hotkeys, patch]);
@@ -58,8 +57,7 @@ function CollectorRow() {
 }
 
 export function Settings() {
-  const u = useUi(), themes: Theme[] = ["dark", "light", "colorblind"];
-  const setOpacity = (v: number) => { u.patch({ overlayOpacity: v }); if (isTauri) emit("overlay-opacity", v); };
+  const u = useUi(), themes: Theme[] = ["dark", "light", "colorblind"], connected = useDraft((s) => s.draft.connected);
   return (
     <div className="space-y-4 max-w-2xl">
       <div><h1 className="font-display text-3xl font-semibold tracking-tight">Settings</h1>
@@ -70,35 +68,23 @@ export function Settings() {
         <Row label="Auto compact in champ select" hint="Shrinks the window to a narrow panel when champ select starts, and restores it after."><Toggle on={u.autoCompact} onChange={(v) => u.patch({ autoCompact: v })} label="Auto compact" /></Row>
       </Card>
       <Card title="League client">
-        <Row label="Source" hint="Real works in the native window only. If League isn’t in C:\Riot Games\League of Legends, set the LOL_LOCKFILE environment variable.">
-          <div className="flex gap-2"><Chip active={u.lcuSource === "mock"} onClick={() => u.setLcuSource("mock")}>Mock (dev)</Chip><Chip active={u.lcuSource === "real"} onClick={() => u.setLcuSource("real")}>Real client</Chip></div></Row>
+        <Row label="Status" hint="Apex finds the client by itself. If League isn’t in C:\Riot Games\League of Legends, set the LOL_LOCKFILE environment variable.">
+          <span className="flex items-center gap-2 text-sm"><span className={`size-1.5 rounded-full ${connected ? "bg-good" : "bg-gold"}`} />{connected ? "Connected" : "Not detected"}</span></Row>
       </Card>
       <Card title="Data">
-        <Row label="Your Riot ID" hint="Home, Recap, Live Game and Draft use this. Your region is found automatically. Example: Name#EUW">
-          <input aria-label="Your Riot ID" defaultValue={u.myRiotId} key={u.myRiotId} className="focus-ring h-8 w-52 px-3 rounded-md bg-raised/60 border border-line/10 text-sm"
-            onBlur={(e) => { const v = e.target.value.trim(); if (v === u.myRiotId) return; if (RIOT_ID_RE.test(v)) u.patch({ myRiotId: v }); else { toast("Riot ID must look like Name#TAG", "error"); e.target.value = u.myRiotId; } }}
+        <Row label="Your Riot ID" hint="Home, Profile and the Draft assistant use this. Your region is found automatically. Example: Name#EUW">
+          <input aria-label="Your Riot ID" defaultValue={u.myRiotId} key={u.myRiotId} placeholder="Name#TAG" className="focus-ring h-8 w-52 px-3 rounded-md bg-raised/60 border border-line/10 text-sm placeholder:text-muted"
+            onBlur={(e) => { const v = e.target.value.trim(); if (v === u.myRiotId) return; if (v === "" || RIOT_ID_RE.test(v)) u.patch({ myRiotId: v }); else { toast("Riot ID must look like Name#TAG", "error"); e.target.value = u.myRiotId; } }}
             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} /></Row>
         <CollectorRow />
         <Row label="Backend" hint={u.backendUrl}><Button variant="ghost" onClick={() => void testBackend(u.backendUrl)}>Test connection</Button></Row>
       </Card>
-      <Card title="Overlay">
-        <Row label="Show in-game overlay" hint={isTauri ? "A transparent, always-on-top window that ignores the mouse. Content is a placeholder for now." : "Native window only."}>
-          <Toggle on={u.overlayEnabled} onChange={(v) => u.patch({ overlayEnabled: v })} label="Show overlay" /></Row>
-        <Row label={`Opacity ${Math.round(u.overlayOpacity * 100)}%`}>
-          <input type="range" min={0.3} max={1} step={0.05} value={u.overlayOpacity} aria-label="Overlay opacity" onChange={(e) => setOpacity(Number(e.target.value))} className="w-40 accent-[rgb(var(--accent))]" /></Row>
-      </Card>
       <Card title="Hotkeys">
         <Row label="Command palette"><kbd className="rounded border border-line/15 px-2 py-1 text-xs text-muted">Ctrl+K (fixed)</kbd></Row>
-        <HotkeyField id="overlayToggle" label="Toggle overlay" />
         <HotkeyField id="compactToggle" label="Toggle compact mode" />
-        <p className="text-[11px] text-muted">These work while Apex is focused. System-wide hotkeys arrive with the live overlay.</p>
-      </Card>
-      <Card title="Language">
-        <Row label="Interface language" hint="More languages are planned for Phase 4."><select value={u.language} onChange={(e) => u.patch({ language: e.target.value })} aria-label="Language"
-          className="focus-ring h-8 px-2 rounded-md bg-raised border border-line/10 text-sm"><option value="en">English</option><option disabled>Español (soon)</option><option disabled>한국어 (soon)</option></select></Row>
+        <p className="text-[11px] text-muted">Hotkeys work while Apex is focused.</p>
       </Card>
       <Card title="Privacy">
-        <Row label="Anonymous usage telemetry" hint="Off by default. Nothing is collected or sent yet."><Toggle on={u.telemetry} onChange={(v) => u.patch({ telemetry: v })} label="Telemetry" /></Row>
         <Row label="Local data" hint="Settings and recent searches are stored only on this device. No Riot API key is ever stored in the app.">
           <Button variant="ghost" onClick={() => { if (window.confirm("Reset all Apex settings and recent searches on this device?")) { localStorage.clear(); location.reload(); } }}>Reset local data</Button></Row>
         <p className="text-[11px] text-muted">Apex isn’t endorsed by Riot Games and doesn’t reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties.</p>
