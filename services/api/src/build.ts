@@ -1,7 +1,8 @@
-import type { BuildItem, BuildItemBlock, ChampionBuild, ItemPathStat, PathItem, Role, RunePageStat, SkillOrderStat, SpellPairStat } from "@apex/schema";
+import type { BuildItem, BuildItemBlock, ChampionBuild, ItemPathStat, ItemWpa, PathItem, Role, RunePageStat, SkillOrderStat, SpellPairStat } from "@apex/schema";
+import { itemWpa } from "@apex/stats-core";
 
 /** One collected game of a champion (see Store.buildRows). */
-export interface BuildRow { perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills?: string | null; start?: string | null; buys?: string | null }
+export interface BuildRow { perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills?: string | null; start?: string | null; buys?: string | null; /** Game length in seconds (needed for WPA). */ duration?: number }
 export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; boots?: boolean }
 
 const FLASH = 4;
@@ -69,7 +70,7 @@ export function spellPair(rows: BuildRow[]): SpellPairStat | null {
  * "Core" means most often owned at the end, not a build order: order needs timelines, which are not collected yet.
  * Only finished items count: no components, consumables, trinkets or starter items.
  */
-export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>): BuildItemBlock[] {
+export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>, wpas: Map<number, ItemWpa> = new Map()): BuildItemBlock[] {
   const boots = new Map<string, Tally>(), done = new Map<string, Tally>();
   for (const r of rows) {
     let ids: number[]; try { ids = JSON.parse(r.items) as number[]; } catch { continue; }
@@ -78,7 +79,7 @@ export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>): Buil
       if (it.boots) bump(boots, String(id), r.win); else if (isFinished(it)) bump(done, String(id), r.win);
     }
   }
-  const take = (m: Map<string, Tally>, from: number, to: number): BuildItem[] => ranked(m).slice(from, to).map(([id, t]) => ({ id: Number(id), name: items.get(Number(id))!.name, games: t.games, wins: t.wins }));
+  const take = (m: Map<string, Tally>, from: number, to: number): BuildItem[] => ranked(m).slice(from, to).map(([id, t]) => ({ id: Number(id), name: items.get(Number(id))!.name, games: t.games, wins: t.wins, ...(wpas.has(Number(id)) ? { wpa: wpas.get(Number(id)) } : {}) }));
   const { core, situational } = LIMITS;
   return [{ name: "Boots", items: take(boots, 0, LIMITS.boots) }, { name: "Core items", items: take(done, 0, core) }, { name: "Situational", items: take(done, core, core + situational) }].filter((b) => b.items.length > 0);
 }
@@ -145,7 +146,38 @@ export function corePath(rows: BuildRow[], items: Map<number, ItemMeta>, minGame
   return { items: order.map((id) => ({ id, name: items.get(id)!.name, count: 1 })), games: sample.length, wins: sample.reduce((t, s) => t + s.win, 0) };
 }
 
+/** Game length bands in minutes: under 20, 20-25, 25-30, 30-35, 35 and longer. */
+export const lengthBand = (sec: number) => Math.min(4, Math.max(0, Math.floor(sec / 300) - 3));
+/** Most finished items counted when comparing games (5 means 5 or 6). */
+const MAX_FINISHED_BAND = 5;
+
+/**
+ * Win Probability Added for every boots and finished item the champion owned at the end of its games (see stats-core `itemWpa`).
+ * Games are compared only with games of the same length band and the same number of finished items, which removes most of the
+ * "winners and long games own more items" bias. Items are final inventories, so this is still a correlation. Rows without a game length are skipped.
+ */
+export function itemWpas(rows: BuildRow[], items: Map<number, ItemMeta>): Map<number, ItemWpa> {
+  const totals = new Map<string, Tally>(), owned = new Map<number, Map<string, Tally>>();
+  for (const r of rows) {
+    if (!(r.duration && r.duration > 0)) continue;
+    const ids = json<number[]>(r.items); if (!ids) continue;
+    const set = new Set(ids), finished = [...set].filter((id) => isFinished(items.get(id))).length;
+    const stratum = `${lengthBand(r.duration)}:${Math.min(finished, MAX_FINISHED_BAND)}`;
+    bump(totals, stratum, r.win);
+    for (const id of set) {
+      const it = items.get(id); if (!it || it.hasUpgrade || !(it.boots || isFinished(it))) continue;
+      const m = owned.get(id) ?? new Map<string, Tally>(); bump(m, stratum, r.win); owned.set(id, m);
+    }
+  }
+  const out = new Map<number, ItemWpa>();
+  for (const [id, m] of owned) {
+    const strata = [...totals].map(([k, all]) => { const o = m.get(k) ?? { games: 0, wins: 0 }; return { owners: o, others: { games: all.games - o.games, wins: all.wins - o.wins } }; });
+    const w = itemWpa(strata); out.set(id, { wpa: w.wpa, lo: w.lo, hi: w.hi, expected: w.expected });
+  }
+  return out;
+}
+
 export function computeBuild(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>): ChampionBuild {
-  return { champion, role, games: rows.length, runePages: runePages(rows), spells: spellPair(rows), itemBlocks: itemBlocks(rows, items),
+  return { champion, role, games: rows.length, runePages: runePages(rows), spells: spellPair(rows), itemBlocks: itemBlocks(rows, items, itemWpas(rows, items)),
     timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: corePath(rows, items), minPathGames: MIN_PATH_GAMES };
 }

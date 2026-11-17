@@ -8,7 +8,7 @@ import type { Store } from "./store";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
-import { computeBuild, skillOrder } from "./build";
+import { computeBuild, itemWpas } from "./build";
 import { canonicalChampionId } from "./champions";
 import type { Filter } from "./store";
 
@@ -166,10 +166,10 @@ export async function buildApp(deps: Deps) {
     const data = await dd(), line = (name: string, r: { games: number; wins: number }, id?: number | string): StatLine => ({ name, games: r.games, wins: r.wins, ...(id !== undefined ? { id } : {}) });
     const nameOf = (id: string) => [...data.champs.values()].find((c) => c.id === id)?.name ?? id;
     const completed = store.items(req.params.id, f).filter((i) => { const it = data.items.get(i.id); return it && it.total >= 2000 && !it.hasUpgrade; }); // finished items only
+    const wpas = itemWpas(store.buildRows(req.params.id, f), data.items);   // Win Probability Added per item (all roles of this champion)
     return { ...me, totalGames: total,
-      builds: completed.slice(0, 6).map((i) => line(data.items.get(i.id)!.name, i, i.id)),
+      builds: completed.slice(0, 6).map((i) => ({ ...line(data.items.get(i.id)!.name, i, i.id), ...(wpas.has(i.id) ? { wpa: wpas.get(i.id) } : {}) })),
       runes: store.keystones(req.params.id, f).map((k) => line(data.runes.get(k.id) ?? `Rune ${k.id}`, k, k.id)),
-      skillOrder: skillOrder(store.buildRows(req.params.id, f))?.max ?? [], // from the share of games that have timelines
       matchups: store.matchups(req.params.id, f).map((m) => line(nameOf(m.name), m, m.name)) };
   });
 

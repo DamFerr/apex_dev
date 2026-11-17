@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { RoleIcon } from "../components/RoleIcon";
 import type { ItemPathStat, Role, RunePageStat } from "@apex/schema";
 import { placeFlash, SPELL_NAMES } from "@apex/lcu-core";
 import { Chip, Skeleton } from "../components/ui";
-import { pct, rate, LowBadge } from "../components/StatRows";
+import { pct, rate, LowBadge, Wpa } from "../components/StatRows";
 import { useChampionBuild } from "../lib/api";
 import { useUi } from "../lib/store";
 import { useRuneLookup } from "../lib/ddragon";
@@ -48,7 +49,8 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
             <GameIcon kind="ability" champion={id} slot={k as "Q" | "W" | "E"} size={36} /></span>)}</div>
           <div className="mt-2" title="First 9 skill points, most common sequence among games with this max order">
             <div className="text-xs text-muted mb-1">First 9 levels</div>
-            <div className="flex gap-1" aria-hidden>{b.skillOrder.levels.map((k, i) => <GameIcon key={i} kind="ability" champion={id} slot={k as "Q" | "W" | "E" | "R"} size={24} keyBadge={false} />)}</div>
+            <div className="flex flex-wrap items-center gap-y-2" aria-hidden>{b.skillOrder.levels.map((k, i) => <span key={i} className="flex items-center">
+              {i > 0 && <ChevronRight size={12} className="text-muted/70 mx-0.5 shrink-0" />}<GameIcon kind="ability" champion={id} slot={k as "Q" | "W" | "E" | "R"} size={30} /></span>)}</div>
             <span className="sr-only">First 9 levels: {b.skillOrder.levels.join(" ")}</span></div></div>}
         {b.spells && <div className="text-sm pt-1">Summoner spells: <span className="inline-flex items-center gap-1.5 align-middle">{placeFlash(b.spells.ids, flashSlot).map((sid) => <GameIcon key={sid} kind="spell" id={sid} size={28} />)}</span><span className="sr-only">{spellText(b.spells.ids, flashSlot)}</span>{" "}
           <span className="text-xs text-muted">({wr(b.spells.wins, b.spells.games)} in {b.spells.games.toLocaleString()} games)</span></div>}
@@ -62,8 +64,9 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
           <div className="text-xs text-muted mb-1">{blk.name}</div>
           <div className="flex flex-wrap gap-3">{blk.items.map((it) => <div key={it.id} className="flex flex-col items-center gap-1 w-14" title={`${it.name}: ${it.games} games`}>
             <GameIcon kind="item" id={it.id} name={it.name} size={40} />
-            <span className="text-[11px] leading-none">{wr(it.wins, it.games)}</span><span className="text-[10px] text-muted leading-none">{it.games}</span></div>)}</div>
+            <span className="text-[11px] leading-none">{wr(it.wins, it.games)}</span>{it.wpa && <span className="text-[11px] leading-none"><Wpa w={it.wpa} /></span>}<span className="text-[10px] text-muted leading-none">{it.games}</span></div>)}</div>
         </div>)}
+        {b.itemBlocks.some((blk) => blk.items.some((it) => it.wpa)) && <div className="text-[11px] text-muted">Under each item: win rate, <span className="text-text">WPA</span> (win probability added, percentage points, vs games without the item of the same length and number of finished items; green or red only when its 95% range excludes 0) and games. A link, not proof.</div>}
       </div>
     </div>}
     <div className="text-xs text-muted">From {b?.games.toLocaleString() ?? "…"} collected games{role ? ` as ${role}` : ""} with your current filters; skill order, starting items and build order come from the {b?.timelineGames.toLocaleString() ?? "…"} of them that have a match timeline (a sample). Win rates are adjusted for small samples. In champ select, Apex can import this to the League client (Draft screen).</div>

@@ -34,7 +34,8 @@ test("champion page shows collected items, keystones and matchups", async ({ pag
   await expect(page.getByText("Zhonya's Hourglass")).toBeVisible();
   await expect(page.getByText("Press the Attack")).toBeVisible();
   await expect(page.getByRole("cell", { name: "Lux" })).toBeVisible();
-  await expect(page.getByText("Skill order (max priority)")).toBeVisible(); // from the games that have a timeline
+  await expect(page.getByLabel("Recommended build").getByText(/^Skill order ·/)).toBeVisible(); // from the games that have a timeline
+  await expect(page.getByText(/^Skill order/)).toHaveCount(1);                                 // shown once on the page
 });
 
 test("filters: region, patch and rank change the numbers, persist, and reset", async ({ page }) => {

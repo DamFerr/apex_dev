@@ -111,7 +111,15 @@ describe("champion statistics API", () => {
     expect(b.skillOrder).toMatchObject({ max: ["Q", "E", "W"], games: 40 }); expect(b.skillOrder.levels.join("")).toBe("QWEQQRQEQ");
     expect(b.startItems.items).toEqual([{ id: 1055, name: "Doran's Blade", count: 1 }, { id: 2003, name: "Health Potion", count: 2 }]);
     expect(b.corePath.items.map((i: { id: number }) => i.id)).toEqual([3157, 3089, 3100]);
-    expect((await get("/v1/champions/Ahri")).json().skillOrder).toEqual(["Q", "E", "W"]);     // the champion page's skill order now has data
+    expect((await get("/v1/champions/Ahri")).json()).not.toHaveProperty("skillOrder");      // the skill order lives in /build only (one place on the champion page)
+  });
+  it("adds Win Probability Added (WPA) to item rows on the champion route and in the build blocks", async () => {
+    const wpaShape = { wpa: expect.any(Number), lo: expect.any(Number), hi: expect.any(Number), expected: expect.any(Number) };
+    const champ = (await get("/v1/champions/Ahri")).json();
+    expect(champ.builds.length).toBeGreaterThan(0);
+    for (const row of champ.builds) { expect(row.wpa).toMatchObject(wpaShape); expect(row.wpa.lo).toBeLessThanOrEqual(row.wpa.wpa); expect(row.wpa.hi).toBeGreaterThanOrEqual(row.wpa.wpa); }
+    const blocks = (await get("/v1/champions/Ahri/build?role=TOP")).json().itemBlocks;
+    for (const it of blocks.flatMap((b: { items: unknown[] }) => b.items)) expect(it).toHaveProperty("wpa", expect.objectContaining(wpaShape));
   });
   it("returns lane matchups and teammate synergies with the other champions' own games", async () => {
     const r = (await get("/v1/champions/Ahri/relations")).json();   // no role given: Ahri's busiest role, TOP in the fixture

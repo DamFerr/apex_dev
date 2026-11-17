@@ -23,7 +23,9 @@ export interface MatchDetail { id: string; blueWon: boolean; participants: Parti
 export interface MatchPage { items: MatchSummary[]; nextCursor: number | null }
 
 /** One row of a stats table. `id` is the game id of what the row is (item id, keystone id, or champion id for matchups) so the UI can show its icon. */
-export interface StatLine { name: string; games: number; wins: number; id?: number | string }
+/** Win Probability Added of an item for one champion, in percentage points (shrunk), with its 95% range and the win rate (0..1) those games would be expected to have without the item. A correlation within games of the same length and number of finished items, not proof that the item causes wins. */
+export interface ItemWpa { wpa: number; lo: number; hi: number; expected: number }
+export interface StatLine { name: string; games: number; wins: number; id?: number | string; /** Only on item rows. */ wpa?: ItemWpa }
 export interface ChampionSummary { id: string; name: string; roles: Role[]; tags: string[]; games: number; wins: number; bans: number }
 /** One champion met in a lane matchup (opposite team, same role) or played with as a teammate. `baseGames/baseWins` are THAT champion's own games in `role`, so the client can work out what the pairing is expected to do. */
 export interface RelationLine { champion: string; name: string; role: Role; games: number; wins: number; baseGames: number; baseWins: number }
@@ -34,12 +36,12 @@ export interface ChampionRelations {
 }
 export interface ChampionList { patch: string; totalGames: number; champions: ChampionSummary[] }
 export interface ChampionDetail extends ChampionSummary {
-  totalGames: number; builds: StatLine[]; runes: StatLine[]; skillOrder: string[]; matchups: StatLine[];
+  totalGames: number; builds: StatLine[]; runes: StatLine[]; matchups: StatLine[];
 }
 
 /** A rune page as played in collected games: 4 primary + 2 secondary runes, then 3 stat shards (offense, flex, defense). */
 export interface RunePageStat { primaryStyleId: number; subStyleId: number; perkIds: number[]; games: number; wins: number }
-export interface BuildItem { id: number; name: string; games: number; wins: number }
+export interface BuildItem { id: number; name: string; games: number; wins: number; wpa?: ItemWpa }
 /** A titled group of items, e.g. "Boots" or "Core items". */
 export interface BuildItemBlock { name: string; items: BuildItem[] }
 export interface SpellPairStat { ids: [number, number]; games: number; wins: number }

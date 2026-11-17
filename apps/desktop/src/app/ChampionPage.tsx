@@ -36,12 +36,10 @@ export function ChampionPage() {
       <StatCard label="Ban rate" value={(c.bans / c.totalGames) * 100} suffix="%" />
       <StatCard label="Games" value={c.games} decimals={0} hint={s.badge === "low" ? "Low data: treat with caution" : `${s.badge} sample`} />
     </div>
-    {c.skillOrder.length > 0 && <div className="glass rounded-lg p-5"><div className="text-sm font-medium mb-2">Skill order (max priority)</div>
-      <div className="flex items-center gap-2">{c.skillOrder.map((k, i) => <span key={k} className="flex items-center gap-2">
-        {i > 0 && <span className="text-muted" aria-hidden>›</span>}<GameIcon kind="ability" champion={c.id} slot={k as "Q" | "W" | "E"} size={36} /></span>)}</div></div>}
     <BuildPanel id={c.id} roles={c.roles} />
     <div className="grid grid-cols-2 gap-4">
-      <div className="glass rounded-lg p-5"><StatRows title="Items" rows={c.builds} icon={(r) => typeof r.id === "number" ? <GameIcon kind="item" id={r.id} name={r.name} size={26} /> : null} /></div>
+      <div className="glass rounded-lg p-5"><StatRows title="Items" rows={c.builds} icon={(r) => typeof r.id === "number" ? <GameIcon kind="item" id={r.id} name={r.name} size={26} /> : null} />
+        {c.builds.some((r) => r.wpa) && <p className="text-[11px] text-muted mt-3">WPA = win probability added, in percentage points: how much owning the item goes with winning, compared with games without it of the same length and the same number of finished items. Final inventories only, so it shows a link, not proof.</p>}</div>
       <div className="glass rounded-lg p-5"><StatRows title="Keystone runes" rows={c.runes} icon={(r) => typeof r.id === "number" ? <GameIcon kind="rune" id={r.id} size={26} /> : null} /></div>
     </div>
     <RelationsPanel id={c.id} roles={c.roles} />

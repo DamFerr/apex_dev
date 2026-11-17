@@ -187,9 +187,9 @@ export function makeStore(db: DatabaseSync) {
       return { games: r.games, kda: r.kda ?? 0, cs: r.cs ?? 0, damage: r.damage ?? 0, gold: r.gold ?? 0 };
     },
     /** One row per collected game of this champion (optionally in one role): its rune page, spells and final items. Input for computeBuild. */
-    buildRows(champion: string, f: Filter, role?: Role): { perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills: string | null; start: string | null; buys: string | null }[] {
+    buildRows(champion: string, f: Filter, role?: Role): { perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills: string | null; start: string | null; buys: string | null; duration: number }[] {
       const w = filt(f);
-      return q(`SELECT p.perks, p.items, p.spell1, p.spell2, p.win, p.skills, p.start, p.buys FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.champion = ?${role ? " AND p.role = ?" : ""}${w.sql}`, champion, ...(role ? [role] : []), ...w.args);
+      return q(`SELECT p.perks, p.items, p.spell1, p.spell2, p.win, p.skills, p.start, p.buys, m.duration FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.champion = ?${role ? " AND p.role = ?" : ""}${w.sql}`, champion, ...(role ? [role] : []), ...w.args);
     },
     bans(f: Filter) { const w = filt(f); return q<{ k: number; n: number }>(`SELECT b.champion_key k, COUNT(*) n FROM bans b JOIN matches m ON m.id = b.match_id WHERE 1=1${w.sql} GROUP BY k`, ...w.args); },
     /** Lane matchups: same role, opposite team. */

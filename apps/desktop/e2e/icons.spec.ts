@@ -17,6 +17,13 @@ test("build panel icons (items, spells, skills, shards) all carry names", async 
   expect(errors).toEqual([]);
 });
 
+test("first 9 skill levels show the key letter on every icon and an arrow between them", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const row = page.getByLabel("Recommended build").getByText("First 9 levels", { exact: true }).locator("..");
+  await expect(row.locator("span[aria-hidden]").filter({ hasText: /^[QWER]$/ })).toHaveCount(9);   // Q W E Q Q R Q E Q, each with its letter
+  await expect(row.locator("svg.lucide-chevron-right")).toHaveCount(8);                              // arrows between the nine icons
+});
+
 test("everything still works, with names instead of pictures, when Data Dragon is completely offline", async ({ page }) => {
   const errors = collectErrors(page);
   await page.route("https://ddragon.leagueoflegends.com/**", (r) => r.abort());       // registered last, so it wins over the fake
@@ -67,8 +74,8 @@ test("champion page lists show item, keystone and matchup icons and the skill or
   const items = page.getByRole("table").filter({ hasText: "Items" }).first();
   await expect(items.getByRole("img", { name: "Zhonya's Hourglass" })).toBeVisible();
   await expect(items.getByText("Zhonya's Hourglass")).toBeVisible();                   // the name stays as text next to the icon
-  await expect(page.getByText("Skill order (max priority)").locator("..").getByRole("img", { name: "Q: Ahri Q" })).toBeVisible();
   const panel = page.getByLabel("Recommended build");
+  await expect(panel.getByLabel("Max order Q then E then W").getByRole("img", { name: "Q: Ahri Q" })).toBeVisible();
   await expect(panel.getByText("First 9 levels: Q W E Q Q R Q E Q")).toBeAttached();   // text kept for screen readers
   await expect(panel.locator('[aria-label="R: Ahri R"]').first()).toBeAttached();   // drawn, but hidden from screen readers (the text above says the same)
   expect(await unnamedImages(page)).toBe(0);

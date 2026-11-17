@@ -26,7 +26,8 @@ test("opens a champion page with stats, builds and matchups", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Ahri" })).toBeVisible();
   await expect(page.getByText("Win rate (adjusted)").first()).toBeVisible();
   await expect(page.getByRole("tab", { name: "Matchups" })).toBeVisible();
-  await expect(page.getByText("Skill order (max priority)")).toBeVisible();
+  await expect(page.getByText("Skill order (max priority)")).toHaveCount(0);   // the skill order is shown once, in the recommended build
+  await expect(page.getByLabel("Recommended build").getByText(/^Skill order ·/)).toBeVisible();
 });
 
 test.describe("with the backend not running", () => {
@@ -75,4 +76,15 @@ test("a champion without enough pairings says so instead of showing an empty tab
   await page.route("**/v1/champions/Lux/relations**", (r) => r.fulfill({ json: { champion: "Lux", role: "TOP", base: { games: 40, wins: 14 }, matchups: [], synergies: [] } }));
   await page.reload();
   await expect(page.getByLabel("Matchups and synergy").getByText(/Not enough games yet/)).toBeVisible();
+});
+
+test("items show WPA (win probability added) with its explanation, on the champion page and in the build", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const items = page.getByRole("table").filter({ hasText: "Items" }).first();
+  await expect(items.getByRole("columnheader", { name: "WPA" })).toBeVisible();
+  await expect(items.getByText(/^[+−]\d+\.\d$/).first()).toBeVisible();                     // a signed number in percentage points
+  await expect(page.getByText(/^WPA = win probability added/)).toBeVisible();
+  const panel = page.getByLabel("Recommended build");
+  await expect(panel.getByText(/Under each item: win rate, WPA/)).toBeVisible();
+  await expect(panel.getByText(/^[+−]\d+\.\d$/).first()).toBeVisible();
 });

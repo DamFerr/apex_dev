@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "./sqlite";
-import { computeBuild, itemBlocks, runePages, spellPair, type BuildRow, type ItemMeta } from "./build";
+import { computeBuild, itemBlocks, itemWpas, lengthBand, runePages, spellPair, type BuildRow, type ItemMeta } from "./build";
 import { makeStore, perksJson } from "./store";
 import { matchFixture, participant } from "./testkit";
 
@@ -86,5 +86,47 @@ describe("store + computeBuild", () => {
     db.exec("INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('OLD', '16.20', 'EMERALD', 'euw1', 1, 1800, 1)");
     expect(s.buildRows("Ahri", {})).toHaveLength(1);
     expect(computeBuild("Ahri", null, s.buildRows("Ahri", {}), items).runePages).toEqual([]);
+  });
+});
+
+describe("itemWpas (Win Probability Added of items)", () => {
+  const MIN = 60;
+  /** n games of the given length with the given final items; `wins` of them won. */
+  const games = (n: number, wins: number, itemIds: number[], minutes: number): BuildRow[] =>
+    Array.from({ length: n }, (_, i) => row({ items: JSON.stringify(itemIds), duration: minutes * MIN }, i < wins ? 1 : 0));
+
+  it("puts game lengths into 5 minute bands from under 20 to 35+", () => {
+    expect([10, 19.9, 20, 27, 34.9, 35, 60].map((m) => lengthBand(m * MIN))).toEqual([0, 0, 1, 2, 3, 4, 4]);
+  });
+  it("is positive for an item whose owners win more than games without it, in the same length band and item count", () => {
+    const rows = [...games(300, 200, [3157, 3089], 30), ...games(300, 150, [3100, 3089], 30)];   // Zhonya 67% vs Lich Bane 50%, both with 2 finished items
+    const w = itemWpas(rows, items);
+    expect(w.get(3157)!.wpa).toBeGreaterThan(5); expect(w.get(3157)!.lo).toBeGreaterThan(0);
+    expect(w.get(3100)!.wpa).toBeLessThan(-3);
+    expect(w.get(3157)!.expected).toBeGreaterThan(0.45); expect(w.get(3157)!.expected).toBeLessThan(0.6);
+  });
+  it("does not credit an item for appearing in long games, which everyone wins more (no length bias)", () => {
+    // Zhonya is owned mostly in 38 minute games (70% wins for everyone), Lich Bane mostly in 22 minute games (30% wins for everyone)
+    const rows = [...games(400, 280, [3157, 3089], 38), ...games(40, 12, [3157, 3089], 22), ...games(400, 120, [3100, 3089], 22), ...games(40, 28, [3100, 3089], 38)];
+    const w = itemWpas(rows, items);
+    expect(Math.abs(w.get(3157)!.wpa)).toBeLessThan(1.5); expect(Math.abs(w.get(3100)!.wpa)).toBeLessThan(1.5);
+  });
+  it("covers boots and finished items only, and skips games without a length", () => {
+    const rows = [...games(20, 10, [3157, 3020, 1055, 3340], 30), row({ items: "[3157]", duration: undefined })];
+    const w = itemWpas(rows, items);
+    expect([...w.keys()].sort()).toEqual([3020, 3157]);                  // not the Doran's Blade component or the ward
+    expect(w.get(3157)!.expected).toBeGreaterThan(0);
+    expect(itemWpas([row({ items: "[3157]" })], items).size).toBe(0);     // no duration at all: nothing to compare
+  });
+  it("shows a tiny sample as a small effect with a wide range", () => {
+    const rows = [...games(500, 250, [3089, 3100], 30), ...games(3, 3, [3157, 3089], 30)];
+    const z = itemWpas(rows, items).get(3157)!;
+    expect(z.wpa).toBeGreaterThan(0); expect(z.wpa).toBeLessThan(4); expect(z.lo).toBeLessThan(0);
+  });
+  it("is attached to the item blocks and the build", () => {
+    const rows = [...games(60, 40, [3157, 3089], 30), ...games(60, 30, [3100, 3089], 30)];
+    const b = computeBuild("Ahri", null, rows, items);
+    const all = b.itemBlocks.flatMap((x) => x.items);
+    expect(all.find((i) => i.id === 3157)!.wpa).toMatchObject({ wpa: expect.any(Number), lo: expect.any(Number), hi: expect.any(Number), expected: expect.any(Number) });
   });
 });

@@ -127,3 +127,4 @@ export function relationStat(kind: "matchup" | "synergy", own: Tally, other: Tal
 }
 
 export * from "./ladder";
+export * from "./wpa";
