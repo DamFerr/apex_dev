@@ -27,6 +27,12 @@ export async function buildApp(deps: Deps) {
     if (hit && now() - hit.at < ttl) return JSON.parse(hit.value) as T;
     const value = await fn(); cache.set(key, JSON.stringify(value), now()); return value;
   }
+  /**
+   * Cache for the endpoints that scan the whole participants table (patch history and patch trends). 10 minutes, like /v1/draft/data (the
+   * collector adds games all the time, so a number is at most 10 minutes old). The key carries the kept patches, so a new patch (or the
+   * removal of the oldest one) never serves an answer built for the old window.
+   */
+  const cachedScan = <T,>(key: string, fn: () => Promise<T>) => cached<T>(`${key}|${store.recentPatches().join(",")}`, 10 * MIN, fn);
   const REGIONS = ["europe", "americas", "asia", "sea"];
   function parseRiotId(raw: string): [string, string] {
     const i = raw.lastIndexOf("#");
@@ -198,7 +204,7 @@ export async function buildApp(deps: Deps) {
    * One champion across the kept patches (newest first): its games and wins in one role (default: its busiest), its bans and the size of each
    * patch. The client turns neighbouring patches into changes with `patchDelta` (stats-core), so this only reports counts.
    */
-  app.get<{ Params: { id: string }; Querystring: { role?: string; region?: string; rank?: string } }>("/v1/champions/:id/patches", async (req): Promise<ChampionPatches> => {
+  app.get<{ Params: { id: string }; Querystring: { role?: string; region?: string; rank?: string } }>("/v1/champions/:id/patches", async (req): Promise<ChampionPatches> => cachedScan(`patches:${req.params.id}:${JSON.stringify(req.query)}`, async () => {
     const f = patchScope(req.query), data = await dd(), champion = req.params.id, key = [...data.champs].find(([, c]) => c.id === champion)?.[0];
     const rows = store.championRowsByPatch(f, champion), perRole = new Map<string, number>();
     for (const r of rows) if (r.role) perRole.set(r.role, (perRole.get(r.role) ?? 0) + r.games);
@@ -208,7 +214,7 @@ export async function buildApp(deps: Deps) {
     const patches = (f.patches ?? []).map((patch): PatchPoint => { const r = rows.find((x) => x.patch === patch && x.role === role);
       return { patch, games: r?.games ?? 0, wins: r?.wins ?? 0, bans: key !== undefined ? bans.get(`${patch}|${key}`) ?? 0 : 0, matches: matches.get(patch) ?? 0 }; });
     return { champion, role, patches };
-  });
+  }));
 
   /**
    * The newest patch next to the one before it, for every champion that really plays `role` (same 10% rule as the tier list). Needs data in two
@@ -217,7 +223,10 @@ export async function buildApp(deps: Deps) {
   app.get<{ Querystring: { role?: string; region?: string; rank?: string } }>("/v1/patch-trends", async (req): Promise<PatchTrends> => {
     const role = roleOfQuery(req.query.role);
     if (!role) throw new HttpError(400, "role is required (TOP, JUNGLE, MID, ADC or SUPPORT)");
-    const f = patchScope(req.query), [patch, previous] = f.patches ?? [];
+    return cachedScan(`trends:${JSON.stringify(req.query)}`, () => patchTrends(role, req.query));
+  });
+  async function patchTrends(role: Role, query: { region?: string; rank?: string }): Promise<PatchTrends> {
+    const f = patchScope(query), [patch, previous] = f.patches ?? [];
     if (!patch || !previous) return { patch: patch ?? null, previous: null, role, rows: [] };
     const data = await dd(), matches = store.matchesByPatch(f), bans = store.bansByPatch(f), byId = new Map([...data.champs].map(([key, c]) => [c.id, { key, name: c.name }]));
     type Acc = { all: number; role: Record<string, { games: number; wins: number }> };
@@ -235,7 +244,7 @@ export async function buildApp(deps: Deps) {
       return [{ id, name: c.name, cur: point(id, patch, e), prev: point(id, previous, e) }];
     }).sort((a, b) => a.id.localeCompare(b.id));
     return { patch, previous, role, rows };
-  });
+  }
 
   /** Rune pages, summoner spells and final items of collected games for one champion. role is optional; an empty result means no collected games with these filters. */
   app.get<{ Params: { id: string }; Querystring: { role?: string; patch?: string; region?: string; rank?: string } }>("/v1/champions/:id/build", async (req): Promise<ChampionBuild> => {

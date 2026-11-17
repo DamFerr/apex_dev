@@ -98,6 +98,14 @@ export function makeStore(db: DatabaseSync) {
       return { kept, removedMatches };
     },
     /**
+     * Gives the space of deleted games back to the disk (SQLite only reuses it otherwise, so the file never shrinks after a cleanup).
+     * VACUUM rewrites the whole file and needs free disk space about the size of the database, so call it only after a big cleanup and
+     * never while the collector writes (server start, before the collector runs). Returns false (and changes nothing) if it cannot run.
+     */
+    compact(): boolean {
+      try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); db.exec("VACUUM"); return true; } catch { return false; }
+    },
+    /**
      * Remembers a player's Ranked Solo rank (LP history). A snapshot identical to the latest one is not stored again, so the history only
      * grows when the rank, LP or win/loss counters changed. Returns true when a row was added.
      */

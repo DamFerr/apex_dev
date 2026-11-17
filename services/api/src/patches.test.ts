@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildApp } from "./app";
-import { diverseStore, fakeDD, fakeRiot, idleCollector, memoryCache, seededStore } from "./testkit";
+import { diverseStore, fakeDD, fakeRiot, idleCollector, matchFixture, memoryCache, seededStore } from "./testkit";
 
 // diverseStore: 40 Emerald games on euw1 in 16.22 (blue wins 26 of them) and 20 Diamond games on na1 in 16.21 (blue wins 10).
 // In every game Ahri plays TOP for blue and is banned once, so Ahri has 40/26 and 20/10.
@@ -56,5 +56,38 @@ describe("GET /v1/patch-trends", () => {
     const app = await appWith(diverseStore());
     const euw = (await get(app, "/v1/patch-trends?role=TOP&region=euw1")).json().rows.find((r: { id: string }) => r.id === "Ahri");
     expect(euw.prev.games).toBe(0); expect(euw.cur.games).toBe(40);
+  });
+});
+
+describe("caching of the patch endpoints (they scan the whole participants table)", () => {
+  async function counted() {
+    const store = diverseStore(), riot = fakeRiot(); let t = 1_000_000;
+    let scans = 0; const orig = store.championRowsByPatch.bind(store); store.championRowsByPatch = (...a: Parameters<typeof orig>) => { scans++; return orig(...a); };
+    const app = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store, collector: idleCollector(riot, store), defaultPlatform: "euw1", now: () => t });
+    return { app, advance: (ms: number) => { t += ms; }, scans: () => scans };
+  }
+  it("answers the same request from the cache for 10 minutes, then scans again", async () => {
+    const { app, advance, scans } = await counted();
+    for (const url of ["/v1/champions/Ahri/patches", "/v1/patch-trends?role=TOP"]) {
+      const before = scans(), first = (await get(app, url)).json();
+      expect(scans()).toBe(before + 1);
+      expect((await get(app, url)).json()).toEqual(first); expect(scans()).toBe(before + 1); // cached
+      advance(9 * 60_000); await get(app, url); expect(scans()).toBe(before + 1);
+      advance(2 * 60_000); await get(app, url); expect(scans()).toBe(before + 2); // older than 10 minutes
+    }
+  });
+  it("keeps different filters apart and never caches an error", async () => {
+    const { app, scans } = await counted();
+    await get(app, "/v1/patch-trends?role=TOP"); await get(app, "/v1/patch-trends?role=TOP&region=euw1");
+    expect(scans()).toBe(2);
+    expect((await get(app, "/v1/patch-trends")).statusCode).toBe(400); expect((await get(app, "/v1/patch-trends")).statusCode).toBe(400);
+    expect((await get(app, "/v1/patch-trends?role=TOP")).json().rows.length).toBeGreaterThan(0);
+  });
+  it("does not serve an answer built for an older patch window once a new patch arrives", async () => {
+    const store = diverseStore(), riot = fakeRiot(); let t = 1_000_000;
+    const app = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store, collector: idleCollector(riot, store), defaultPlatform: "euw1", now: () => t });
+    expect((await get(app, "/v1/patch-trends?role=TOP")).json().patch).toBe("16.22");
+    store.saveMatch(matchFixture("NEW1", { gameVersion: "16.23.1.1" }), "Emerald", "euw1"); t += 1000; // well inside the 10 minutes
+    expect((await get(app, "/v1/patch-trends?role=TOP")).json().patch).toBe("16.23");
   });
 });

@@ -322,3 +322,33 @@ describe("timeline backfill bookkeeping", () => {
     expect(s2.pendingTimelines(1, ["euw1"], 10).map((m) => m.id)).toEqual(["EUW1_2"]);
   });
 });
+
+describe("store.compact (shrinking the file after a cleanup)", () => {
+  it("returns the disk space of pruned games and keeps the remaining data", async () => {
+    const { mkdtempSync, statSync, rmSync } = await import("node:fs"), { tmpdir } = await import("node:os"), { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "apex-compact-")), file = join(dir, "apex.db");
+    try {
+      const db = new DatabaseSync(file), s = makeStore(db);
+      // Old-patch games written straight into the tables (bypasses the retention rule, like data from an older version), with fat rows.
+      db.exec("BEGIN");
+      for (let i = 0; i < 3000; i++) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('O${i}', '${i < 2900 ? "16.1" : "16.9"}', 'EMERALD', 'euw1', 1, 1800, 1);
+        INSERT INTO participants (match_id, puuid, team, champion, win, items, perks) VALUES ('O${i}', 'x', 100, 'Ahri', 1, '[]', '${"x".repeat(2000)}');`);
+      db.exec("COMMIT");
+      s.recentPatches(); // loads the patch list
+      for (const p of ["16.2", "16.3", "16.4", "16.5", "16.6"]) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('N${p}', '${p}', 'EMERALD', 'euw1', 1, 1800, 1)`);
+      const fresh = makeStore(db); // a second store reads the patches again, like a restart
+      expect(fresh.pruneOldPatches().removedMatches).toBe(2901);
+      const before = statSync(file).size;
+      expect(fresh.compact()).toBe(true);
+      expect(statSync(file).size).toBeLessThan(before / 5); // most of the file was deleted games
+      expect(db.prepare("SELECT COUNT(*) AS n FROM matches").get()).toEqual({ n: 104 }); // 100 of 16.9 + 4 single-game patches (16.2 left the window too)
+      expect(db.prepare("SELECT COUNT(*) AS n FROM participants").get()).toEqual({ n: 100 });
+      db.close();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it("does not throw inside a transaction or on a closed database: it just reports false", () => {
+    const db = new DatabaseSync(":memory:"), s = makeStore(db);
+    db.exec("BEGIN"); expect(s.compact()).toBe(false); db.exec("ROLLBACK"); // VACUUM cannot run inside a transaction
+    expect(s.compact()).toBe(true);
+  });
+});
