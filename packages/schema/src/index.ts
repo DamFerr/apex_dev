@@ -76,11 +76,15 @@ export interface MasteryEntry { champion: string; name: string; level: number; p
 export interface PoolEntry { champion: string; games: number; wins: number; points: number }
 
 /** Collected statistics for the draft engine: pairs are [champion, champion, games, winsOfFirst], first id alphabetically first. */
+/** Sums over the collected games of one champion that carry damage-type data: what the team composition analysis averages. */
+export interface CompProfileRow { id: string; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }
 export interface DraftStats {
   games: number; patch?: string;
   champions: { id: string; games: number; wins: number; roles: string[] }[];
   matchups: [string, string, number, number][];   // lane opponents: same role, opposite teams
   synergies: [string, string, number, number][];  // same team
+  /** Damage split, damage taken and CC per champion (optional: older backends and test fixtures omit it). */
+  profiles?: CompProfileRow[];
 }
 /** Filters shared by every stats screen. platform: "all" or a region id; patch: "latest", "all" (= the last 5 patches, the only ones Apex keeps) or e.g. "16.22"; rank: "all" or a tier such as "EMERALD", which always means that tier AND ABOVE (Emerald IV and up). */
 export interface StatsFilter { platform: string; patch: string; rank: string }

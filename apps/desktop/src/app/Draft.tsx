@@ -6,11 +6,11 @@ import { applyCompact } from "../lib/compact";
 import { isTauri } from "../lib/tauri";
 import { useUi } from "../lib/store";
 import { useMemo, useState } from "react";
-import { createRealData, evaluate, personalZ, recommend, recommendBans } from "@apex/draft-engine";
+import { createRealData, evaluate, personalZ, recommend, recommendBans, teamComp } from "@apex/draft-engine";
 import { FilterBar } from "../components/FilterBar";
 import { useDraftStats, usePool } from "../lib/api";
 import { useDdChampions } from "../lib/ddragon";
-import { BanSuggestions, Recommendations, WinProbability } from "./DraftPanels";
+import { BanSuggestions, CompAnalysis, Recommendations, WinProbability } from "./DraftPanels";
 import { champId, champName, runImport, useDraft } from "../lib/lcu";
 
 function SlotCard({ s }: { s: Slot }) {
@@ -52,6 +52,8 @@ export function Draft() {
     return { ally: locked("ally"), enemy: locked("enemy") };
   }, [draft.slots]);
   const ev = useMemo(() => (data && draft.active ? evaluate(picks.ally, picks.enemy, data) : null), [data, draft.active, picks]);
+  // Team composition of the locked picks. Same data as the engine's layer B, so the panel shows what the win probability used.
+  const comps = useMemo(() => (data && draft.active ? { ally: teamComp(picks.ally, (c) => data.profile?.(c), data.tags), enemy: teamComp(picks.enemy, (c) => data.profile?.(c), data.tags) } : null), [data, draft.active, picks]);
   const recs = useMemo(() => {
     if (!data || !champs || !draft.active || draft.banning || !me?.role || me.locked) return [];
     const t0 = performance.now();
@@ -97,6 +99,7 @@ export function Draft() {
           {banSuggestions.length > 0 && me?.role && <BanSuggestions bans={banSuggestions} role={me.role} source={source} pool={poolSource} />}
           {!data && !champsQ.isError && <div role="status" className="glass rounded-lg p-4 text-sm text-muted">{statsQ.isError ? (statsQ.error as Error).message : statsQ.isLoading ? "Loading collected statistics…" : "No collected games for these filters yet, so there are no suggestions. The collector gathers them in the background; check its progress in Settings."}</div>}
           {ev && <WinProbability ev={ev} source={source} games={stats?.games ?? 0} />}
+          {comps && comps.ally.picks + comps.enemy.picks > 0 && <CompAnalysis ally={comps.ally} enemy={comps.enemy} />}
           {recs.length > 0 && me?.role && <Recommendations recs={recs} role={me.role} source={source} />}
         </aside>
       </div>)}

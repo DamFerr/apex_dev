@@ -246,6 +246,7 @@ describe("draft data and champion pool APIs", () => {
     expect(d.games).toBe(40); expect(d.patch).toBe("16.22");
     expect(d.champions.find((c: { id: string }) => c.id === "Ahri")).toMatchObject({ games: 40, wins: 26 });
     expect(d.matchups.length).toBeGreaterThan(0); expect(d.synergies.length).toBeGreaterThan(0);
+    expect(d.profiles).toEqual([]);                                  // the fixture games carry no damage-type data, so nothing is invented
   });
   it("builds your pool from recent games and mastery", async () => {
     const pool = (await get("/v1/players/Test%23EUW/pool")).json();

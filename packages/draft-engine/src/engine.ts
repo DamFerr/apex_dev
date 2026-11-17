@@ -1,4 +1,5 @@
 import type { Role } from "@apex/schema";
+import { damageSkew, teamComp, type CompProfile } from "./comp";
 
 /** Where numbers come from. createRealData implements it from the games the collector has stored. */
 export interface DraftData {
@@ -7,6 +8,8 @@ export interface DraftData {
   synergy(a: number, b: number): number;         // log-odds bonus when a and b are on the same team (symmetric)
   tags(champion: number): string[];
   roles(champion: number): Role[];
+  /** Measured damage split, damage taken and CC of a champion, when collected games have it (optional). */
+  profile?(champion: number): CompProfile | null;
 }
 export interface Pick { champion: number; role: Role | null }
 export interface Factor { kind: "strength" | "matchup" | "synergy" | "comp" | "personal"; champs: number[]; label: string; z: number; pp: number }
@@ -31,7 +34,7 @@ function resolve(picks: Pick[], data: DraftData): Pick[] {
 /** Layer B: team composition features. Returns log-odds contributions per feature for one team. */
 function comp(picks: Pick[], data: DraftData): Record<string, number> {
   const n = picks.length, tags = picks.map((p) => data.tags(p.champion));
-  const ap = tags.filter((t) => t[0] === "Mage" || t[0] === "Support").length, share = Math.max(ap, n - ap) / (n || 1);
+  const share = damageSkew(teamComp(picks, (c) => data.profile?.(c), data.tags)); // measured when every pick has games, else the class-tag estimate
   const has = (...k: string[]) => tags.some((t) => t.some((x) => k.includes(x)));
   return {
     "Damage balance": n >= 3 ? -0.3 * Math.max(0, (share - 0.75) / 0.25) : 0,

@@ -13,6 +13,24 @@ describe("store", () => {
     expect(s.counts().matches).toBe(1);
     expect(s.hasMatch("EUW1_1")).toBe(true);
   });
+  it("sums damage by type, damage taken and CC per champion, and skips games stored without them", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    const typed = (id: string) => matchFixture(id, { participants: Array.from({ length: 10 }, (_, i) => participant(i, { win: i < 5,
+      physicalDamageDealtToChampions: 6000, magicDamageDealtToChampions: 3000, trueDamageDealtToChampions: 1000, totalDamageTaken: 20000, timeCCingOthers: 30 })) });
+    s.saveMatch(typed("A"), "EMERALD", "euw1"); s.saveMatch(typed("B"), "EMERALD", "euw1");
+    s.saveMatch(matchFixture("C"), "EMERALD", "euw1");                       // an older game: Riot fields absent, columns NULL
+    const rows = s.compProfiles({}), ahri = rows.find((r) => r.id === "Ahri")!;
+    expect(ahri).toEqual({ id: "Ahri", games: 2, phys: 12000, magic: 6000, trueDmg: 2000, taken: 40000, cc: 60, seconds: 3600 });
+    expect(rows).toHaveLength(10);
+    expect(s.draftStats({}).profiles).toEqual(rows);
+  });
+  it("adds the damage columns to a database created by an earlier version", () => {
+    const db = new DatabaseSync(":memory:");
+    makeStore(db); db.exec("ALTER TABLE participants DROP COLUMN dmg_p; ALTER TABLE participants DROP COLUMN dmg_m; ALTER TABLE participants DROP COLUMN dmg_t; ALTER TABLE participants DROP COLUMN taken; ALTER TABLE participants DROP COLUMN cc;");
+    const s = makeStore(db);                                                 // the second start migrates
+    expect(s.saveMatch(matchFixture("A"), "EMERALD", "euw1")).toBe(true);
+    expect(s.compProfiles({})).toEqual([]);
+  });
   it("derives the patch and reports the latest one", () => {
     const s = makeStore(new DatabaseSync(":memory:"));
     s.saveMatch(matchFixture("A", { gameVersion: "16.21.5.9", gameEndTimestamp: 1000 }), "X", "euw1");

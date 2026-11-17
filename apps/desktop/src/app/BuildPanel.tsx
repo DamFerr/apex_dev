@@ -60,6 +60,7 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
         {b.startItems && <Path label="Starting items" p={b.startItems} />}
         {b.corePath && <Path label="Core items, usual build order" p={b.corePath} arrows />}
         {!b.corePath && b.timelineGames > 0 && <div className="text-xs text-muted">Build order: not enough games yet. It needs {b.minPathGames}+ timeline games that kept the same three core items ({b.timelineGames.toLocaleString()} timeline {b.timelineGames === 1 ? "game" : "games"} so far).</div>}
+        {(!b.skillOrder || !b.startItems) && b.timelineGames > 0 && <div className="text-xs text-muted">{[!b.skillOrder && "Skill order", !b.startItems && "Starting items"].filter(Boolean).join(" and ")}: not enough games yet. {!b.skillOrder && !b.startItems ? "They need" : "It needs"} {b.minPathGames}+ timeline games with the same {!b.skillOrder && !b.startItems ? "choices" : !b.skillOrder ? "max order" : "starting set"} ({b.timelineGames.toLocaleString()} timeline {b.timelineGames === 1 ? "game" : "games"} so far).</div>}
         {b.itemBlocks.map((blk) => <div key={blk.name}>
           <div className="text-xs text-muted mb-1">{blk.name}</div>
           <div className="flex flex-wrap gap-3">{blk.items.map((it) => <div key={it.id} className="flex flex-col items-center gap-1 w-14" title={`${it.name}: ${it.games} games`}>

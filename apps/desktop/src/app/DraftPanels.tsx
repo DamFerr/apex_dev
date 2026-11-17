@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { RoleIcon } from "../components/RoleIcon";
-import type { BanSuggestion, Evaluation, Factor, Recommendation } from "@apex/draft-engine";
+import type { BanSuggestion, Evaluation, Factor, Recommendation, TeamComp } from "@apex/draft-engine";
 import { ChampIcon } from "../components/ChampIcon";
 import { AnimatedNumber, spring } from "../components/ui";
 import { champId, champName } from "../lib/lcu";
@@ -66,6 +66,57 @@ export function BanSuggestions({ bans, role, source, pool }: { bans: BanSuggesti
             <span className="text-xs text-muted truncate">{b.against ? `Beats your ${champName(b.against)}` : "Strong in general"}</span>
           </motion.li>))}
       </ul>
+    </section>
+  );
+}
+
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+/** One team's damage split as a stacked bar. Three full-width layers scaled from the left (GPU friendly): true under magic under physical. */
+function DamageBar({ c, label }: { c: TeamComp; label: string }) {
+  const empty = c.picks === 0, text = `${label}: ${pct(c.ad)} physical, ${pct(c.ap)} magic${c.trueShare >= 0.005 ? `, ${pct(c.trueShare)} true` : ""}${c.measured ? "" : ", estimated from champion classes"}`;
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1"><span className="font-medium">{label}</span>
+        <span className="text-muted tabular-nums">{empty ? "no picks yet" : <><span className="text-gold">AD {pct(c.ad)}</span> · <span className="text-accent">AP {pct(c.ap)}</span>{c.trueShare >= 0.005 && <> · True {pct(c.trueShare)}</>}</>}</span></div>
+      <div className="relative h-2.5 rounded-full bg-raised/70 overflow-hidden" role="img" aria-label={text}>
+        <motion.div className="absolute inset-0 origin-left bg-text/70" initial={false} animate={{ scaleX: empty ? 0 : 1 }} transition={spring} />
+        <motion.div className="absolute inset-0 origin-left bg-accent" initial={false} animate={{ scaleX: empty ? 0 : c.ad + c.ap }} transition={spring} />
+        <motion.div className="absolute inset-0 origin-left bg-gold" initial={false} animate={{ scaleX: empty ? 0 : c.ad }} transition={spring} />
+      </div>
+    </div>
+  );
+}
+
+/** A per-minute number for both teams, bars relative to the larger one. Only drawn when both teams are measured. */
+function Versus({ label, ally, enemy, unit, digits = 0 }: { label: string; ally: number; enemy: number; unit: string; digits?: number }) {
+  const top = Math.max(ally, enemy, 1e-9), f = (n: number) => n.toFixed(digits);
+  return (
+    <div className="text-xs">
+      <div className="flex justify-between mb-1"><span className="font-medium">{label}</span><span className="text-muted tabular-nums">you {f(ally)} · enemy {f(enemy)} {unit}</span></div>
+      <div className="grid gap-1" role="img" aria-label={`${label}: your team ${f(ally)}, enemy team ${f(enemy)} ${unit}`}>
+        {[[ally, "bg-accent"], [enemy, "bg-bad"]].map(([v, c], i) => <div key={i} className="h-1.5 rounded-full bg-raised/70 overflow-hidden"><motion.div className={`h-full w-full origin-left ${c}`} initial={false} animate={{ scaleX: (v as number) / top }} transition={spring} /></div>)}
+      </div>
+    </div>
+  );
+}
+
+/** Team composition from the locked picks: damage split (measured from collected games, class estimate otherwise), tankiness and CC. */
+export function CompAnalysis({ ally, enemy }: { ally: TeamComp; enemy: TeamComp }) {
+  const both = ally.measured && enemy.measured && ally.takenPerMin != null && enemy.takenPerMin != null && ally.ccPerMin != null && enemy.ccPerMin != null;
+  const skewed = ([["Your team", ally], ["Enemy team", enemy]] as const).filter(([, c]) => c.picks >= 3 && Math.max(c.ad, c.ap) >= 0.75)
+    .map(([n, c]) => `${n} is ${pct(Math.max(c.ad, c.ap))} ${c.ad >= c.ap ? "physical" : "magic"} damage.`);
+  const estimated = [ally, enemy].some((c) => c.picks > 0 && !c.measured);
+  return (
+    <section className="glass rounded-lg p-4" aria-label="Team composition">
+      <div className="font-display text-lg font-semibold mb-3">Team composition</div>
+      <div className="space-y-3">
+        <DamageBar c={ally} label="Your team" /><DamageBar c={enemy} label="Enemy team" />
+        {both && <><Versus label="Damage taken" ally={ally.takenPerMin!} enemy={enemy.takenPerMin!} unit="/min" /><Versus label="Crowd control time" ally={ally.ccPerMin!} enemy={enemy.ccPerMin!} unit="s/min" digits={1} /></>}
+      </div>
+      {skewed.length > 0 && <p className="mt-3 text-xs text-gold" role="status">{skewed.join(" ")} One resistance item goes a long way against it.</p>}
+      <p className="mt-3 text-xs text-muted">{estimated
+        ? "Estimated from champion classes where a champion has fewer than 20 collected games with damage data. Damage taken and CC appear once both teams are measured."
+        : "Measured from collected games: average damage by type per minute, summed over the locked picks."}</p>
     </section>
   );
 }

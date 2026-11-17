@@ -57,3 +57,12 @@ describe("createRealData: roles and the engine", () => {
     expect(evaluate(ally, enemy, d).winProb + evaluate(enemy, ally, d).winProb).toBeCloseTo(1, 9);
   });
 });
+
+describe("createRealData: profiles", () => {
+  it("exposes collected damage numbers by champion key and nothing for unknown champions", () => {
+    const row = { id: "Ahri", games: 30, phys: 1, magic: 2, trueDmg: 3, taken: 4, cc: 5, seconds: 6 };
+    const d = createRealData(stats({ profiles: [row] }), keys, tags);
+    expect(d.profile?.(1)).toEqual(row); expect(d.profile?.(2)).toBeNull(); expect(d.profile?.(99)).toBeNull();
+  });
+  it("works with a backend that sends no profiles at all", () => expect(createRealData(stats(), keys, tags).profile?.(1)).toBeNull());
+});

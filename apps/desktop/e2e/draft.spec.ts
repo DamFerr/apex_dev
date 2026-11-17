@@ -34,6 +34,36 @@ test("champ select: ban turn, win probability from collected games, suggestions,
   expect(errors).toEqual([]);
 });
 
+test("team composition appears once picks lock, and says when the split is only an estimate", async ({ page, request }) => {
+  await open(page, request);
+  await play(request, "normal");
+  const comp = page.getByRole("region", { name: "Team composition" });
+  await expect(comp).toBeVisible({ timeout: 45_000 });
+  await expect(comp.getByRole("img", { name: /Your team: \d+% physical, \d+% magic/ })).toBeVisible();
+  await expect(comp.getByRole("img", { name: /Enemy team: \d+% physical, \d+% magic/ })).toBeVisible();
+  // The test backend's games carry no damage-type data, so the panel must not pretend to have measured anything.
+  await expect(comp).toContainText("Estimated from champion classes");
+  await expect(comp.getByRole("img", { name: /Damage taken|Crowd control time/ })).toHaveCount(0);
+});
+
+test("team composition is measured when collected games carry damage data", async ({ page, request }) => {
+  // The test backend's games have no damage-type data, so add a profile for every champion it knows to the draft data response.
+  await page.route("**/v1/draft/data*", async (route) => {
+    const res = await route.fetch(), body = await res.json();
+    body.profiles = body.champions.map((c: { id: string }, i: number) => ({ id: c.id, games: 50, phys: (i % 2 ? 9000 : 3000) * 50, magic: (i % 2 ? 3000 : 9000) * 50, trueDmg: 500 * 50, taken: 20000 * 50, cc: 30 * 50, seconds: 1800 * 50 }));
+    await route.fulfill({ response: res, json: body });
+  });
+  await open(page, request);
+  await play(request, "normal");
+  const comp = page.getByRole("region", { name: "Team composition" });
+  await expect(comp).toBeVisible({ timeout: 45_000 });
+  await expect(comp).toContainText("Measured from collected games", { timeout: 45_000 });
+  await expect(comp.getByRole("img", { name: /Damage taken: your team \d+, enemy team \d+ \/min/ })).toBeVisible();
+  await expect(comp.getByRole("img", { name: /Crowd control time: your team/ })).toBeVisible();
+  await expect(comp).not.toContainText("Estimated from champion classes");
+  await comp.screenshot({ path: "test-results/team-composition.png" });
+});
+
 test("the champion-pool checkbox changes the ban reasons", async ({ page, request }) => {
   await open(page, request);
   await play(request, "normal");

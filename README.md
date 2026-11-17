@@ -42,6 +42,7 @@ Test-only tooling, never shown in the app:
 | Draft assistant (win probability, pick and ban suggestions, your champion pool) | Built; needs collected games for the current filters |
 | League client connector (Rust) | Built; needs the real client running |
 | Rune, summoner spell and item set import | Built; uses collected games (10+ per champion), class/role defaults otherwise. Needs testing against the real client |
+| Draft "Team composition" panel (damage split, damage taken, CC time of both teams from the locked picks) | Built; measured from collected games stored after this update (20+ per champion), a labelled class estimate until then |
 | Champion page "Matchups and synergy" (lane matchups and teammates, difference from the expected win rate) | Built; needs collected games (pairs with 5+) |
 | Champion page "Recommended build" | Built (runes, spells, skill order, starting items, build order, final items; sample sizes shown) |
 | Patch deltas (champion page "Patch history", Tier List "Patch changes": win/pick/ban rate change between neighbouring kept patches, adjusted win rate with 95% range, withheld under 50 games per patch) | Built; needs collected games in at least two patches |

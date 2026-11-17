@@ -49,11 +49,13 @@ export function makeStore(db: DatabaseSync) {
   // Databases created by earlier versions lack these columns (full rune page, and the timeline data: skill order, starting items, purchases). Old rows stay NULL and are ignored by those stats.
   const pcols = (db.prepare("PRAGMA table_info(participants)").all() as { name: string }[]).map((c) => c.name);
   for (const c of ["perks", "skills", "start", "buys"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} TEXT`);
+  // Damage by type, damage taken and CC time (team composition analysis). Older games have NULL here and are skipped by compProfiles.
+  for (const c of ["dmg_p", "dmg_m", "dmg_t", "taken", "cc"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} INTEGER`);
   // Games stored before champion ids were canonicalised (e.g. "FiddleSticks") are renamed to the Data Dragon spelling, so one champion is never split in two. Safe to repeat.
   for (const [riot, dd] of Object.entries(RIOT_CHAMPION_ALIASES)) db.prepare("UPDATE participants SET champion = ? WHERE champion = ?").run(dd, riot);
   const q = <T,>(sql: string, ...args: (string | number)[]) => db.prepare(sql).all(...args) as T[];
   const filt = (f: Filter) => { const c: string[] = [], a: string[] = []; if (f.patches) { if (f.patches.length) { c.push(`m.patch IN (${f.patches.map(() => "?").join(",")})`); a.push(...f.patches); } else c.push("1 = 0"); } if (f.platform) { c.push("m.platform = ?"); a.push(f.platform); } if (f.brackets?.length) { c.push(`m.bracket IN (${f.brackets.map(() => "?").join(",")})`); a.push(...f.brackets); } return { sql: c.map((x) => ` AND ${x}`).join(""), args: a }; };
-  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
+  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks, dmg_p, dmg_m, dmg_t, taken, cc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
 
   // The distinct patches in the database, read once and kept up to date by saveMatch and pruneOldPatches (this process is the only writer).
   let known: Set<string> | undefined;
@@ -121,7 +123,8 @@ export function makeStore(db: DatabaseSync) {
         for (const p of i.participants) {
           const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6].filter((x): x is number => !!x && x > 0);
           insP.run(id, p.puuid, p.teamId, canonicalChampionId(p.championName), roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
-            p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p));
+            p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p),
+            p.physicalDamageDealtToChampions ?? null, p.magicDamageDealtToChampions ?? null, p.trueDamageDealtToChampions ?? null, p.totalDamageTaken ?? null, p.timeCCingOthers ?? null);
         }
         for (const t of i.teams ?? []) for (const b of t.bans) if (b.championId > 0) insB.run(id, b.championId);
         db.exec("COMMIT");
@@ -156,6 +159,16 @@ export function makeStore(db: DatabaseSync) {
       const per = new Map(q<{ id: string; matches: number }>("SELECT patch id, COUNT(*) matches FROM matches GROUP BY patch").map((r) => [r.id, r.matches]));
       return { platforms: g("platform"), ranks: g("bracket"), patches: this.recentPatches().map((id) => ({ id, matches: per.get(id) ?? 0 })) }; // the kept patches, newest first (numerically)
     },
+    /**
+     * Per champion sums for the team composition analysis: damage to champions by type, damage taken, CC time and the seconds played,
+     * over games that have the new columns (older stored games are skipped, so `games` is the measured sample, not all games).
+     */
+    compProfiles(f: Filter) {
+      const w = filt(f);
+      return q<{ id: string; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }>(
+        `SELECT p.champion id, COUNT(*) games, SUM(p.dmg_p) phys, SUM(p.dmg_m) magic, SUM(p.dmg_t) trueDmg, SUM(COALESCE(p.taken, 0)) taken, SUM(COALESCE(p.cc, 0)) cc, SUM(m.duration) seconds
+         FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.dmg_p IS NOT NULL AND p.dmg_m IS NOT NULL AND p.dmg_t IS NOT NULL${w.sql} GROUP BY p.champion`, ...w.args);
+    },
     /** Everything the draft engine needs, as compact arrays. Pairs with fewer than `min` games are left out. */
     draftStats(f: Filter, min = 3) {
       const w = filt(f);
@@ -164,7 +177,7 @@ export function makeStore(db: DatabaseSync) {
       const pairs = (sameTeam: boolean) => q<[string, string, number, number]>(`SELECT a.champion x, b.champion y, COUNT(*) g, SUM(a.win) w FROM participants a JOIN participants b ON a.match_id = b.match_id AND a.champion < b.champion
         AND ${sameTeam ? "a.team = b.team" : "a.team <> b.team AND a.role IS NOT NULL AND a.role = b.role"} JOIN matches m ON m.id = a.match_id WHERE 1=1${w.sql} GROUP BY a.champion, b.champion HAVING g >= ${min}`, ...w.args)
         .map((r) => { const o = r as unknown as { x: string; y: string; g: number; w: number }; return [o.x, o.y, o.g, o.w] as [string, string, number, number]; });
-      return { games: this.matchCount(f), champions: [...per].map(([id, e]) => ({ id, games: e.games, wins: e.wins, roles: [...e.roles].filter(([, g]) => g >= Math.max(2, e.games * 0.1)).map(([r]) => r) })), matchups: pairs(false), synergies: pairs(true) };
+      return { games: this.matchCount(f), champions: [...per].map(([id, e]) => ({ id, games: e.games, wins: e.wins, roles: [...e.roles].filter(([, g]) => g >= Math.max(2, e.games * 0.1)).map(([r]) => r) })), matchups: pairs(false), synergies: pairs(true), profiles: this.compProfiles(f) };
     },
     markCrawled: (puuid: string, at: number) => void db.prepare("UPDATE seeds SET crawled_at = ? WHERE puuid = ?").run(at, puuid),
     counts: () => ({ matches: (db.prepare("SELECT COUNT(*) n FROM matches").get() as { n: number }).n, seeds: (db.prepare("SELECT COUNT(*) n FROM seeds").get() as { n: number }).n,

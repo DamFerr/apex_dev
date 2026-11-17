@@ -7,7 +7,7 @@ import { matchFixture, participant } from "./testkit";
 const perks = (p: number, keystone: number, s: number, extra: number[] = [8126, 8139, 8135], pair = [8304, 8347], shards = [5008, 5008, 5011]) =>
   JSON.stringify({ p, s, r: [keystone, ...extra, ...pair], h: shards });
 const row = (over: Partial<BuildRow> = {}, win = 1): BuildRow => ({ perks: perks(8000, 8005, 8300), items: "[3157,3020]", spell1: 4, spell2: 14, win, ...over });
-const items = new Map<number, ItemMeta>([[3157, { name: "Zhonya", total: 3250, hasUpgrade: false }], [3089, { name: "Rabadon", total: 3600, hasUpgrade: false }], [3020, { name: "Sorcerer's Shoes", total: 1100, hasUpgrade: false, boots: true }],
+const items = new Map<number, ItemMeta>([[3157, { name: "Zhonya", total: 3250, hasUpgrade: false }], [3089, { name: "Rabadon", total: 3600, hasUpgrade: false }], [3020, { name: "Sorcerer's Shoes", total: 1100, hasUpgrade: true, boots: true }], [3998, { name: "Tier 3 Boots", total: 1850, hasUpgrade: false, boots: true }],
   [1001, { name: "Boots", total: 300, hasUpgrade: true, boots: true }], [1055, { name: "Doran's Blade", total: 450, hasUpgrade: true }], [3340, { name: "Ward", total: 0, hasUpgrade: false }], [3100, { name: "Lich Bane", total: 3000, hasUpgrade: false }]]);
 
 describe("runePages", () => {
@@ -58,6 +58,11 @@ describe("itemBlocks", () => {
   it("skips components, consumables, trinkets and base boots", () => {
     const blocks = itemBlocks([r([1055, 3340, 1001, 3157])], items);
     expect(blocks.flatMap((b) => b.items.map((i) => i.id))).toEqual([3157]);
+  });
+  it("shows tier 2 boots even though they build into tier 3, and tier 3 boots too", () => {
+    const blocks = itemBlocks([r([3157, 3020]), r([3157, 3020]), r([3157, 3998], 0)], items);
+    expect(blocks[0].name).toBe("Boots");
+    expect(blocks[0].items.map((i) => [i.id, i.games])).toEqual([[3020, 2], [3998, 1]]);
   });
   it("counts a duplicated item once per game", () => expect(itemBlocks([r([3157, 3157])], items)[0].items[0].games).toBe(1));
   it("survives broken item data", () => expect(itemBlocks([row({ items: "oops" })], items)).toEqual([]));
@@ -114,7 +119,7 @@ describe("itemWpas (Win Probability Added of items)", () => {
   it("covers boots and finished items only, and skips games without a length", () => {
     const rows = [...games(20, 10, [3157, 3020, 1055, 3340], 30), row({ items: "[3157]", duration: undefined })];
     const w = itemWpas(rows, items);
-    expect([...w.keys()].sort()).toEqual([3020, 3157]);                  // not the Doran's Blade component or the ward
+    expect([...w.keys()].sort()).toEqual([3020, 3157]);              // tier 2 boots (they build into tier 3) are included                  // not the Doran's Blade component or the ward
     expect(w.get(3157)!.expected).toBeGreaterThan(0);
     expect(itemWpas([row({ items: "[3157]" })], items).size).toBe(0);     // no duration at all: nothing to compare
   });

@@ -10,6 +10,13 @@ const FLASH = 4;
 export const MIN_PATH_GAMES = 10;
 /** The one rule for a "finished" item (no boots, nothing it upgrades into, costs 2000+). Core items, situational items and the core path all use it, so they always agree. */
 export const isFinished = (it: ItemMeta | undefined): it is ItemMeta => !!it && !it.boots && !it.hasUpgrade && it.total >= 2000;
+/**
+ * The one rule for boots. Boots come in three tiers (basic 300g, tier 2 around 900-1200g, tier 3 around 1850g), so a boots item that
+ * "builds into" something is NOT unfinished: most players end the game in tier 2, which builds into tier 3. Only the basic tier (and
+ * cheap boots-like items) is excluded, by cost. A final inventory holds one boots item, so tiers never double count.
+ */
+export const MIN_BOOTS_COST = 800;
+export const isBoots = (it: ItemMeta | undefined): it is ItemMeta => !!it && !!it.boots && it.total >= MIN_BOOTS_COST;
 /** How many rune pages, boots, core items and situational items are returned. */
 export const LIMITS = { runePages: 3, boots: 2, core: 3, situational: 5 } as const;
 
@@ -75,8 +82,8 @@ export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>, wpas:
   for (const r of rows) {
     let ids: number[]; try { ids = JSON.parse(r.items) as number[]; } catch { continue; }
     for (const id of new Set(ids)) { // a duplicate (two copies) counts once per game
-      const it = items.get(id); if (!it || it.hasUpgrade) continue;
-      if (it.boots) bump(boots, String(id), r.win); else if (isFinished(it)) bump(done, String(id), r.win);
+      const it = items.get(id);
+      if (isBoots(it)) bump(boots, String(id), r.win); else if (isFinished(it)) bump(done, String(id), r.win);
     }
   }
   const take = (m: Map<string, Tally>, from: number, to: number): BuildItem[] => ranked(m).slice(from, to).map(([id, t]) => ({ id: Number(id), name: items.get(Number(id))!.name, games: t.games, wins: t.wins, ...(wpas.has(Number(id)) ? { wpa: wpas.get(Number(id)) } : {}) }));
@@ -96,25 +103,25 @@ export function skillPriority(skills: number[]): string[] | null {
 }
 
 /** Most played skill priority and, among games with it, the most common first 9 skill points (a real sequence, never a mix). */
-export function skillOrder(rows: BuildRow[]): SkillOrderStat | null {
+export function skillOrder(rows: BuildRow[], minGames: number = MIN_PATH_GAMES): SkillOrderStat | null {
   const groups = new Map<string, { levels: string[]; wins: number }>();
   for (const r of rows) {
     const sk = json<number[]>(r.skills); if (!sk || sk.some((x) => !(x >= 1 && x <= 4))) continue;
     const pr = skillPriority(sk); if (!pr) continue;
     const g = groups.get(pr.join("")) ?? { levels: [], wins: 0 }; g.levels.push(sk.slice(0, 9).map((x) => SKILL[x - 1]).join("")); g.wins += r.win; groups.set(pr.join(""), g);
   }
-  const top = [...groups].sort((a, b) => b[1].levels.length - a[1].levels.length || (a[0] < b[0] ? -1 : 1))[0]; if (!top) return null;
+  const top = [...groups].sort((a, b) => b[1].levels.length - a[1].levels.length || (a[0] < b[0] ? -1 : 1))[0]; if (!top || top[1].levels.length < minGames) return null; // a handful of games is a coin flip, not a usual order
   return { max: top[0].split(""), levels: mode(top[1].levels).split(""), games: top[1].levels.length, wins: top[1].wins };
 }
 
 /** Most common starting items (as a set, with counts such as 2 potions). Free items (trinkets) are left out. */
-export function startItems(rows: BuildRow[], items: Map<number, ItemMeta>): ItemPathStat | null {
+export function startItems(rows: BuildRow[], items: Map<number, ItemMeta>, minGames: number = MIN_PATH_GAMES): ItemPathStat | null {
   const groups = new Map<string, Tally>();
   for (const r of rows) {
     const ids = json<number[]>(r.start)?.filter((id) => (items.get(id)?.total ?? 0) > 0).sort((a, b) => a - b); if (!ids?.length) continue;
     bump(groups, ids.join(","), r.win);
   }
-  const top = ranked(groups)[0]; if (!top) return null;
+  const top = ranked(groups)[0]; if (!top || top[1].games < minGames) return null;
   const count = new Map<number, number>(); for (const id of top[0].split(",").map(Number)) count.set(id, (count.get(id) ?? 0) + 1);
   return { items: [...count].map(([id, c]): PathItem => ({ id, name: items.get(id)!.name, count: c })), games: top[1].games, wins: top[1].wins };
 }
@@ -165,7 +172,7 @@ export function itemWpas(rows: BuildRow[], items: Map<number, ItemMeta>): Map<nu
     const stratum = `${lengthBand(r.duration)}:${Math.min(finished, MAX_FINISHED_BAND)}`;
     bump(totals, stratum, r.win);
     for (const id of set) {
-      const it = items.get(id); if (!it || it.hasUpgrade || !(it.boots || isFinished(it))) continue;
+      const it = items.get(id); if (!(isBoots(it) || isFinished(it))) continue;
       const m = owned.get(id) ?? new Map<string, Tally>(); bump(m, stratum, r.win); owned.set(id, m);
     }
   }

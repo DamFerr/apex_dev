@@ -1,6 +1,7 @@
 import { shrink } from "@apex/stats-core";
 import type { DraftStats, Role } from "@apex/schema";
 import { logit, sigmoid, type DraftData } from "./engine";
+import type { CompProfile } from "./comp";
 
 export type { DraftStats };
 /** Guesses roles from Riot's class tags, only for champions the collector has not seen yet. */
@@ -15,6 +16,7 @@ const PAIR_PRIOR = 30;     // virtual games pulling a pairing toward what the tw
  * Everything is shrunk toward its expectation, so a pairing seen 3 times barely moves the result.
  */
 export function createRealData(stats: DraftStats, keyOf: ReadonlyMap<string, number>, tagsOf: (key: number) => string[]): DraftData {
+  const prof = new Map((stats.profiles ?? []).map((r) => [r.id, r as CompProfile] as const));
   const idOf = new Map([...keyOf].map(([id, key]) => [key, id])), champ = new Map(stats.champions.map((c) => [c.id, c]));
   const strength = (id: string) => { const c = champ.get(id); return c ? shrink(c.wins, c.games, 0.5, STRENGTH_PRIOR) : 0.5; };
   const edges = (pairs: DraftStats["matchups"], expected: (x: string, y: string) => number) => new Map(pairs.map(([x, y, games, wins]) => {
@@ -26,6 +28,7 @@ export function createRealData(stats: DraftStats, keyOf: ReadonlyMap<string, num
   return {
     strength: (c) => { const id = idOf.get(c); return id ? strength(id) : 0.5; },
     tags: tagsOf,
+    profile: (c) => prof.get(idOf.get(c) ?? "") ?? null,
     roles: (c) => { const known = champ.get(idOf.get(c) ?? "")?.roles ?? []; return known.length ? (known as Role[]) : guessRoles(tagsOf(c)); },
     // Pairs are stored once with the first id alphabetically first; the reverse direction is the negative (matchup) or the same (synergy).
     matchup: (a, b) => { const x = idOf.get(a), y = idOf.get(b); if (!x || !y) return 0; return x < y ? lane.get(`${x}|${y}`) ?? 0 : -(lane.get(`${y}|${x}`) ?? 0); },

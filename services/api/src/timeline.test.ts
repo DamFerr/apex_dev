@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { corePath, skillOrder, skillPriority, startItems, type ItemMeta } from "./build";
+import { corePath, MIN_PATH_GAMES, skillOrder, skillPriority, startItems, type ItemMeta } from "./build";
 import { extractTimeline, inShare, START_MS } from "./timeline";
 import { timelineFixture } from "./testkit";
 import type { RiotTimeline } from "./riot";
@@ -43,8 +43,17 @@ describe("skill order", () => {
   const row = (skills: number[], win = 1) => ({ perks: null, items: "[]", spell1: null, spell2: null, win, skills: JSON.stringify(skills) });
   const qew = [1, 2, 3, 1, 1, 4, 1, 3, 1, 3, 4, 3, 3, 2, 2, 4, 2, 2], qwe = [1, 2, 3, 1, 1, 4, 1, 2, 1, 2, 4, 2, 2, 3, 3, 4, 3, 3];
   it("takes the most played priority and a real first-9 sequence from games with it", () => {
-    const s = skillOrder([row(qew), row(qew, 0), row(qwe)])!;
+    const s = skillOrder([row(qew), row(qew, 0), row(qwe)], 1)!;
     expect(s).toMatchObject({ max: ["Q", "E", "W"], games: 2, wins: 1 }); expect(s.levels.join("")).toBe("QWEQQRQEQ");
+  });
+  it("shows nothing from a handful of games, and exactly at the minimum", () => {
+    const many = (n: number) => Array.from({ length: n }, () => row(qew));
+    expect(skillOrder(many(MIN_PATH_GAMES - 1))).toBeNull();
+    expect(skillOrder(many(MIN_PATH_GAMES))).toMatchObject({ max: ["Q", "E", "W"], games: MIN_PATH_GAMES });
+  });
+  it("counts the minimum on the most played order, not on all timeline games", () => {
+    const rows = [...Array.from({ length: 6 }, () => row(qew)), ...Array.from({ length: 6 }, () => row(qwe))];   // 12 games, but no order has 10
+    expect(skillOrder(rows)).toBeNull();
   });
   it("is null without usable data", () => expect(skillOrder([{ ...row(qew), skills: null }, { ...row(qew), skills: "oops" }, row([9, 9, 9, 9, 9, 9, 9, 9, 9])])).toBeNull());
 });
@@ -52,9 +61,14 @@ describe("skill order", () => {
 describe("starting items and core path", () => {
   const row = (start: number[], buys: number[], win = 1) => ({ perks: null, items: "[]", spell1: null, spell2: null, win, start: JSON.stringify(start), buys: JSON.stringify(buys) });
   it("starting items: most common set with counts, trinkets left out", () => {
-    const s = startItems([row([2003, 1055, 2003, 3340], []), row([1055, 2003, 2003], [], 0), row([2003], [])], items)!;
+    const s = startItems([row([2003, 1055, 2003, 3340], []), row([1055, 2003, 2003], [], 0), row([2003], [])], items, 1)!;
     expect(s.games).toBe(2); expect(s.wins).toBe(1);
     expect(s.items).toEqual([{ id: 1055, name: "Doran's Blade", count: 1 }, { id: 2003, name: "Health Potion", count: 2 }]);
+  });
+  it("starting items: shows nothing from a handful of games, and exactly at the minimum", () => {
+    const many = (n: number) => Array.from({ length: n }, () => row([1055, 2003], []));
+    expect(startItems(many(MIN_PATH_GAMES - 1), items)).toBeNull();
+    expect(startItems(many(MIN_PATH_GAMES), items)).toMatchObject({ games: MIN_PATH_GAMES });
   });
   // A row: final inventory (what the player kept) and purchases after the start, in order.
   const game = (buys: number[], final: number[], win = 1) => ({ ...row([], buys, win), items: JSON.stringify(final) });
