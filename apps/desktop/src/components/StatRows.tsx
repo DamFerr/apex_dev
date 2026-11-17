@@ -1,7 +1,9 @@
-import { sampleBadge, shrink, wilson } from "@apex/stats-core";
+import { sampleBadge, shrink, wilson, winRateBand } from "@apex/stats-core";
 import type { ReactNode } from "react";
 import type { ItemWpa, StatLine } from "@apex/schema";
 
+/** The one win-rate colour class for every screen (see `winRateBand`: bad under 48%, good over 52%). Pass the ADJUSTED win rate as a fraction; always show the number too. */
+export const wrClass = (adj: number) => ({ good: "text-good", bad: "text-bad", neutral: "text-text" })[winRateBand(adj)];
 export const pct = (x: number, d = 1) => (x * 100).toFixed(d) + "%";
 /** Adjusted (shrunk) win rate plus the 95% Wilson range, so small samples are never overstated. */
 export function rate(wins: number, games: number) {
@@ -32,7 +34,7 @@ export function StatRows({ rows, title, icon }: { rows: StatLine[]; title: strin
         <tr key={r.name} className="h-9 border-t border-line/5">
           <td className="whitespace-nowrap"><span className="inline-flex items-center gap-2 align-middle">{icon?.(r)}<span>{r.name}</span></span><LowBadge games={r.games} /></td>
           <td className="text-right tabular-nums text-muted">{r.games.toLocaleString()}</td>
-          <td className={`text-right tabular-nums font-medium ${s.adj >= 0.5 ? "text-good" : "text-bad"}`} title={`Raw ${pct(s.raw)}`}>{pct(s.adj)}</td>
+          <td className={`text-right tabular-nums font-medium ${wrClass(s.adj)}`} title={`Raw ${pct(s.raw)}`}>{pct(s.adj)}</td>
           <td className="text-right tabular-nums text-muted text-xs whitespace-nowrap pl-2">{pct(s.lo, 0)}–{pct(s.hi, 0)}</td>
           {showWpa && <td className="text-right whitespace-nowrap pl-3">{r.wpa ? <Wpa w={r.wpa} /> : <span className="text-muted">–</span>}</td>}
         </tr>); })}</tbody>

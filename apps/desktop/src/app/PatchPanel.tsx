@@ -4,7 +4,7 @@ import { MIN_DELTA_GAMES, patchDelta, shrink, wilson } from "@apex/stats-core";
 import type { PatchPoint, Role } from "@apex/schema";
 import { Delta, winTone } from "../components/Delta";
 import { RoleIcon } from "../components/RoleIcon";
-import { LowBadge, pct, signed } from "../components/StatRows";
+import { LowBadge, pct, signed, wrClass } from "../components/StatRows";
 import { Chip, Skeleton } from "../components/ui";
 import { useChampionPatches } from "../lib/api";
 import { useUi } from "../lib/store";
@@ -59,7 +59,7 @@ export function PatchPanel({ id, roles }: { id: string; roles: Role[] }) {
           <tr key={p.patch} className="h-9 border-t border-line/5">
             <td className="whitespace-nowrap font-medium">{p.patch}{i === 0 && <span className="ml-2 rounded-full bg-accent/20 text-[10px] px-2 py-0.5">newest</span>}</td>
             <td className="text-right tabular-nums text-muted">{p.games.toLocaleString()}{p.games > 0 && <LowBadge games={p.games} />}</td>
-            <td className={`text-right tabular-nums font-medium pl-2 ${adj === null ? "text-muted" : adj >= 0.5 ? "text-good" : "text-bad"}`} title={p.games ? `Raw ${pct(p.wins / p.games)}` : undefined}>{adj === null ? "–" : pct(adj)}</td>
+            <td className={`text-right tabular-nums font-medium pl-2 ${adj === null ? "text-muted" : wrClass(adj)}`} title={p.games ? `Raw ${pct(p.wins / p.games)}` : undefined}>{adj === null ? "–" : pct(adj)}</td>
             <td className="text-right pl-2">{d ? <Delta value={d.winDelta} tone={winTone(d)} title={d.winDelta === null ? `Needs at least ${MIN_DELTA_GAMES} games in both patches` : `95% range ${signed(d.winRange![0])} to ${signed(d.winRange![1])} pp${d.significant ? "" : ": could be luck"}`} /> : <span className="text-muted">–</span>}</td>
             <td className="text-right tabular-nums pl-2">{p.matches ? pct(rateOf(p.games, p.matches)) : "–"}</td>
             <td className="text-right pl-2">{d ? <Delta value={d.pickDelta} tone="plain" /> : <span className="text-muted">–</span>}</td>
@@ -67,7 +67,7 @@ export function PatchPanel({ id, roles }: { id: string; roles: Role[] }) {
             <td className="text-right pl-2">{d ? <Delta value={d.banDelta} tone="plain" /> : <span className="text-muted">–</span>}</td>
           </tr>); })}</tbody>
       </table>
-      <p className="text-[11px] text-muted">Each row is compared with the patch below it. Win-rate changes need {MIN_DELTA_GAMES}+ games in both patches and are coloured only when the 95% range excludes 0; a patch also changes who plays the champion, so a change is not always caused by the balance changes. Pick and ban rates are shares of all collected games of that patch (bans count in every role). The patch filter does not apply here, region and rank do.</p>
+      <p className="text-[11px] text-muted" title={`Each row is compared with the patch below it. Win-rate changes need ${MIN_DELTA_GAMES}+ games in both patches and are coloured only when the 95% range excludes 0; a patch also changes who plays the champion, so a change is not always caused by the balance changes. Pick and ban rates are shares of all collected games of that patch (bans count in every role). The patch filter does not apply here, region and rank do.`}>Change vs the patch below · needs {MIN_DELTA_GAMES}+ games in both</p>
     </>}
   </section>);
 }

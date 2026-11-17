@@ -108,7 +108,7 @@ test("items show WPA (win probability added) with its explanation, on the champi
   const items = page.getByRole("table").filter({ hasText: "Items" }).first();
   await expect(items.getByRole("columnheader", { name: "WPA" })).toBeVisible();
   await expect(items.getByText(/^[+−]\d+\.\d$/).first()).toBeVisible();                     // a signed number in percentage points
-  await expect(page.getByText(/^WPA = win probability added/)).toBeVisible();
+  await expect(page.getByText(/^WPA: win probability added/)).toBeVisible();
   const panel = page.getByLabel("Recommended build");
   await expect(panel.getByText(/Under each item: win rate, WPA/)).toBeVisible();
   await expect(panel.getByText(/^[+−]\d+\.\d$/).first()).toBeVisible();
@@ -155,10 +155,11 @@ test("build variants (AP / Tank) can be switched and sorted; the build below fol
   await expect(list.getByRole("listitem").first()).toContainText("Tank");               // 70% beats 50%
 });
 
-test("a champion without separate builds shows no variant list", async ({ page }) => {
+test("a champion without separate builds has no variant switcher (the one build is shown instead)", async ({ page }) => {
   await page.goto("/#/champions/Ahri");
-  await expect(page.getByLabel("Recommended build")).toBeVisible();
-  await expect(page.getByRole("group", { name: "Build variants" })).toHaveCount(0);
+  const list = page.getByLabel("Recommended build").getByRole("group", { name: "Build variants" });
+  await expect(list.getByRole("listitem")).toHaveCount(0);
+  await expect(list.getByRole("button", { name: "Best" })).toHaveCount(0);
 });
 
 test("with Data Dragon's rune trees, every rune of the tree is listed and only the chosen ones are lit", async ({ page }) => {
@@ -171,4 +172,23 @@ test("with Data Dragon's rune trees, every rune of the tree is listed and only t
   await expect(primary.locator('[data-selected="true"]')).toHaveCount(4);
   await expect(secondary.locator("[data-selected]")).toHaveCount(9);      // the secondary tree has no keystone row
   await expect(secondary.locator('[data-selected="true"]')).toHaveCount(2);
+});
+
+// The test backend has one dominant build for Ahri (no AP/AD/Tank split), so the left column must still show that one build instead of staying empty.
+test("with too little data for separate variants the left column shows the one build", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const panel = page.getByLabel("Recommended build");
+  const list = panel.getByRole("group", { name: "Build variants" });
+  await expect(list).toBeVisible();
+  await expect(list.getByLabel(/^Most played build, \d+ games$/)).toBeVisible();
+  await expect(list.getByRole("button")).toHaveCount(0);                            // nothing to switch between, so no sort tabs and no buttons
+  await expect(list.getByText(/^\d+(\.\d)?%$/)).toBeVisible();                       // its win rate, with a number (colour is never the only signal)
+});
+
+test("long explanations live in tooltips, the page keeps short lines", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  await expect(page.getByText(/^WPA: win probability added, pp/)).toHaveAttribute("title", /link, not proof/);
+  await expect(page.getByText(/^vs expected:/)).toHaveAttribute("title", /overall win rates predict/);
+  await expect(page.getByText(/^Change vs the patch below/)).toHaveAttribute("title", /95% range excludes 0/);
+  await expect(page.getByText(/Final inventories only, so it shows a link/)).toHaveCount(0);   // the old long sentence is gone from the page text
 });

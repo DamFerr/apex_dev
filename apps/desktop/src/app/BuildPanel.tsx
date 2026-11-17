@@ -4,13 +4,13 @@ import { RoleIcon } from "../components/RoleIcon";
 import type { BuildItem, ChampionBuild, ItemPathStat, Role, RunePageStat } from "@apex/schema";
 import { placeFlash, SHARD_ROWS, SPELL_NAMES } from "@apex/lcu-core";
 import { Chip, Skeleton } from "../components/ui";
-import { pct, rate, LowBadge, Wpa } from "../components/StatRows";
+import { pct, rate, LowBadge, Wpa, wrClass } from "../components/StatRows";
 import { useChampionBuild } from "../lib/api";
 import { useUi } from "../lib/store";
 import { useRuneLookup, useRunes } from "../lib/ddragon";
 import { GameIcon } from "../components/GameIcon";
 
-const wr = (wins: number, games: number) => { const s = rate(wins, games); return <span className={`tabular-nums font-medium ${s.adj >= 0.5 ? "text-good" : "text-bad"}`} title={`Raw ${pct(s.raw)} · 95% ${pct(s.lo, 0)}–${pct(s.hi, 0)}`}>{pct(s.adj)}</span>; };
+const wr = (wins: number, games: number) => { const s = rate(wins, games); return <span className={`tabular-nums font-medium ${wrClass(s.adj)}`} title={`Raw ${pct(s.raw)} · 95% ${pct(s.lo, 0)}–${pct(s.hi, 0)}`}>{pct(s.adj)}</span>; };
 const spellText = (ids: [number, number], slot: "D" | "F") => placeFlash(ids, slot).map((i) => SPELL_NAMES[i] ?? i).join(" + ");
 const Arrow = () => <ChevronRight size={14} className="text-muted/70 shrink-0" aria-hidden />;
 const Heading = ({ children }: { children: ReactNode }) => <div className="text-sm font-medium">{children}</div>;
@@ -64,7 +64,7 @@ function RunesColumn({ b }: { b: Core }) {
       ? <div className="space-y-2">
           <div className="flex flex-wrap gap-4">{b.keystones.map((k) => <div key={k.id} className="flex items-center gap-2" title={`${names.get(k.id)?.name ?? "Keystone"}: ${k.games} games`}>
             <GameIcon kind="rune" id={k.id} size={40} /><div className="text-xs leading-tight"><div>{wr(k.wins, k.games)}</div><div className="text-muted">{k.games.toLocaleString()} games</div></div></div>)}</div>
-          <div className="text-xs text-muted">Keystones only. Full rune pages (all runes and shards) are stored for newly collected games, so none of this champion's games has one yet. They appear as the collector gathers more.</div>
+          <div className="text-xs text-muted" title="Full rune pages (all runes and shards) are stored for newly collected games only. They appear as the collector gathers more.">Keystones only · full pages need newer games</div>
         </div>
       : <div className="text-xs text-muted">No rune data for these filters yet.</div>)}
   </div>);
@@ -100,9 +100,9 @@ function ItemsColumn({ b }: { b: Core }) {
   const blocks = b.itemBlocks.filter((blk) => !(order && blk.name === "Core items")).map((blk) => ({ ...blk, items: blk.items.filter((i) => !inOrder.has(i.id)) })).filter((blk) => blk.items.length > 0);
   const missing = [!b.skillOrder && "Skill order", !b.startItems && "Starting items"].filter(Boolean).join(" and ");
   return (<div className="space-y-3">
-    <Heading>Items <span className="text-xs text-muted font-normal">(win rates are from final inventories)</span></Heading>
+    <Heading><span title="Win rates are from final inventories (what players owned at the end), not from the order they bought things.">Items</span></Heading>
     {b.startItems && <Starting p={b.startItems} />}
-    {missing && b.timelineGames > 0 && <div className="text-xs text-muted">{missing}: not enough games yet. {!b.skillOrder && !b.startItems ? "They need" : "It needs"} {b.minPathGames}+ timeline games with the same {!b.skillOrder && !b.startItems ? "choices" : !b.skillOrder ? "max order" : "starting set"} ({b.timelineGames.toLocaleString()} timeline {b.timelineGames === 1 ? "game" : "games"} so far).</div>}
+    {missing && b.timelineGames > 0 && <div className="text-xs text-muted" title={`Needs ${b.minPathGames}+ timeline games with the same ${!b.skillOrder && !b.startItems ? "choices" : !b.skillOrder ? "max order" : "starting set"}.`}>{missing}: need {b.minPathGames}+ timeline games ({b.timelineGames.toLocaleString()} so far)</div>}
     {order && <div>
       <div className="text-xs text-muted mb-1">Build order <span>· {wr(order.wins, order.games)} in {order.games.toLocaleString()} games that kept all the core items<LowBadge games={order.games} /></span></div>
       <div className="flex flex-wrap items-start gap-1" aria-label={`Build order ${order.items.map((i) => i.name).join(", then ")}`}>{order.items.map((it, i) => <Fragment key={it.id}>
@@ -111,7 +111,7 @@ function ItemsColumn({ b }: { b: Core }) {
     {blocks.map((blk) => <div key={blk.name}>
       <div className="text-xs text-muted mb-1">{blk.name}</div>
       <div className="flex flex-wrap items-start gap-3">{blk.items.map((it) => <ItemCell key={it.id} it={it} />)}</div></div>)}
-    {!order && b.timelineGames > 0 && b.itemBlocks.some((blk) => blk.name === "Core items") && <div className="text-xs text-muted">Core items are shown by popularity, not build order: the order needs {b.minPathGames}+ timeline games that kept the same three ({b.timelineGames.toLocaleString()} so far).</div>}
+    {!order && b.timelineGames > 0 && b.itemBlocks.some((blk) => blk.name === "Core items") && <div className="text-xs text-muted" title="Core items are shown by popularity, not build order. The order needs timeline games that kept the same three items.">Core items by popularity · order needs {b.minPathGames}+ timeline games ({b.timelineGames.toLocaleString()} so far)</div>}
     {b.itemBlocks.some((blk) => blk.items.some((it) => it.wpa)) && <div className="text-[11px] text-muted" title="WPA = win probability added, in percentage points, vs games without the item of the same length and number of finished items. Green or red only when its 95% range excludes 0. A link, not proof.">Under each item: win rate, <span className="text-text">WPA</span>, games. A link, not proof.</div>}
   </div>);
 }
@@ -139,19 +139,37 @@ function SkillBlock({ id, b }: { id: string; b: Core }) {
   </div>);
 }
 
+/** Keystone and the first items of a build, as small icons. */
+function BuildIcons({ build }: { build: Core }) {
+  const items = (build.buildOrder ?? build.corePath)?.items ?? build.itemBlocks.find((x) => x.name === "Core items")?.items ?? [], key = build.runePages[0]?.perkIds[0] ?? build.keystones[0]?.id;
+  return <div className="flex items-center gap-1.5">{key && <GameIcon kind="rune" id={key} size={22} />}{items.slice(0, 4).map((it) => <GameIcon key={it.id} kind="item" id={it.id} name={it.name} size={24} />)}</div>;
+}
+
+/** The left column when there are no separate variants (few games, or everyone builds the same): the one build shown on the right, as a single selected row. */
+function SingleBuild({ b }: { b: Core }) {
+  return (<div className="space-y-3" role="group" aria-label="Build variants">
+    <div aria-label={`Most played build, ${b.games} games`} className="rounded-lg border border-accent/60 bg-accent/15 p-3">
+      <div className="flex items-baseline justify-between"><span className="font-display font-semibold">Most played</span>{b.wins !== undefined && <span className="text-sm">{wr(b.wins, b.games)}</span>}</div>
+      <div className="text-[11px] text-muted mb-2">{b.games.toLocaleString()} games<LowBadge games={b.games} /></div>
+      <BuildIcons build={b} />
+    </div>
+    <p className="text-[11px] text-muted" title="Separate AP / AD / Tank builds appear when at least two of them have 10+ games and 5% of the classified games.">One build so far</p>
+  </div>);
+}
+
 /** The list of build variants (AP, AD, Tank) with a sort switch, like the build list of a champion page on Lolalytics or Blitz. */
 function VariantList({ b, sort, setSort, selected, setSelected }: { b: ChampionBuild; sort: VariantSort; setSort: (s: VariantSort) => void; selected: string; setSelected: (id: string) => void }) {
   const sorted = sortVariants(b, sort);
   return (<div className="space-y-3" role="group" aria-label="Build variants">
     <div className="flex gap-1.5 flex-wrap">{([["best", "Best"], ["rate", "Win rate"], ["common", "Common"]] as const).map(([k, l]) => <Chip key={k} active={sort === k} onClick={() => setSort(k)}>{l}</Chip>)}</div>
-    <ul className="space-y-2">{sorted.map((v) => { const items = (v.build.buildOrder ?? v.build.corePath)?.items ?? v.build.itemBlocks.find((x) => x.name === "Core items")?.items ?? [], key = v.build.runePages[0]?.perkIds[0] ?? v.build.keystones[0]?.id;
-      return <li key={v.id}><button onClick={() => setSelected(v.id)} aria-pressed={v.id === selected} aria-label={`${v.label} build, ${v.games} games`}
+    <ul className="space-y-2">{sorted.map((v) => (
+      <li key={v.id}><button onClick={() => setSelected(v.id)} aria-pressed={v.id === selected} aria-label={`${v.label} build, ${v.games} games`}
         className={`focus-ring w-full text-left rounded-lg border p-3 transition-colors ${v.id === selected ? "border-accent/60 bg-accent/15" : "border-line/10 hover:bg-raised/60"}`}>
         <div className="flex items-baseline justify-between"><span className="font-display font-semibold">{v.label}</span><span className="text-sm">{wr(v.wins, v.games)}</span></div>
         <div className="text-[11px] text-muted mb-2">{v.games.toLocaleString()} games<LowBadge games={v.games} /></div>
-        <div className="flex items-center gap-1.5">{key && <GameIcon kind="rune" id={key} size={22} />}{items.slice(0, 4).map((it) => <GameIcon key={it.id} kind="item" id={it.id} name={it.name} size={24} />)}</div>
-      </button></li>; })}</ul>
-    <p className="text-[11px] text-muted" title="Grouped by finished items (Data Dragon tags): AP, AD or defensive. Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items. “Best” ranks by the 95% lower bound.</p>
+        <BuildIcons build={v.build} />
+      </button></li>))}</ul>
+    <p className="text-[11px] text-muted" title="Grouped by finished items (Data Dragon tags): AP, AD or defensive. Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items</p>
   </div>);
 }
 
@@ -176,13 +194,13 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
     </div>
     {isLoading && <Skeleton className="h-32" />}
     {isError && <div className="text-sm text-muted">The build could not be loaded from the local backend.</div>}
-    {b && !has && <div className="text-sm text-muted">No rune or item data for these filters yet. Rune pages are stored for newly collected games only; games collected by older versions of Apex do not have them.</div>}
-    {b && cur && has && <div className={`grid gap-x-8 gap-y-6 items-start ${variants.length ? "grid-cols-[210px_minmax(0,1fr)_300px]" : "grid-cols-[minmax(0,1fr)_300px]"}`}>
-      {variants.length > 0 && b && <VariantList b={b} sort={sort} setSort={setSort} selected={active?.id ?? ""} setSelected={setVid} />}
+    {b && !has && <div className="text-sm text-muted" title="Rune pages are stored for newly collected games only; games collected by older versions of Apex do not have them.">No build data for these filters yet.</div>}
+    {b && cur && has && <div className={`grid gap-x-8 gap-y-6 items-start grid-cols-[210px_minmax(0,1fr)_300px]`}>
+      {variants.length > 0 ? <VariantList b={b} sort={sort} setSort={setSort} selected={active?.id ?? ""} setSelected={setVid} /> : <SingleBuild b={b} />}
       <div key={`r-${active?.id ?? "all"}`}><RunesColumn b={cur} /></div>
       <div className="space-y-5"><SpellsBlock b={cur} /><ItemsColumn b={cur} /></div>
-      {cur.skillOrder && <div className={variants.length ? "col-span-2 col-start-2" : "col-span-2"}><SkillBlock id={id} b={cur} /></div>}
+      {cur.skillOrder && <div className="col-span-2 col-start-2"><SkillBlock id={id} b={cur} /></div>}
     </div>}
-    <div className="text-xs text-muted">From {(cur ?? b)?.games.toLocaleString() ?? "…"} collected games{active ? ` with ${active.label} builds` : ""}{role ? ` as ${role}` : ""} with your current filters; skill order, starting items and build order come from the {(cur ?? b)?.timelineGames.toLocaleString() ?? "…"} of them that have a match timeline (a sample). Win rates are adjusted for small samples. In champ select, Apex can import this to the League client (Draft screen).</div>
+    <div className="text-xs text-muted" title="Skill order, starting items and build order come only from the games that have a match timeline (a sample). Win rates are adjusted for small samples. In champ select, Apex can import this build to the League client (Draft screen).">{(cur ?? b)?.games.toLocaleString() ?? "…"} collected games{active ? ` with ${active.label} builds` : ""}{role ? ` as ${role}` : ""} · {(cur ?? b)?.timelineGames.toLocaleString() ?? "…"} with a timeline</div>
   </div>);
 }

@@ -282,7 +282,7 @@ export function buildVariants(champion: string, role: Role | null, rows: BuildRo
 export function computeBuild(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>, withVariants = true): ChampionBuild {
   const path = corePath(rows, items), order = buildOrder(rows, items);
   const variants = withVariants ? buildVariants(champion, role, rows, items) : [];
-  return { champion, role, games: rows.length, runePages: runePages(rows), keystones: keystoneStats(rows), spells: spellPair(rows), spellPairs: spellPairs(rows),
+  return { champion, role, games: rows.length, wins: rows.reduce((t, r) => t + r.win, 0), runePages: runePages(rows), keystones: keystoneStats(rows), spells: spellPair(rows), spellPairs: spellPairs(rows),
     itemBlocks: itemBlocks(rows, items, itemWpas(rows, items), path?.items.map((i) => i.id) ?? []),
     timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: path, buildOrder: order, minPathGames: MIN_PATH_GAMES,
     ...(variants.length ? { variants } : {}) };

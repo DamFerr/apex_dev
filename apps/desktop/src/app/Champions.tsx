@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Role } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
-import { LowBadge, pct, rate } from "../components/StatRows";
+import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
 import { FilterBar } from "../components/FilterBar";
 import { Chip, Skeleton } from "../components/ui";
 import { useChampions } from "../lib/api";
@@ -47,7 +47,7 @@ export function Champions() {
               className="h-12 border-t border-line/5 cursor-pointer hover:bg-line/5">
               <td><Link to={`/champions/${c.id}`} className="focus-ring flex items-center gap-3 rounded-md" onClick={(e) => e.stopPropagation()}><ChampIcon id={c.id} name={c.name} />{c.name}</Link></td>
               <td className="text-xs text-muted">{c.roles.map(roleName).join(", ")}</td>
-              <td className={`text-right tabular-nums font-medium ${s.adj >= 0.5 ? "text-good" : "text-bad"}`} title={`Raw ${pct(s.raw)} · 95% ${pct(s.lo, 0)}–${pct(s.hi, 0)}`}>{pct(s.adj)}<LowBadge games={c.games} /></td>
+              <td className={`text-right tabular-nums font-medium ${wrClass(s.adj)}`} title={`Raw ${pct(s.raw)} · 95% ${pct(s.lo, 0)}–${pct(s.hi, 0)}`}>{pct(s.adj)}<LowBadge games={c.games} /></td>
               <td className="text-right tabular-nums">{pct(c.games / data!.totalGames)}</td>
               <td className="text-right tabular-nums">{pct(c.bans / data!.totalGames)}</td>
               <td className="text-right tabular-nums text-muted pr-2">{c.games.toLocaleString()}</td>

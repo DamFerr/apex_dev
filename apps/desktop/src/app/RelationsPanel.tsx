@@ -45,7 +45,7 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
     <div role="tabpanel" aria-label={kind === "matchups" ? "Matchups" : "Synergy"}>
       {isLoading && <Skeleton className="h-48" />}
       {isError && <div className="text-sm text-muted">Matchups could not be loaded from the local backend.</div>}
-      {data && rows.length === 0 && <div className="text-sm text-muted">Not enough games yet: a pairing needs at least 5 collected games with these filters{data.base.games === 0 ? ` (this champion has none as ${data.role ?? "this role"})` : ""}.</div>}
+      {data && rows.length === 0 && <div className="text-sm text-muted">Not enough games yet: a pairing needs 5+ games{data.base.games === 0 ? ` (none as ${data.role ?? "this role"})` : ""}.</div>}
       {rows.length > 0 && <table className="w-full text-sm">
         <caption className="sr-only">{kind === "matchups" ? "Lane matchups" : "Teammate synergy"} sorted by {sort === "games" ? "games played" : "difference from expected"}</caption>
         <thead className="text-xs text-muted"><tr>
@@ -69,7 +69,7 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
             </motion.tr>); })}
         </motion.tbody>
       </table>}
-      {rows.length > 0 && <p className="pt-3 text-xs text-muted">&ldquo;vs expected&rdquo; compares the win rate with what the two champions&rsquo; overall win rates predict, in percentage points. Win rates are adjusted toward that expected value, so a small sample stays close to it.</p>}
+      {rows.length > 0 && <p className="pt-3 text-xs text-muted" title="Compares the win rate with what the two champions' overall win rates predict, in percentage points. Win rates are adjusted toward that expected value, so a small sample stays close to it.">vs expected: pp difference from what overall win rates predict</p>}
       {rows.length > COLLAPSED && <div className="pt-3"><Chip onClick={() => setAll((a) => !a)}>{all ? "Show fewer" : `Show all ${rows.length}`}</Chip></div>}
     </div>
   </section>);

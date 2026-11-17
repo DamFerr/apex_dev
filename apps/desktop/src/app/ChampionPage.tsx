@@ -35,7 +35,7 @@ export function ChampionPage() {
     <BuildPanel id={c.id} roles={c.roles} />
     <div className="grid grid-cols-2 gap-4">
       <div className="glass rounded-lg p-5"><StatRows title="Items" rows={c.builds} icon={(r) => typeof r.id === "number" ? <GameIcon kind="item" id={r.id} name={r.name} size={26} /> : null} />
-        {c.builds.some((r) => r.wpa) && <p className="text-[11px] text-muted mt-3">WPA = win probability added, in percentage points: how much owning the item goes with winning, compared with games without it of the same length and the same number of finished items. Final inventories only, so it shows a link, not proof.</p>}</div>
+        {c.builds.some((r) => r.wpa) && <p className="text-[11px] text-muted mt-3" title="How much owning the item goes with winning, in percentage points, compared with games without it of the same length and the same number of finished items. Final inventories only, so it shows a link, not proof.">WPA: win probability added, pp · a link, not proof</p>}</div>
       <div className="glass rounded-lg p-5"><StatRows title="Keystone runes" rows={c.runes} icon={(r) => typeof r.id === "number" ? <GameIcon kind="rune" id={r.id} size={26} /> : null} /></div>
     </div>
     <PatchPanel id={c.id} roles={c.roles} />

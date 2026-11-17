@@ -5,7 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { LiveGame as Game, LivePlayer } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
-import { LowBadge, pct, rate } from "../components/StatRows";
+import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
 import { Button, Skeleton, spring } from "../components/ui";
 import { useLiveGame } from "../lib/api";
 import { RIOT_ID_RE } from "../lib/riotId";
@@ -39,7 +39,7 @@ function PlayerCard({ p }: { p: LivePlayer }) {
           {season && p.rank ? `${p.rank.wins}W ${p.rank.losses}L · ${pct(season.adj, 0)}` : "no ranked games"}</div>
       </div></div>
       <div className="text-right text-xs shrink-0 w-24" title="Win rate of everyone on this champion in the games Apex has collected (current patch)">
-        {champ ? <><div className={`tabular-nums font-medium text-sm ${champ.adj >= 0.5 ? "text-good" : "text-bad"}`}>{pct(champ.adj)}<LowBadge games={p.champGames} /></div><div className="text-muted">champion</div></>
+        {champ ? <><div className={`tabular-nums font-medium text-sm ${wrClass(champ.adj)}`}>{pct(champ.adj)}<LowBadge games={p.champGames} /></div><div className="text-muted">champion</div></>
           : <div className="text-muted">no champion data</div>}
       </div>
     </motion.li>);

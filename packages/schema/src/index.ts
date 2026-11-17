@@ -67,7 +67,7 @@ export interface ItemPathStat { items: PathItem[]; games: number; wins: number }
  * build order and starting items come from the timeline sample. Empty lists = not enough data.
  */
 export interface ChampionBuild {
-  champion: string; role: Role | null; games: number;
+  champion: string; role: Role | null; games: number; /** Wins among those games (absent on old backends). */ wins?: number;
   runePages: RunePageStat[]; /** Most played keystones; shown when `runePages` is empty. */ keystones: KeystoneStat[]; spells: SpellPairStat | null; itemBlocks: BuildItemBlock[];
   /** Games of this champion that have timeline data (only a share of collected games do). The three fields below come from those. */
   timelineGames: number; skillOrder: SkillOrderStat | null; startItems: ItemPathStat | null; corePath: ItemPathStat | null;

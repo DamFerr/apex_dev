@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { Role } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
 import { FilterBar } from "../components/FilterBar";
-import { pct } from "../components/StatRows";
+import { pct, wrClass } from "../components/StatRows";
 import { Tabs } from "../components/Tabs";
 import { Chip, Skeleton, spring } from "../components/ui";
 import { PatchChanges } from "./PatchChanges";
@@ -60,7 +60,7 @@ export function TierList() {
                   <Link to={`/champions/${r.id}`} className="focus-ring flex items-center gap-2 rounded-md bg-raised/60 border border-line/10 pl-1 pr-3 py-1 hover:bg-raised"
                     title={`${r.games.toLocaleString()} games · pick ${pct(r.pickRate)} · ban ${pct(r.banRate)} · edge ${r.delta >= 0 ? "+" : ""}${r.delta.toFixed(1)} pp`}>
                     <ChampIcon id={r.id} name={r.name} size={32} />
-                    <span className="text-sm leading-tight">{r.name}<span className={`block text-xs tabular-nums ${r.winRate >= 0.5 ? "text-good" : "text-bad"}`}>{pct(r.winRate)}</span></span>
+                    <span className="text-sm leading-tight">{r.name}<span className={`block text-xs tabular-nums ${wrClass(r.winRate)}`}>{pct(r.winRate)}</span></span>
                   </Link>
                 </motion.li>))}
             </motion.ul>
