@@ -62,3 +62,13 @@ test.describe("a player Apex has not seen before", () => {
   });
 });
 
+
+test("a champion id in Riot's spelling (FiddleSticks) still shows the right name and loads the right icon file", async ({ page }) => {
+  await page.route("**/v1/matches/**", (r) => r.fulfill({ json: { id: "EUW1_1", blueWon: true, participants: [{ name: "Fid", loadout: { items: [], trinket: null, spells: [], keystone: null, secondaryStyle: null },
+    champion: "FiddleSticks", team: "blue", kills: 1, deaths: 1, assists: 1, cs: 1, damage: 1, gold: 1, vision: 1 }] } }));
+  const icon = page.waitForRequest(/\/img\/champion\/Fiddlesticks\.png$/);
+  await page.goto("/#/profile");
+  await page.locator("li button[aria-expanded]").first().click();
+  await expect(page.getByText("Fiddlesticks", { exact: true })).toBeVisible();
+  await icon;                                                               // never .../FiddleSticks.png, which does not exist on Data Dragon
+});

@@ -1,12 +1,15 @@
 import type { DatabaseSync } from "./sqlite";
 import type { Role } from "@apex/schema";
 import { roleOf } from "./mapping";
+import { canonicalChampionId, RIOT_CHAMPION_ALIASES } from "./champions";
 import type { RiotMatch } from "./riot";
 import type { PlayerTimeline } from "./timeline";
 
 /** `patches` undefined = no patch restriction (only used below the API; the API always passes a list); an empty list matches nothing. */
 export interface Filter { patches?: string[]; brackets?: string[]; platform?: string }
 export interface Row { name: string; games: number; wins: number }
+/** A champion met in some role, with the games and wins of the champion it was asked about. */
+export interface Rel { champion: string; role: string; games: number; wins: number }
 const RANKED_SOLO = 420, MIN_SECONDS = 300; // remakes and early surrenders are ignored
 
 /** Apex keeps data for the newest KEEP_PATCHES patches only (the newest one seen in the collected games, never decided by the clock). */
@@ -46,6 +49,8 @@ export function makeStore(db: DatabaseSync) {
   // Databases created by earlier versions lack these columns (full rune page, and the timeline data: skill order, starting items, purchases). Old rows stay NULL and are ignored by those stats.
   const pcols = (db.prepare("PRAGMA table_info(participants)").all() as { name: string }[]).map((c) => c.name);
   for (const c of ["perks", "skills", "start", "buys"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} TEXT`);
+  // Games stored before champion ids were canonicalised (e.g. "FiddleSticks") are renamed to the Data Dragon spelling, so one champion is never split in two. Safe to repeat.
+  for (const [riot, dd] of Object.entries(RIOT_CHAMPION_ALIASES)) db.prepare("UPDATE participants SET champion = ? WHERE champion = ?").run(dd, riot);
   const q = <T,>(sql: string, ...args: (string | number)[]) => db.prepare(sql).all(...args) as T[];
   const filt = (f: Filter) => { const c: string[] = [], a: string[] = []; if (f.patches) { if (f.patches.length) { c.push(`m.patch IN (${f.patches.map(() => "?").join(",")})`); a.push(...f.patches); } else c.push("1 = 0"); } if (f.platform) { c.push("m.platform = ?"); a.push(f.platform); } if (f.brackets?.length) { c.push(`m.bracket IN (${f.brackets.map(() => "?").join(",")})`); a.push(...f.brackets); } return { sql: c.map((x) => ` AND ${x}`).join(""), args: a }; };
   const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
@@ -115,7 +120,7 @@ export function makeStore(db: DatabaseSync) {
         insM.run(id, patch, bracket, platform, i.gameEndTimestamp ?? i.gameCreation + i.gameDuration * 1000, i.gameDuration, i.participants.find((p) => p.teamId === 100)?.win ? 1 : 0);
         for (const p of i.participants) {
           const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6].filter((x): x is number => !!x && x > 0);
-          insP.run(id, p.puuid, p.teamId, p.championName, roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
+          insP.run(id, p.puuid, p.teamId, canonicalChampionId(p.championName), roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
             p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p));
         }
         for (const t of i.teams ?? []) for (const b of t.bans) if (b.championId > 0) insB.run(id, b.championId);
@@ -190,6 +195,16 @@ export function makeStore(db: DatabaseSync) {
     /** Lane matchups: same role, opposite team. */
     matchups(champion: string, f: Filter): Row[] { const w = filt(f); return q<Row>(`SELECT b.champion name, COUNT(*) games, SUM(a.win) wins FROM participants a JOIN participants b ON a.match_id = b.match_id AND a.team <> b.team AND a.role IS NOT NULL AND a.role = b.role
       JOIN matches m ON m.id = a.match_id WHERE a.champion = ?${w.sql} GROUP BY b.champion ORDER BY games DESC`, champion, ...w.args); },
+    /**
+     * Lane opponents (same role, other team) and teammates (other four roles, same team) of `champion` while it plays `role`.
+     * Pairs with fewer than `min` games are left out; the busiest `limit` of each list are kept.
+     */
+    relations(champion: string, role: string, f: Filter, min = 5, limit = 100): { matchups: Rel[]; synergies: Rel[] } {
+      const w = filt(f);
+      const run = (on: string) => q<Rel>(`SELECT b.champion champion, b.role role, COUNT(*) games, SUM(a.win) wins FROM participants a JOIN participants b ON a.match_id = b.match_id AND ${on}
+        JOIN matches m ON m.id = a.match_id WHERE a.champion = ? AND a.role = ?${w.sql} GROUP BY b.champion, b.role HAVING games >= ${Math.max(1, Math.floor(min))} ORDER BY games DESC, b.champion LIMIT ${Math.max(1, Math.floor(limit))}`, champion, role, ...w.args);
+      return { matchups: run("a.team <> b.team AND b.role = a.role"), synergies: run("a.team = b.team AND a.rowid <> b.rowid AND b.role IS NOT NULL AND b.role <> a.role") };
+    },
     keystones(champion: string, f: Filter): { id: number; games: number; wins: number }[] { const w = filt(f); return q(`SELECT p.keystone id, COUNT(*) games, SUM(p.win) wins FROM participants p JOIN matches m ON m.id = p.match_id
       WHERE p.champion = ? AND p.keystone IS NOT NULL${w.sql} GROUP BY p.keystone ORDER BY games DESC LIMIT 6`, champion, ...w.args); },
     items(champion: string, f: Filter): { id: number; games: number; wins: number }[] { const w = filt(f); return q(`SELECT CAST(j.value AS INTEGER) id, COUNT(*) games, SUM(p.win) wins FROM participants p JOIN matches m ON m.id = p.match_id, json_each(p.items) j

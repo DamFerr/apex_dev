@@ -113,6 +113,29 @@ describe("champion statistics API", () => {
     expect(b.corePath.items.map((i: { id: number }) => i.id)).toEqual([3157, 3089, 3100]);
     expect((await get("/v1/champions/Ahri")).json().skillOrder).toEqual(["Q", "E", "W"]);     // the champion page's skill order now has data
   });
+  it("returns lane matchups and teammate synergies with the other champions' own games", async () => {
+    const r = (await get("/v1/champions/Ahri/relations")).json();   // no role given: Ahri's busiest role, TOP in the fixture
+    expect(r).toMatchObject({ champion: "Ahri", role: "TOP", base: { games: 40, wins: 26 } });          // blue wins 26 of the 40 games
+    expect(r.matchups).toEqual([{ champion: "Lux", name: "Lux", role: "TOP", games: 40, wins: 26, baseGames: 40, baseWins: 14 }]);   // only the lane opponent, Lux is TOP on red
+    expect(r.synergies.map((x: { champion: string }) => x.champion).sort()).toEqual(["Garen", "Jinx", "LeeSin", "Thresh"]);        // the four other blue players, never Ahri's own role
+    expect(r.synergies.find((x: { champion: string }) => x.champion === "LeeSin")).toMatchObject({ name: "Lee Sin", role: "SUPPORT", games: 40, wins: 26, baseGames: 40, baseWins: 26 });
+    expect(r.synergies.every((x: { role: string }) => x.role !== "TOP")).toBe(true);
+  });
+  it("relations: an explicit role without games, an unknown champion and filters give empty lists, not errors", async () => {
+    const mid = await get("/v1/champions/Ahri/relations?role=MID"); expect(mid.statusCode).toBe(200);
+    expect(mid.json()).toEqual({ champion: "Ahri", role: "MID", base: { games: 0, wins: 0 }, matchups: [], synergies: [] });
+    expect((await get("/v1/champions/Teemo/relations")).json()).toEqual({ champion: "Teemo", role: null, base: { games: 0, wins: 0 }, matchups: [], synergies: [] });
+    expect((await get("/v1/champions/Ahri/relations?role=NOPE")).json().role).toBe("TOP");        // an invalid role is ignored like everywhere else
+  });
+  it("shows Fiddlesticks under one id and name, and accepts Riot's old spelling in the address", async () => {
+    const st = makeStore(new DatabaseSync(":memory:"));
+    for (let n = 0; n < 6; n++) st.saveMatch(matchFixture(`EUW1_${n}`, { participants: [participant(0, { championName: "FiddleSticks" }), ...Array.from({ length: 9 }, (_, i) => participant(i + 1))] }), "EMERALD", "euw1");
+    const x = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: st, collector: idleCollector(riot, st), defaultPlatform: "euw1" });
+    const list = (await x.inject({ url: "/v1/champions" })).json().champions.filter((c: { id: string }) => c.id.toLowerCase() === "fiddlesticks");
+    expect(list).toHaveLength(1); expect(list[0]).toMatchObject({ id: "Fiddlesticks", name: "Fiddlesticks", games: 6 });
+    for (const path of ["Fiddlesticks", "FiddleSticks"]) { for (const sub of ["", "/build", "/relations"]) expect((await x.inject({ url: `/v1/champions/${path}${sub}` })).statusCode).toBe(200); }
+    expect((await x.inject({ url: "/v1/champions/FiddleSticks/relations" })).json().champion).toBe("Fiddlesticks");
+  });
   it("404s for a champion without collected games", async () => { expect((await get("/v1/champions/Teemo")).statusCode).toBe(404); });
   it("reports collector status and only accepts start/stop with the X-Apex header", async () => {
     expect((await get("/v1/collector")).json()).toMatchObject({ running: false, matches: 40, ladders: { seeded: 0, total: 4 }, workers: 1, latestPatch: "16.22" });
@@ -156,6 +179,8 @@ describe("filters API", () => {
   });
   it("applies the same filters to champion detail, and says so when nothing matches", async () => {
     expect((await fget("/v1/champions/Ahri?patch=all&region=na1")).json().games).toBe(20);
+    expect((await fget("/v1/champions/Ahri/relations?patch=all&region=na1")).json()).toMatchObject({ role: "TOP", base: { games: 20 } });   // the same filters apply to relations
+    expect((await fget("/v1/champions/Ahri/relations?region=na1")).json().matchups).toEqual([]);                                         // latest patch has no na1 games
     const none = await fget("/v1/champions/Ahri?region=na1");        // na1 games are on an older patch
     expect(none.statusCode).toBe(404); expect(none.json().error).toMatch(/these filters/);
   });

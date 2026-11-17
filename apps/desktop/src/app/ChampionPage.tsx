@@ -7,6 +7,7 @@ import { Skeleton, StatCard } from "../components/ui";
 import { GameIcon } from "../components/GameIcon";
 import { RoleIcon } from "../components/RoleIcon";
 import { BuildPanel } from "./BuildPanel";
+import { RelationsPanel } from "./RelationsPanel";
 import { useChampion } from "../lib/api";
 import { splashUrl } from "../lib/ddragon";
 
@@ -17,7 +18,6 @@ export function ChampionPage() {
       <FilterBar /><div className="glass rounded-lg p-8 text-sm text-bad">{(error as Error).message}. Try different filters, or <Link className="underline" to="/champions">go back to champions</Link>.</div></div>);
   if (!c) return <div className="space-y-3"><Skeleton className="h-40" /><Skeleton className="h-24" /><Skeleton className="h-64" /></div>;
   const s = rate(c.wins, c.games);
-  const matchups = [...c.matchups].sort((a, b) => rate(b.wins, b.games).adj - rate(a.wins, a.games).adj);
   return (<div className="space-y-6">
     <Link to="/champions" className="focus-ring inline-flex items-center gap-1 text-sm text-muted hover:text-text rounded-md"><ArrowLeft size={14} /> Champions</Link>
     <FilterBar />
@@ -44,6 +44,6 @@ export function ChampionPage() {
       <div className="glass rounded-lg p-5"><StatRows title="Items" rows={c.builds} icon={(r) => typeof r.id === "number" ? <GameIcon kind="item" id={r.id} name={r.name} size={26} /> : null} /></div>
       <div className="glass rounded-lg p-5"><StatRows title="Keystone runes" rows={c.runes} icon={(r) => typeof r.id === "number" ? <GameIcon kind="rune" id={r.id} size={26} /> : null} /></div>
     </div>
-    <div className="glass rounded-lg p-5"><StatRows title="Matchups (best to worst)" rows={matchups} icon={(r) => typeof r.id === "string" ? <ChampIcon id={r.id} name={r.name} size={26} /> : null} /></div>
+    <RelationsPanel id={c.id} roles={c.roles} />
   </div>);
 }

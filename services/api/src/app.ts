@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { ChampionBuild, ChampionDetail, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
+import type { ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
@@ -9,6 +9,7 @@ import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummon
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
 import { computeBuild, skillOrder } from "./build";
+import { canonicalChampionId } from "./champions";
 import type { Filter } from "./store";
 
 export interface Deps { riot: RiotApi; cache: Cache; dd: () => Promise<DD>; store: Store; collector: Collector; defaultPlatform: string; hasKey?: boolean; now?: () => number }
@@ -63,6 +64,9 @@ export async function buildApp(deps: Deps) {
     console.error("Unexpected error:", err instanceof Error ? err.message : err);
     return reply.code(500).send({ error: "Unexpected server error" });
   });
+
+  // Old links and clients may still use Riot's spelling of a champion id ("FiddleSticks"): every /v1/champions/:id route sees the Data Dragon one.
+  app.addHook("preHandler", async (req) => { const p = req.params as { id?: string } | undefined; if (p?.id && req.url.startsWith("/v1/champions/")) p.id = canonicalChampionId(p.id); });
 
   app.get("/health", async () => ({ ok: true, hasKey: deps.hasKey ?? true }));
 
@@ -169,6 +173,24 @@ export async function buildApp(deps: Deps) {
       matchups: store.matchups(req.params.id, f).map((m) => line(nameOf(m.name), m, m.name)) };
   });
 
+  /**
+   * Lane matchups and teammate synergies of a champion in one role (default: its busiest role), each with the other champion's own
+   * games in its role, so the client can compare the pairing with what the two win rates predict. Empty lists = no collected games.
+   */
+  app.get<{ Params: { id: string }; Querystring: { role?: string; patch?: string; region?: string; rank?: string } }>("/v1/champions/:id/relations", async (req): Promise<ChampionRelations> => {
+    const f = filterOf(req.query), data = await dd(), rows = store.championRows(f), champion = req.params.id;
+    const base = new Map(rows.filter((r) => r.role).map((r) => [`${r.champion}|${r.role}`, { games: r.games, wins: r.wins }]));
+    const mine = rows.filter((r) => r.champion === champion && r.role).sort((a, b) => b.games - a.games);
+    const role = roleOfQuery(req.query.role) ?? (mine[0]?.role as Role | undefined);
+    const own = role ? base.get(`${champion}|${role}`) : undefined;
+    if (!role || !own) return { champion, role: role ?? null, base: { games: 0, wins: 0 }, matchups: [], synergies: [] };
+    const nameOf = (id: string) => [...data.champs.values()].find((c) => c.id === id)?.name ?? id;
+    const line = (r: { champion: string; role: string; games: number; wins: number }): RelationLine => { const b = base.get(`${r.champion}|${r.role}`) ?? { games: r.games, wins: 0 };
+      return { champion: r.champion, name: nameOf(r.champion), role: r.role as Role, games: r.games, wins: r.wins, baseGames: b.games, baseWins: b.wins }; };
+    const rel = store.relations(champion, role, f);
+    return { champion, role, base: own, matchups: rel.matchups.map(line), synergies: rel.synergies.map(line) };
+  });
+
   /** Rune pages, summoner spells and final items of collected games for one champion. role is optional; an empty result means no collected games with these filters. */
   app.get<{ Params: { id: string }; Querystring: { role?: string; patch?: string; region?: string; rank?: string } }>("/v1/champions/:id/build", async (req): Promise<ChampionBuild> => {
     const f = filterOf(req.query), role = roleOfQuery(req.query.role), data = await dd();
@@ -218,8 +240,8 @@ export async function buildApp(deps: Deps) {
     let baseline: { label: string; avg: PerGame; games: number } | null = null;
     if (role) {
       const tier = (await cached(`league:${platform}:${acct.puuid}`, 10 * MIN, () => riot.league(acct.puuid, platform)).catch(() => [])).find((e) => e.queueType === "RANKED_SOLO_5x5")?.tier;
-      const champ = names.get(me.championName) ?? me.championName;
-      const tries = [...(tier ? [{ champion: me.championName, bracket: tier, label: `${tierLabel(tier)} ${champ} ${roleLabel(role)}` }] : []), { champion: me.championName, bracket: undefined, label: `${champ} ${roleLabel(role)}, all ranks` },
+      const myChamp = canonicalChampionId(me.championName), champ = names.get(myChamp) ?? myChamp;
+      const tries = [...(tier ? [{ champion: myChamp, bracket: tier, label: `${tierLabel(tier)} ${champ} ${roleLabel(role)}` }] : []), { champion: myChamp, bracket: undefined, label: `${champ} ${roleLabel(role)}, all ranks` },
         ...(tier ? [{ champion: undefined, bracket: tier, label: `${tierLabel(tier)} ${roleLabel(role)}` }] : []), { champion: undefined, bracket: undefined, label: `${roleLabel(role)}, all ranks` }];
       for (const t of tries) {
         const a = store.averages({ role, champion: t.champion, bracket: t.bracket });

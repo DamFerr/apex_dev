@@ -26,6 +26,7 @@ export function createHttpApi(base: () => string): ApexApi {
     getChampions: (role, f) => get("/v1/champions", { ...(role ? { role } : {}), ...filterParams(f) }),
     getChampion: (id, f) => get(`/v1/champions/${encodeURIComponent(id)}`, filterParams(f)),
     getChampionBuild: (id, role, f) => get(`/v1/champions/${encodeURIComponent(id)}/build`, { ...(role ? { role } : {}), ...filterParams(f) }),
+    getChampionRelations: (id, role, f) => get(`/v1/champions/${encodeURIComponent(id)}/relations`, { ...(role ? { role } : {}), ...filterParams(f) }),
     getFilterOptions: () => get("/v1/filters"),
     getDraftStats: (f) => get("/v1/draft/data", filterParams(f)),
     getRecap: (id, matchId) => get(`${player(id)}/recap`, matchId ? { matchId } : {}),

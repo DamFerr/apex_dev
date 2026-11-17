@@ -1,4 +1,5 @@
 import type { Loadout, LiveGame, PostGameRecap, RecapMetric, MasteryEntry, MatchDetail, MatchSummary, Participant, RankInfo, Role, Summoner, Tier } from "@apex/schema";
+import { canonicalChampionId } from "./champions";
 import { HttpError, type LeagueEntry, type RiotActiveGame, type RiotMastery, type RiotMatch, type RiotParticipant } from "./riot";
 
 const ROLES: Record<string, Role> = { TOP: "TOP", JUNGLE: "JUNGLE", MIDDLE: "MID", BOTTOM: "ADC", UTILITY: "SUPPORT" };
@@ -16,7 +17,7 @@ function endTime(m: RiotMatch) { const i = m.info; return i.gameEndTimestamp ?? 
 export function toMatchSummary(m: RiotMatch, puuid: string): MatchSummary | null {
   const p = m.info.participants.find((x) => x.puuid === puuid);
   if (!p) return null;
-  return { id: m.metadata.matchId, champion: p.championName, role: ROLES[p.teamPosition] ?? null, win: p.win, kills: p.kills, deaths: p.deaths, assists: p.assists,
+  return { id: m.metadata.matchId, champion: canonicalChampionId(p.championName), role: ROLES[p.teamPosition] ?? null, win: p.win, kills: p.kills, deaths: p.deaths, assists: p.assists,
     cs: p.totalMinionsKilled + p.neutralMinionsKilled, durationSec: m.info.gameDuration, queue: queueName(m.info.queueId), playedAt: new Date(endTime(m)).toISOString() };
 }
 /** The items, spells and runes of one player in a finished game. Zero ids (empty slots) are dropped; the trinket is slot 6. Pure. */
@@ -27,7 +28,7 @@ export function toLoadout(p: RiotParticipant): Loadout {
 }
 export function toMatchDetail(m: RiotMatch, puuid?: string): MatchDetail {
   const participants: Participant[] = m.info.participants.map((p, i) => ({
-    name: p.riotIdGameName || p.summonerName || `Player ${i + 1}`, loadout: toLoadout(p), champion: p.championName, team: p.teamId === 100 ? "blue" : "red",
+    name: p.riotIdGameName || p.summonerName || `Player ${i + 1}`, loadout: toLoadout(p), champion: canonicalChampionId(p.championName), team: p.teamId === 100 ? "blue" : "red",
     kills: p.kills, deaths: p.deaths, assists: p.assists, cs: p.totalMinionsKilled + p.neutralMinionsKilled,
     damage: p.totalDamageDealtToChampions, gold: p.goldEarned, vision: p.visionScore, isYou: !!puuid && p.puuid === puuid }));
   const names = new Set<string>(); // names are React keys in the UI, so make them unique
@@ -76,7 +77,7 @@ export function toRecap(m: RiotMatch, puuid: string, o: { names: Map<string, str
   const personal = o.personal.length >= 3 ? o.personal : null;
   return {
     matchId: m.metadata.matchId, queue: queueName(m.info.queueId), win: me.win, durationSec: dur, playedAt: new Date(endTime(m)).toISOString(),
-    champion: me.championName, championName: o.names.get(me.championName) ?? me.championName, role: ROLES[me.teamPosition] ?? null, kills: me.kills, deaths: me.deaths, assists: me.assists,
+    champion: canonicalChampionId(me.championName), championName: o.names.get(canonicalChampionId(me.championName)) ?? canonicalChampionId(me.championName), role: ROLES[me.teamPosition] ?? null, kills: me.kills, deaths: me.deaths, assists: me.assists,
     killParticipation: teamKills > 0 ? (me.kills + me.assists) / teamKills : 0, damageShare: teamDamage > 0 ? me.totalDamageDealtToChampions / teamDamage : 0, loadout: toLoadout(me),
     metrics: METRICS.map(({ id, label, unit }) => ({ id, label, unit, you: mine[id], vsRank: o.baseline ? o.baseline.avg[id] : null, vsYou: personal ? mean(personal.map((g) => g[id])) : null,
       lobbyRank: 1 + all.filter((g) => g[id] > mine[id]).length })),

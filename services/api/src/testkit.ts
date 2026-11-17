@@ -30,7 +30,7 @@ export const timelineFixture = (): RiotTimeline => {
 export const fakeDD = async (): Promise<DD> => ({
   champs: new Map([[103, { id: "Ahri", name: "Ahri", tags: ["Mage"] }], [222, { id: "Jinx", name: "Jinx", tags: ["Marksman"] }], [412, { id: "Thresh", name: "Thresh", tags: ["Support"] }],
     [86, { id: "Garen", name: "Garen", tags: ["Fighter"] }], [64, { id: "LeeSin", name: "Lee Sin", tags: ["Fighter"] }],
-    [99, { id: "Lux", name: "Lux", tags: ["Mage"] }], [238, { id: "Zed", name: "Zed", tags: ["Assassin"] }], [22, { id: "Ashe", name: "Ashe", tags: ["Marksman"] }], [516, { id: "Ornn", name: "Ornn", tags: ["Tank"] }], [157, { id: "Yasuo", name: "Yasuo", tags: ["Fighter"] }]]),
+    [99, { id: "Lux", name: "Lux", tags: ["Mage"] }], [238, { id: "Zed", name: "Zed", tags: ["Assassin"] }], [22, { id: "Ashe", name: "Ashe", tags: ["Marksman"] }], [516, { id: "Ornn", name: "Ornn", tags: ["Tank"] }], [157, { id: "Yasuo", name: "Yasuo", tags: ["Fighter"] }], [9, { id: "Fiddlesticks", name: "Fiddlesticks", tags: ["Mage"] }]]),
   items: new Map([[3157, { name: "Zhonya's Hourglass", total: 3250, hasUpgrade: false }], [3020, { name: "Sorcerer's Shoes", total: 1100, hasUpgrade: false, boots: true }], [3089, { name: "Rabadon's Deathcap", total: 3600, hasUpgrade: false }],
     [1055, { name: "Doran's Blade", total: 450, hasUpgrade: true }], [2003, { name: "Health Potion", total: 50, hasUpgrade: false }], [3100, { name: "Lich Bane", total: 3000, hasUpgrade: false }], [3340, { name: "Stealth Ward", total: 0, hasUpgrade: false }]]),
   runes: new Map([[8112, "Electrocute"], [8005, "Press the Attack"]]),

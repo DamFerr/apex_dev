@@ -86,4 +86,9 @@ describe("toLoadout", () => {
     expect(d.participants[1].loadout).toMatchObject({ trinket: 3340, keystone: 8112, secondaryStyle: 8300, spells: [4, 14] });
     expect(d.participants.every((p) => p.loadout.items.length > 0)).toBe(true);
   });
+  it("uses the Data Dragon spelling of champion ids (Riot sends FiddleSticks)", () => {
+    const m = matchFixture("EUW1_1", { participants: [participant(0, { championName: "FiddleSticks" }), ...Array.from({ length: 9 }, (_, i) => participant(i + 1))] });
+    expect(toMatchSummary(m, "p0")!.champion).toBe("Fiddlesticks");
+    expect(toMatchDetail(m, "p0").participants[0].champion).toBe("Fiddlesticks");
+  });
 });

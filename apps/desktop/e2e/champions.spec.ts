@@ -25,7 +25,7 @@ test("opens a champion page with stats, builds and matchups", async ({ page }) =
   await expect(page).toHaveURL(/#\/champions\/Ahri/);
   await expect(page.getByRole("heading", { name: "Ahri" })).toBeVisible();
   await expect(page.getByText("Win rate (adjusted)").first()).toBeVisible();
-  await expect(page.getByText("Matchups (best to worst)")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Matchups" })).toBeVisible();
   await expect(page.getByText("Skill order (max priority)")).toBeVisible();
 });
 
@@ -48,4 +48,31 @@ test("shows the recommended build (runes, spells, items) with sample sizes on th
   await expect(panel.getByText(/^Starting items ·/)).toBeVisible();
   await expect(panel.getByText(/^Core items, usual build order ·/)).toBeVisible();
   await expect(panel.getByText(/collected games/).last()).toContainText("40");
+});
+
+test("shows matchups and synergy with sample sizes and the difference from expected", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const panel = page.getByLabel("Matchups and synergy");
+  await expect(panel.getByRole("table", { name: /Lane matchups/ })).toBeVisible();
+  const rows = panel.locator("tbody tr");
+  await expect(rows).toHaveCount(1);                                      // Ahri plays TOP in the fixture, and Lux is the only top laner against her
+  await expect(rows.first()).toContainText("Lux");
+  await expect(rows.first()).toContainText("40");                         // games
+  await expect(rows.first()).toContainText(/[+\u2212]\d+\.\d pp/);        // difference from expected, with its sign
+  await panel.getByRole("tab", { name: "Synergy" }).click();
+  await expect(panel.getByRole("table", { name: /Teammate synergy/ })).toBeVisible();
+  await expect(rows).toHaveCount(4);                                      // jungle, mid, bot and support teammates
+  await expect(panel.locator("tbody")).not.toContainText("Ahri");
+  await expect(panel.getByRole("button", { name: /Show all/ })).toHaveCount(0);   // 4 rows: nothing to expand
+  await panel.getByRole("button", { name: "Most played" }).click();
+  await expect(panel.getByRole("button", { name: "Most played" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a champion without enough pairings says so instead of showing an empty table", async ({ page }) => {
+  await page.goto("/#/champions/Lux");
+  const panel = page.getByLabel("Matchups and synergy");
+  await expect(panel.getByRole("table")).toBeVisible();                   // Lux has the mirror data
+  await page.route("**/v1/champions/Lux/relations**", (r) => r.fulfill({ json: { champion: "Lux", role: "TOP", base: { games: 40, wins: 14 }, matchups: [], synergies: [] } }));
+  await page.reload();
+  await expect(page.getByLabel("Matchups and synergy").getByText(/Not enough games yet/)).toBeVisible();
 });

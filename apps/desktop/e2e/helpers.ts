@@ -4,7 +4,7 @@ export { expect };
 const CHAMPS: [number, string, string][] = [[103, "Ahri", "Mage"], [61, "Orianna", "Mage"], [112, "Viktor", "Mage"], [134, "Syndra", "Mage"], [81, "Ezreal", "Marksman"],
   [222, "Jinx", "Marksman"], [22, "Ashe", "Marksman"], [64, "LeeSin", "Fighter"], [121, "Khazix", "Assassin"], [412, "Thresh", "Support"], [89, "Leona", "Tank"],
   [117, "Lulu", "Support"], [86, "Garen", "Fighter"], [516, "Ornn", "Tank"], [122, "Darius", "Fighter"], [99, "Lux", "Mage"], [157, "Yasuo", "Fighter"],
-  [238, "Zed", "Assassin"], [893, "Aurora", "Mage"]];
+  [238, "Zed", "Assassin"], [893, "Aurora", "Mage"], [9, "Fiddlesticks", "Mage"]];
 export const CHAMP_COUNT = CHAMPS.length;
 
 /** Fakes Riot's Data Dragon so tests never depend on the internet. Call BEFORE page.goto. Image files 404 on purpose, so icons fall back to their names/initials (which is what the tests look at). */

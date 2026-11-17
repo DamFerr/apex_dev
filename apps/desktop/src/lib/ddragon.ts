@@ -53,8 +53,13 @@ export function fetchRunes(): Promise<RuneStyle[]> {
 export function useChampName(): (id: string) => string {
   const list = useDdChampions().data;
   if (!list) return (id) => id;
-  const byId = new Map(list.map((c) => [c.id, c.name]));
-  return (id) => byId.get(id) ?? id;
+  const byId = new Map(list.map((c) => [c.id.toLowerCase(), c.name]));
+  return (id) => byId.get(id.toLowerCase()) ?? id;
+}
+/** The Data Dragon spelling of a champion id, ignoring case ("FiddleSticks" -> "Fiddlesticks"), so names and image files always match. Unknown ids come back unchanged. */
+export function resolveChampId(id: string, list?: DdChampion[]): string {
+  const lower = id.toLowerCase();
+  return list?.find((c) => c.id.toLowerCase() === lower)?.id ?? id;
 }
 
 export const useRunes = () => useQuery({ queryKey: ["ddragon-runes"], queryFn: fetchRunes, staleTime: Infinity, retry: 1 });

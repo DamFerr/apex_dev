@@ -247,4 +247,28 @@ describe("keeping only the last 5 patches", () => {
     const s = makeStore(new DatabaseSync(":memory:")); fill(s, ["16.1", "16.2"]);
     expect(s.matchCount({ patches: [] })).toBe(0); expect(s.matchCount({})).toBe(4); expect(s.matchCount({ patches: ["16.1", "16.2"] })).toBe(4);
   });
+  it("relations: lane opponents share the role, teammates are the other four roles", () => {
+    const r = seededStore().relations("Ahri", "TOP", {});
+    expect(r.matchups).toEqual([{ champion: "Lux", role: "TOP", games: 40, wins: 26 }]);
+    expect(r.synergies.map((x) => `${x.champion}:${x.role}`).sort()).toEqual(["Garen:ADC", "Jinx:JUNGLE", "LeeSin:SUPPORT", "Thresh:MID"]);
+    expect(seededStore().relations("Lux", "TOP", {}).matchups).toEqual([{ champion: "Ahri", role: "TOP", games: 40, wins: 14 }]);     // seen from the other side the wins flip
+  });
+  it("relations: pairs under the minimum are left out, the limit keeps the busiest, and filters apply", () => {
+    const s = diverseStore();
+    expect(s.relations("Ahri", "TOP", { patches: ["16.22"] }, 41).matchups).toEqual([]);          // 40 games is under a minimum of 41
+    expect(s.relations("Ahri", "TOP", {}, 5, 2).synergies).toHaveLength(2);
+    expect(s.relations("Ahri", "TOP", { patches: ["16.21"] }).matchups[0]).toMatchObject({ games: 20, wins: 10 });
+    expect(s.relations("Ahri", "TOP", { brackets: ["MASTER"] }).matchups).toEqual([]);
+    expect(s.relations("Ahri", "JUNGLE", {}).matchups).toEqual([]);                                  // Ahri never plays jungle
+  });
+  it("stores Riot's FiddleSticks as Fiddlesticks, and renames games stored under the old spelling when the store opens", () => {
+    const db = new DatabaseSync(":memory:"), s = makeStore(db);
+    s.saveMatch(matchFixture("EUW1_1", { participants: [participant(0, { championName: "FiddleSticks" }), ...Array.from({ length: 9 }, (_, i) => participant(i + 1))] }), "EMERALD", "euw1");
+    expect(s.championRows({}).map((r) => r.champion)).toContain("Fiddlesticks");
+    expect(s.championRows({}).map((r) => r.champion)).not.toContain("FiddleSticks");
+    db.prepare("UPDATE participants SET champion = 'FiddleSticks' WHERE champion = 'Fiddlesticks'").run();      // what an older version left behind
+    s.saveMatch(matchFixture("EUW1_2", { participants: [participant(0, { championName: "FiddleSticks" }), ...Array.from({ length: 9 }, (_, i) => participant(i + 1))] }), "EMERALD", "euw1");
+    const rows = makeStore(db).championRows({}).filter((r) => r.champion.toLowerCase() === "fiddlesticks");
+    expect(rows.map((r) => r.champion)).toEqual(["Fiddlesticks"]); expect(rows[0].games).toBe(2);              // one champion, both games
+  });
 });

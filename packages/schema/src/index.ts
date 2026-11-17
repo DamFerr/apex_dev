@@ -25,6 +25,13 @@ export interface MatchPage { items: MatchSummary[]; nextCursor: number | null }
 /** One row of a stats table. `id` is the game id of what the row is (item id, keystone id, or champion id for matchups) so the UI can show its icon. */
 export interface StatLine { name: string; games: number; wins: number; id?: number | string }
 export interface ChampionSummary { id: string; name: string; roles: Role[]; tags: string[]; games: number; wins: number; bans: number }
+/** One champion met in a lane matchup (opposite team, same role) or played with as a teammate. `baseGames/baseWins` are THAT champion's own games in `role`, so the client can work out what the pairing is expected to do. */
+export interface RelationLine { champion: string; name: string; role: Role; games: number; wins: number; baseGames: number; baseWins: number }
+/** Matchups and synergies of one champion in one role. role is null when the champion has no collected games (then every list is empty). */
+export interface ChampionRelations {
+  champion: string; role: Role | null; base: { games: number; wins: number };
+  matchups: RelationLine[]; /** Teammates in the OTHER four roles. */ synergies: RelationLine[];
+}
 export interface ChampionList { patch: string; totalGames: number; champions: ChampionSummary[] }
 export interface ChampionDetail extends ChampionSummary {
   totalGames: number; builds: StatLine[]; runes: StatLine[]; skillOrder: string[]; matchups: StatLine[];
@@ -112,6 +119,8 @@ export interface ApexApi {
   getChampion(id: string, filter?: StatsFilter): Promise<ChampionDetail>;
   /** Most played rune pages, summoner spells and final items for a champion (role optional). */
   getChampionBuild(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionBuild>;
+  /** Lane matchups and teammate synergies of a champion in one role (default: the role it plays most). */
+  getChampionRelations(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionRelations>;
   getFilterOptions(): Promise<FilterOptions>;
   /** games is 0 when nothing has been collected for these filters yet. */
   getDraftStats(filter?: StatsFilter): Promise<DraftStats>;

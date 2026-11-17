@@ -96,4 +96,34 @@ export function performanceScore(ratios: number[]): number | null {
 }
 export const perfGrade = (score: number): PerfGrade => (score >= 80 ? "S" : score >= 65 ? "A" : score >= 50 ? "B" : score >= 35 ? "C" : "D");
 
+/* ---------- Matchup and synergy vs expected (plan sections 3.2 and 4.2) ---------- */
+
+const EPS = 1e-6;
+/** Log-odds of a probability (clamped so 0 and 1 stay finite). */
+export const logit = (p: number) => { const c = Math.min(1 - EPS, Math.max(EPS, p)); return Math.log(c / (1 - c)); };
+/** Inverse of logit. */
+export const expit = (x: number) => 1 / (1 + Math.exp(-x));
+
+/** Games and wins of something (a champion in a role, or a pair of champions). */
+export interface Tally { games: number; wins: number }
+export interface RelationStat {
+  /** What the two champions' own win rates predict for this pairing (0..1). */ expected: number;
+  /** Win rate shrunk toward `expected`, so a small sample cannot look like a real effect (0..1). */ observed: number;
+  /** observed - expected in percentage points: + means the pairing does better than predicted. */ delta: number;
+  /** Raw win rate and its 95% Wilson interval. */ raw: number; lo: number; hi: number;
+}
+
+/**
+ * How a lane matchup or a duo does compared with what the two champions' overall win rates predict.
+ * Each champion's rate is first shrunk toward 50% (so a champion with 5 games predicts nothing), then combined in log-odds space
+ * (draft model layer A): a matchup predicts logit(own) - logit(opponent), a synergy logit(own) + logit(teammate).
+ * The observed pair win rate is shrunk toward that prediction, so `delta` is 0 with no games and grows only as evidence does.
+ */
+export function relationStat(kind: "matchup" | "synergy", own: Tally, other: Tally, pair: Tally, strength = 50): RelationStat {
+  const a = shrink(own.wins, own.games, 0.5, strength), b = shrink(other.wins, other.games, 0.5, strength);
+  const expected = expit(kind === "matchup" ? logit(a) - logit(b) : logit(a) + logit(b));
+  const observed = shrink(pair.wins, pair.games, expected, strength), [lo, hi] = wilson(pair.wins, pair.games);
+  return { expected, observed, delta: (observed - expected) * 100, raw: pair.games ? pair.wins / pair.games : 0, lo, hi };
+}
+
 export * from "./ladder";
