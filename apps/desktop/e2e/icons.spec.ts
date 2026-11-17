@@ -11,7 +11,7 @@ test("build panel icons (items, spells, skills, shards) all carry names", async 
   await expect(panel.getByRole("img", { name: "Ignite" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Flash" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Zhonya's Hourglass" }).first()).toBeVisible();
-  await expect(panel.getByRole("img", { name: "Q: Ahri Q" })).toBeVisible();          // ability icons: key + ability name
+  await expect(panel.getByRole("img", { name: "Q: Ahri Q" }).first()).toBeVisible();          // ability icons: key + ability name
   await expect(panel.getByRole("group", { name: "Stat shards" }).getByRole("img")).toHaveCount(9);   // 3 rows of 3 options, one chosen per row
   expect(await unnamedImages(page)).toBe(0);
   expect(errors).toEqual([]);

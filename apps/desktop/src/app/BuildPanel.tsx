@@ -19,43 +19,46 @@ export type VariantSort = "best" | "rate" | "common";
 
 /** One rune (or shard) among the others of its row: the chosen one is lit, the rest are dimmed, like in the game's rune editor. */
 function Pick({ on, children }: { on: boolean; children: ReactNode }) {
-  return <span data-selected={on} className={`rounded-full transition-[opacity,filter] ${on ? "ring-2 ring-gold/70 shadow-glow" : "opacity-30 grayscale"}`}>{children}</span>;
+  // inline-flex + shrink-0: the ring hugs the icon exactly (a plain span as a flex item got line-height space below the icon and the ring turned into a tall oval)
+  return <span data-selected={on} className={`inline-flex shrink-0 rounded-full transition-[opacity,filter] ${on ? "ring-2 ring-gold/70 shadow-glow" : "opacity-30 grayscale"}`}>{children}</span>;
 }
 
 /** A rune tree with every rune of it, the chosen ones lit. Falls back to just the chosen runes when Data Dragon is unavailable. */
 function RuneTree({ styleId, chosen, primary, label }: { styleId: number; chosen: number[]; primary: boolean; label: string }) {
   const styles = useRunes().data, names = useRuneLookup(), st = styles?.find((s) => s.id === styleId), on = new Set(chosen);
   const rows = st ? (primary ? st.slots : st.slots.slice(1)).map((sl) => sl.runes.map((r) => r.id)) : [chosen];
-  return (<div role="group" aria-label={label} className="space-y-3">
+  return (<div role="group" aria-label={label} className="space-y-3.5">
     <div className="flex items-center justify-center gap-2 text-xs text-muted">
       {(styles ?? []).map((s) => <span key={s.id} className={s.id === styleId ? "" : "opacity-30 grayscale"}><GameIcon kind="rune" id={s.id} size={18} /></span>)}
       {!styles && <GameIcon kind="rune" id={styleId} size={18} />}<span className="text-text">{names.get(styleId)?.name}</span></div>
-    {rows.map((ids, ri) => <div key={ri} className="flex items-center justify-center gap-3">{ids.map((id) => <Pick key={id} on={on.has(id)}><GameIcon kind="rune" id={id} size={primary && ri === 0 ? 44 : 34} /></Pick>)}</div>)}
+    {rows.map((ids, ri) => <div key={ri} className="flex items-center justify-center gap-3 h-11">{ids.map((id) => <Pick key={id} on={on.has(id)}><GameIcon kind="rune" id={id} size={primary && ri === 0 ? 44 : 36} /></Pick>)}</div>)}
   </div>);
 }
 
 function Shards({ ids }: { ids: number[] }) {
-  return (<div role="group" aria-label="Stat shards" className="space-y-2">
+  return (<div role="group" aria-label="Stat shards" className="space-y-2.5">
     {[0, 1, 2].map((row) => { const opts = SHARD_ROWS[row].includes(ids[row]) ? SHARD_ROWS[row] : [...SHARD_ROWS[row], ids[row]];
-      return <div key={row} className="flex items-center justify-center gap-3">{opts.map((id) => <Pick key={id} on={id === ids[row]}><GameIcon kind="shard" id={id} size={24} /></Pick>)}</div>; })}
+      return <div key={row} className="flex items-center justify-center gap-3">{opts.map((id) => <Pick key={id} on={id === ids[row]}><GameIcon kind="shard" id={id} size={26} /></Pick>)}</div>; })}
   </div>);
 }
 
 function RunesColumn({ b }: { b: Core }) {
   const [pick, setPick] = useState(0), names = useRuneLookup();
   const page: RunePageStat | undefined = b.runePages[Math.min(pick, b.runePages.length - 1)];
-  return (<div className="space-y-4">
+  return (<div className="space-y-4 mx-auto w-full max-w-[560px]">
     <Heading>Runes</Heading>
     {b.runePages.length > 1 && <div className="flex flex-wrap justify-center gap-2">{b.runePages.map((p, i) =>
       <button key={i} onClick={() => setPick(i)} aria-pressed={i === pick} className={`focus-ring rounded-lg border px-2.5 py-1.5 flex items-center gap-2 text-xs transition-colors ${i === pick ? "border-accent/60 bg-accent/15" : "border-line/10 hover:bg-raised/60"}`} title={`${names.get(p.perkIds[0])?.name ?? "Page"}: ${p.games} games`}>
         <GameIcon kind="rune" id={p.perkIds[0]} size={26} /><span className="text-left leading-tight"><span className="block">{wr(p.wins, p.games)}</span><span className="block text-muted">{p.games.toLocaleString()} games</span></span></button>)}</div>}
     {page && <>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg bg-raised/30 border border-line/5 p-4">
         <RuneTree styleId={page.primaryStyleId} chosen={page.perkIds.slice(0, 4)} primary label="Primary runes" />
-        <RuneTree styleId={page.subStyleId} chosen={page.perkIds.slice(4, 6)} primary={false} label="Secondary runes" />
+        <div className="space-y-5">
+          <RuneTree styleId={page.subStyleId} chosen={page.perkIds.slice(4, 6)} primary={false} label="Secondary runes" />
+          <Shards ids={page.perkIds.slice(6)} />
+        </div>
       </div>
-      <Shards ids={page.perkIds.slice(6)} />
-      <div className="text-xs text-muted text-center">This setup: {wr(page.wins, page.games)} win rate in {page.games.toLocaleString()} games<LowBadge games={page.games} />. Each rune is the most common choice among those games.</div>
+      <div className="text-xs text-muted text-center" title="Each rune is the most common choice among these games">This page: {wr(page.wins, page.games)} in {page.games.toLocaleString()} games<LowBadge games={page.games} /></div>
     </>}
     {!page && (b.keystones.length > 0
       ? <div className="space-y-2">
@@ -109,7 +112,7 @@ function ItemsColumn({ b }: { b: Core }) {
       <div className="text-xs text-muted mb-1">{blk.name}</div>
       <div className="flex flex-wrap items-start gap-3">{blk.items.map((it) => <ItemCell key={it.id} it={it} />)}</div></div>)}
     {!order && b.timelineGames > 0 && b.itemBlocks.some((blk) => blk.name === "Core items") && <div className="text-xs text-muted">Core items are shown by popularity, not build order: the order needs {b.minPathGames}+ timeline games that kept the same three ({b.timelineGames.toLocaleString()} so far).</div>}
-    {b.itemBlocks.some((blk) => blk.items.some((it) => it.wpa)) && <div className="text-[11px] text-muted">Under each item: win rate, <span className="text-text">WPA</span> (win probability added, percentage points, vs games without the item of the same length and number of finished items; green or red only when its 95% range excludes 0) and games. A link, not proof.</div>}
+    {b.itemBlocks.some((blk) => blk.items.some((it) => it.wpa)) && <div className="text-[11px] text-muted" title="WPA = win probability added, in percentage points, vs games without the item of the same length and number of finished items. Green or red only when its 95% range excludes 0. A link, not proof.">Under each item: win rate, <span className="text-text">WPA</span>, games. A link, not proof.</div>}
   </div>);
 }
 
@@ -117,22 +120,22 @@ function ItemsColumn({ b }: { b: Core }) {
 function SkillBlock({ id, b }: { id: string; b: Core }) {
   const s = b.skillOrder; if (!s) return null;
   const grid = s.grid ?? s.levels, levels = Array.from({ length: grid.length }, (_, i) => i + 1);
-  const cols = { gridTemplateColumns: `28px repeat(${grid.length}, minmax(0, 1fr))` };
+  const cols = { gridTemplateColumns: `28px repeat(${grid.length}, 32px)` };
   return (<div className="space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <Heading>Ability max order</Heading>
       <span className="text-xs text-muted">Skill order · {wr(s.wins, s.games)} in {s.games.toLocaleString()} games<LowBadge games={s.games} /></span>
-      <div className="flex items-center gap-1 ml-auto" aria-label={`Max order ${s.max.join(" then ")}`}>{s.max.map((k, i) => <Fragment key={k}>{i > 0 && <Arrow />}<GameIcon kind="ability" champion={id} slot={k as "Q" | "W" | "E"} size={34} /></Fragment>)}</div>
+      <div className="flex items-center gap-1" aria-label={`Max order ${s.max.join(" then ")}`}>{s.max.map((k, i) => <Fragment key={k}>{i > 0 && <Arrow />}<GameIcon kind="ability" champion={id} slot={k as "Q" | "W" | "E"} size={34} /></Fragment>)}</div>
     </div>
-    <div role="table" aria-label="Skill order by level" className="space-y-1 text-[11px]">
-      <div role="row" className="grid items-center text-muted text-center" style={cols}><span aria-hidden />{levels.map((l) => <span key={l} role="columnheader">{l}</span>)}</div>
-      {(["Q", "W", "E", "R"] as const).map((k) => <div key={k} role="row" className="grid items-center gap-px" style={cols}>
+    <div role="table" aria-label="Skill order by level" className="space-y-1 text-[11px] w-max max-w-full overflow-x-auto">
+      <div role="row" className="grid items-center gap-0.5 text-muted text-center" style={cols}><span aria-hidden />{levels.map((l) => <span key={l} role="columnheader">{l}</span>)}</div>
+      {(["Q", "W", "E", "R"] as const).map((k) => <div key={k} role="row" className="grid items-center gap-0.5" style={cols}>
         <GameIcon kind="ability" champion={id} slot={k} size={22} keyBadge={false} />
         {grid.map((g, i) => <span key={i} role="cell" data-on={g === k} aria-label={g === k ? `Level ${i + 1}: ${k}` : undefined}
           className={`h-6 grid place-items-center rounded-sm font-semibold ${g === k ? (k === "R" ? "bg-gold/25 text-gold" : "bg-accent/30 text-text") : "bg-raised/40"}`}>{g === k ? k : ""}</span>)}</div>)}
     </div>
     <span className="sr-only">First 9 levels: {s.levels.join(" ")}</span>
-    <div className="text-[11px] text-muted">{s.grid ? "Levels 1–9 are the most common real sequence among games with this max order; later levels follow the max order (R at 11 and 16)." : "First 9 levels, the most common real sequence among games with this max order."}</div>
+    <div className="text-[11px] text-muted" title="Levels 1–9: the most common real sequence among games with this max order. Later levels follow the max order (R at 6, 11 and 16).">Levels 1–9 real · later levels follow the max order</div>
   </div>);
 }
 
@@ -148,7 +151,7 @@ function VariantList({ b, sort, setSort, selected, setSelected }: { b: ChampionB
         <div className="text-[11px] text-muted mb-2">{v.games.toLocaleString()} games<LowBadge games={v.games} /></div>
         <div className="flex items-center gap-1.5">{key && <GameIcon kind="rune" id={key} size={22} />}{items.slice(0, 4).map((it) => <GameIcon key={it.id} kind="item" id={it.id} name={it.name} size={24} />)}</div>
       </button></li>; })}</ul>
-    <p className="text-[11px] text-muted">Builds are grouped by what players finished with: mostly AP items, AD items or defensive items (Data Dragon item tags). Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.</p>
+    <p className="text-[11px] text-muted" title="Grouped by finished items (Data Dragon tags): AP, AD or defensive. Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items. “Best” ranks by the 95% lower bound.</p>
   </div>);
 }
 
@@ -174,7 +177,7 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
     {isLoading && <Skeleton className="h-32" />}
     {isError && <div className="text-sm text-muted">The build could not be loaded from the local backend.</div>}
     {b && !has && <div className="text-sm text-muted">No rune or item data for these filters yet. Rune pages are stored for newly collected games only; games collected by older versions of Apex do not have them.</div>}
-    {b && cur && has && <div className={`grid gap-6 ${variants.length ? "grid-cols-[210px_minmax(0,1fr)_280px]" : "grid-cols-[minmax(0,1fr)_280px]"}`}>
+    {b && cur && has && <div className={`grid gap-x-8 gap-y-6 items-start ${variants.length ? "grid-cols-[210px_minmax(0,1fr)_300px]" : "grid-cols-[minmax(0,1fr)_300px]"}`}>
       {variants.length > 0 && b && <VariantList b={b} sort={sort} setSort={setSort} selected={active?.id ?? ""} setSelected={setVid} />}
       <div key={`r-${active?.id ?? "all"}`}><RunesColumn b={cur} /></div>
       <div className="space-y-5"><SpellsBlock b={cur} /><ItemsColumn b={cur} /></div>

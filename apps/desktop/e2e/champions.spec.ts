@@ -130,14 +130,16 @@ test("build variants (AP / Tank) can be switched and sorted; the build below fol
   });
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Recommended build"), list = panel.getByRole("group", { name: "Build variants" });
-  await expect(list.getByRole("button", { name: /^AP build, 300 games/ })).toHaveAttribute("aria-pressed", "true");   // Best: the lower end of the range, AP has far more games
-  await expect(panel.getByRole("img", { name: "Zhonya AP variant" }).first()).toBeVisible();
-  await list.getByRole("button", { name: /^Tank build/ }).click();
+  // Best = lower end of the 95% range: Tank (70 of 100) clears it far higher than AP (150 of 300, exactly 50%), so Tank leads and is selected.
+  await expect(list.getByRole("listitem").first()).toContainText("Tank");
+  await expect(list.getByRole("button", { name: /^Tank build, 100 games/ })).toHaveAttribute("aria-pressed", "true");
   await expect(panel.getByRole("img", { name: "Tank variant item" }).first()).toBeVisible();
-  await expect(panel.getByText(/with Tank builds/)).toBeVisible();
+  await list.getByRole("button", { name: /^AP build/ }).click();
+  await expect(panel.getByRole("img", { name: "Zhonya AP variant" }).first()).toBeVisible();
+  await expect(panel.getByText(/with AP builds/)).toBeVisible();
   await list.getByRole("button", { name: "Common", exact: true }).click();
   await expect(list.getByRole("button", { name: "Common", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(list.getByRole("listitem").first()).toContainText("AP");
+  await expect(list.getByRole("listitem").first()).toContainText("AP");                 // 300 games beat 100
   await list.getByRole("button", { name: "Win rate", exact: true }).click();
   await expect(list.getByRole("listitem").first()).toContainText("Tank");               // 70% beats 50%
 });
