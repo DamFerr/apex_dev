@@ -1,8 +1,8 @@
-import type { BuildItem, BuildItemBlock, ChampionBuild, ItemPathStat, ItemWpa, PathItem, Role, RunePageStat, SkillOrderStat, SpellPairStat } from "@apex/schema";
+import type { BuildItem, BuildItemBlock, ChampionBuild, KeystoneStat, ItemPathStat, ItemWpa, PathItem, Role, RunePageStat, SkillOrderStat, SpellPairStat } from "@apex/schema";
 import { itemWpa } from "@apex/stats-core";
 
 /** One collected game of a champion (see Store.buildRows). */
-export interface BuildRow { perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills?: string | null; start?: string | null; buys?: string | null; /** Game length in seconds (needed for WPA). */ duration?: number }
+export interface BuildRow { /** Keystone rune id: stored for every game, also those collected before full rune pages were. */ keystone?: number | null; perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills?: string | null; start?: string | null; buys?: string | null; /** Game length in seconds (needed for WPA). */ duration?: number }
 export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; boots?: boolean }
 
 const FLASH = 4;
@@ -77,7 +77,7 @@ export function spellPair(rows: BuildRow[]): SpellPairStat | null {
  * "Core" means most often owned at the end, not a build order: order needs timelines, which are not collected yet.
  * Only finished items count: no components, consumables, trinkets or starter items.
  */
-export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>, wpas: Map<number, ItemWpa> = new Map()): BuildItemBlock[] {
+export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>, wpas: Map<number, ItemWpa> = new Map(), order: number[] = []): BuildItemBlock[] {
   const boots = new Map<string, Tally>(), done = new Map<string, Tally>();
   for (const r of rows) {
     let ids: number[]; try { ids = JSON.parse(r.items) as number[]; } catch { continue; }
@@ -86,9 +86,24 @@ export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>, wpas:
       if (isBoots(it)) bump(boots, String(id), r.win); else if (isFinished(it)) bump(done, String(id), r.win);
     }
   }
-  const take = (m: Map<string, Tally>, from: number, to: number): BuildItem[] => ranked(m).slice(from, to).map(([id, t]) => ({ id: Number(id), name: items.get(Number(id))!.name, games: t.games, wins: t.wins, ...(wpas.has(Number(id)) ? { wpa: wpas.get(Number(id)) } : {}) }));
+  const one = (id: number, t: Tally): BuildItem => ({ id, name: items.get(id)!.name, games: t.games, wins: t.wins, ...(wpas.has(id) ? { wpa: wpas.get(id) } : {}) });
+  const take = (m: Map<string, Tally>, from: number, to: number): BuildItem[] => ranked(m).slice(from, to).map(([id, t]) => one(Number(id), t));
   const { core, situational } = LIMITS;
-  return [{ name: "Boots", items: take(boots, 0, LIMITS.boots) }, { name: "Core items", items: take(done, 0, core) }, { name: "Situational", items: take(done, core, core + situational) }].filter((b) => b.items.length > 0);
+  // With a usual build order (corePath) the Core block IS that order, so the same three items are never listed twice (once ordered, once not).
+  // Their stats come from the same all-games tallies as every other item, and they are removed from Situational.
+  const ordered = order.length > 0 && order.every((id) => done.has(String(id)));
+  const coreItems = ordered ? order.map((id) => one(id, done.get(String(id))!)) : take(done, 0, core);
+  const coreIds = new Set(coreItems.map((i) => i.id));
+  const rest = new Map([...done].filter(([id]) => !coreIds.has(Number(id))));
+  return [{ name: "Boots", items: take(boots, 0, LIMITS.boots) }, { name: "Core items", items: coreItems, ...(ordered ? { ordered: true } : {}) },
+    { name: "Situational", items: take(rest, 0, situational) }].filter((b) => b.items.length > 0);
+}
+
+/** The most played keystones (stored for every game). Fallback for the Runes column when no game has a full rune page yet. */
+export function keystoneStats(rows: BuildRow[], limit = 3): KeystoneStat[] {
+  const m = new Map<string, Tally>();
+  for (const r of rows) if (r.keystone) bump(m, String(r.keystone), r.win);
+  return ranked(m).slice(0, limit).map(([id, t]) => ({ id: Number(id), games: t.games, wins: t.wins }));
 }
 
 const json = <T,>(s: string | null | undefined): T | null => { if (!s) return null; try { return JSON.parse(s) as T; } catch { return null; } };
@@ -185,6 +200,8 @@ export function itemWpas(rows: BuildRow[], items: Map<number, ItemMeta>): Map<nu
 }
 
 export function computeBuild(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>): ChampionBuild {
-  return { champion, role, games: rows.length, runePages: runePages(rows), spells: spellPair(rows), itemBlocks: itemBlocks(rows, items, itemWpas(rows, items)),
-    timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: corePath(rows, items), minPathGames: MIN_PATH_GAMES };
+  const path = corePath(rows, items);
+  return { champion, role, games: rows.length, runePages: runePages(rows), keystones: keystoneStats(rows), spells: spellPair(rows),
+    itemBlocks: itemBlocks(rows, items, itemWpas(rows, items), path?.items.map((i) => i.id) ?? []),
+    timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: path, minPathGames: MIN_PATH_GAMES };
 }

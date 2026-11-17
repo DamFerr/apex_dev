@@ -43,3 +43,13 @@ describe("mergeItemSets", () => {
   });
   it("works on an empty list", () => expect(mergeItemSets([], mine)).toEqual([mine]));
 });
+
+describe("buildItemSet with an ordered Core block", () => {
+  it("does not add a second \"Build order\" block for the same items", () => {
+    const ordered = { itemBlocks: [{ name: "Core items", ordered: true, items: [{ id: 3100, name: "l", games: 9, wins: 5 }, { id: 3157, name: "z", games: 9, wins: 5 }, { id: 3089, name: "r", games: 9, wins: 5 }] }],
+      corePath: { items: [{ id: 3100, name: "l", count: 1 }, { id: 3157, name: "z", count: 1 }, { id: 3089, name: "r", count: 1 }], games: 9, wins: 5 } };
+    const s = buildItemSet(ordered, 103, "Ahri")!;
+    expect(s.blocks.map((b) => b.type)).toEqual(["Core items (build order)"]);
+    expect(s.blocks[0].items.map((i) => i.id)).toEqual(["3100", "3157", "3089"]);
+  });
+});

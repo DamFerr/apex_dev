@@ -6,7 +6,7 @@ import { applyCompact } from "../lib/compact";
 import { isTauri } from "../lib/tauri";
 import { useUi } from "../lib/store";
 import { useMemo, useState } from "react";
-import { createRealData, evaluate, personalZ, recommend, recommendBans, teamComp } from "@apex/draft-engine";
+import { createRealData, evaluate, personalZ, recommend, recommendBans, resolve, teamComp } from "@apex/draft-engine";
 import { FilterBar } from "../components/FilterBar";
 import { useDraftStats, usePool } from "../lib/api";
 import { useDdChampions } from "../lib/ddragon";
@@ -53,7 +53,7 @@ export function Draft() {
   }, [draft.slots]);
   const ev = useMemo(() => (data && draft.active ? evaluate(picks.ally, picks.enemy, data) : null), [data, draft.active, picks]);
   // Team composition of the locked picks. Same data as the engine's layer B, so the panel shows what the win probability used.
-  const comps = useMemo(() => (data && draft.active ? { ally: teamComp(picks.ally, (c) => data.profile?.(c), data.tags), enemy: teamComp(picks.enemy, (c) => data.profile?.(c), data.tags) } : null), [data, draft.active, picks]);
+  const comps = useMemo(() => (data && draft.active ? { ally: teamComp(resolve(picks.ally, data), (c, r) => data.profile?.(c, r), data.tags), enemy: teamComp(resolve(picks.enemy, data), (c, r) => data.profile?.(c, r), data.tags) } : null), [data, draft.active, picks]);
   const recs = useMemo(() => {
     if (!data || !champs || !draft.active || draft.banning || !me?.role || me.locked) return [];
     const t0 = performance.now();

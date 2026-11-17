@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { RoleIcon } from "../components/RoleIcon";
 import type { ItemPathStat, Role, RunePageStat } from "@apex/schema";
@@ -33,8 +33,8 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
     </div>
     {isLoading && <Skeleton className="h-32" />}
     {isError && <div className="text-sm text-muted">The build could not be loaded from the local backend.</div>}
-    {b && !page && !b.itemBlocks.length && !b.skillOrder && <div className="text-sm text-muted">No rune or item data for these filters yet. Rune pages are stored for newly collected games only; games collected by older versions of Apex do not have them.</div>}
-    {b && (page || b.itemBlocks.length > 0 || b.skillOrder) && <div className="grid grid-cols-2 gap-6">
+    {b && !page && !b.keystones.length && !b.itemBlocks.length && !b.skillOrder && <div className="text-sm text-muted">No rune or item data for these filters yet. Rune pages are stored for newly collected games only; games collected by older versions of Apex do not have them.</div>}
+    {b && (page || b.keystones.length > 0 || b.itemBlocks.length > 0 || b.skillOrder) && <div className="grid grid-cols-2 gap-6">
       <div className="space-y-3">
         <div className="text-sm font-medium">Runes</div>
         {b.runePages.length > 1 && <div className="flex flex-wrap gap-2">{b.runePages.map((p, i) => <Chip key={i} active={i === pick} onClick={() => setPick(i)}>{names.get(p.perkIds[0])?.name ?? "Page"} · {p.games}</Chip>)}</div>}
@@ -44,6 +44,13 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
           <div className="flex items-center gap-2" role="group" aria-label="Stat shards">{page.perkIds.slice(6).map((s, i) => <GameIcon key={i} kind="shard" id={s} size={24} />)}</div>
           <div className="text-xs text-muted">This setup: {wr(page.wins, page.games)} win rate in {page.games.toLocaleString()} games<LowBadge games={page.games} />. Each rune is the most common choice among those games.</div>
         </>}
+        {!page && (b.keystones.length > 0
+          ? <div className="space-y-2">
+              <div className="flex flex-wrap gap-4">{b.keystones.map((k) => <div key={k.id} className="flex items-center gap-2" title={`${names.get(k.id)?.name ?? "Keystone"}: ${k.games} games`}>
+                <GameIcon kind="rune" id={k.id} size={40} /><div className="text-xs leading-tight"><div>{wr(k.wins, k.games)}</div><div className="text-muted">{k.games.toLocaleString()} games</div></div></div>)}</div>
+              <div className="text-xs text-muted">Keystones only. Full rune pages (all runes and shards) are stored for newly collected games, so none of this champion's games has one yet. They appear as the collector gathers more.</div>
+            </div>
+          : <div className="text-xs text-muted">No rune data for these filters yet.</div>)}
         {b.skillOrder && <div className="pt-1"><div className="text-xs text-muted mb-1">Skill order · {wr(b.skillOrder.wins, b.skillOrder.games)} in {b.skillOrder.games.toLocaleString()} games<LowBadge games={b.skillOrder.games} /></div>
           <div className="flex items-center gap-2" aria-label={`Max order ${b.skillOrder.max.join(" then ")}`}>{b.skillOrder.max.map((k, i) => <span key={k} className="flex items-center gap-2">{i > 0 && <span className="text-muted" aria-hidden>›</span>}
             <GameIcon kind="ability" champion={id} slot={k as "Q" | "W" | "E"} size={36} /></span>)}</div>
@@ -56,17 +63,18 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
           <span className="text-xs text-muted">({wr(b.spells.wins, b.spells.games)} in {b.spells.games.toLocaleString()} games)</span></div>}
       </div>
       <div className="space-y-3">
-        <div className="text-sm font-medium">Items <span className="text-xs text-muted font-normal">(blocks below are final inventories, not a build order)</span></div>
+        <div className="text-sm font-medium">Items <span className="text-xs text-muted font-normal">(win rates are from final inventories)</span></div>
         {b.startItems && <Path label="Starting items" p={b.startItems} />}
-        {b.corePath && <Path label="Core items, usual build order" p={b.corePath} arrows />}
-        {!b.corePath && b.timelineGames > 0 && <div className="text-xs text-muted">Build order: not enough games yet. It needs {b.minPathGames}+ timeline games that kept the same three core items ({b.timelineGames.toLocaleString()} timeline {b.timelineGames === 1 ? "game" : "games"} so far).</div>}
         {(!b.skillOrder || !b.startItems) && b.timelineGames > 0 && <div className="text-xs text-muted">{[!b.skillOrder && "Skill order", !b.startItems && "Starting items"].filter(Boolean).join(" and ")}: not enough games yet. {!b.skillOrder && !b.startItems ? "They need" : "It needs"} {b.minPathGames}+ timeline games with the same {!b.skillOrder && !b.startItems ? "choices" : !b.skillOrder ? "max order" : "starting set"} ({b.timelineGames.toLocaleString()} timeline {b.timelineGames === 1 ? "game" : "games"} so far).</div>}
         {b.itemBlocks.map((blk) => <div key={blk.name}>
-          <div className="text-xs text-muted mb-1">{blk.name}</div>
-          <div className="flex flex-wrap gap-3">{blk.items.map((it) => <div key={it.id} className="flex flex-col items-center gap-1 w-14" title={`${it.name}: ${it.games} games`}>
-            <GameIcon kind="item" id={it.id} name={it.name} size={40} />
-            <span className="text-[11px] leading-none">{wr(it.wins, it.games)}</span>{it.wpa && <span className="text-[11px] leading-none"><Wpa w={it.wpa} /></span>}<span className="text-[10px] text-muted leading-none">{it.games}</span></div>)}</div>
+          <div className="text-xs text-muted mb-1">{blk.name}{blk.ordered && b.corePath && <span> · in their usual build order · {wr(b.corePath.wins, b.corePath.games)} in {b.corePath.games.toLocaleString()} games that kept all three<LowBadge games={b.corePath.games} /></span>}</div>
+          <div className="flex flex-wrap items-start gap-3">{blk.items.map((it, i) => <Fragment key={it.id}>
+            {blk.ordered && i > 0 && <span className="text-muted self-center pb-8" aria-hidden>›</span>}
+            <div className="flex flex-col items-center gap-1 w-14" title={`${it.name}: ${it.games} games`}>
+              <GameIcon kind="item" id={it.id} name={it.name} size={40} />
+              <span className="text-[11px] leading-none">{wr(it.wins, it.games)}</span>{it.wpa && <span className="text-[11px] leading-none"><Wpa w={it.wpa} /></span>}<span className="text-[10px] text-muted leading-none">{it.games}</span></div></Fragment>)}</div>
         </div>)}
+        {!b.corePath && b.timelineGames > 0 && b.itemBlocks.some((blk) => blk.name === "Core items") && <div className="text-xs text-muted">Core items are shown by popularity, not build order: the order needs {b.minPathGames}+ timeline games that kept the same three ({b.timelineGames.toLocaleString()} so far).</div>}
         {b.itemBlocks.some((blk) => blk.items.some((it) => it.wpa)) && <div className="text-[11px] text-muted">Under each item: win rate, <span className="text-text">WPA</span> (win probability added, percentage points, vs games without the item of the same length and number of finished items; green or red only when its 95% range excludes 0) and games. A link, not proof.</div>}
       </div>
     </div>}

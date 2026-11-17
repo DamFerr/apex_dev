@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "./sqlite";
-import { computeBuild, itemBlocks, itemWpas, lengthBand, runePages, spellPair, type BuildRow, type ItemMeta } from "./build";
+import { computeBuild, itemBlocks, itemWpas, keystoneStats, lengthBand, runePages, spellPair, type BuildRow, type ItemMeta } from "./build";
 import { makeStore, perksJson } from "./store";
 import { matchFixture, participant } from "./testkit";
 
@@ -134,4 +134,39 @@ describe("itemWpas (Win Probability Added of items)", () => {
     const all = b.itemBlocks.flatMap((x) => x.items);
     expect(all.find((i) => i.id === 3157)!.wpa).toMatchObject({ wpa: expect.any(Number), lo: expect.any(Number), hi: expect.any(Number), expected: expect.any(Number) });
   });
+});
+
+describe("one core row (no duplicate ordered / unordered core)", () => {
+  // 12 timeline games: final inventory has three core items, bought Lich Bane -> Zhonya -> Rabadon; one extra item sits outside the core.
+  const tl = (n: number, win = 1) => Array.from({ length: n }, () => row({ items: "[3157,3089,3100,3020]", buys: "[3100,3157,3089]" }, win));
+  it("makes the Core block the build order, with per-item stats, and lists each item once", () => {
+    const b = computeBuild("Ahri", null, [...tl(12), row({ items: "[3157,3020]" })], items);
+    const core = b.itemBlocks.find((x) => x.name === "Core items")!;
+    expect(core.ordered).toBe(true);
+    expect(core.items.map((i) => i.id)).toEqual([3100, 3157, 3089]);
+    expect(core.items.find((i) => i.id === 3157)).toMatchObject({ games: 13, wins: 13 });
+    const ids = b.itemBlocks.flatMap((x) => x.items.map((i) => i.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(b.corePath?.items.map((i) => i.id)).toEqual([3100, 3157, 3089]);
+  });
+  it("keeps a popularity-ordered Core block (not marked ordered) when there are too few timeline games", () => {
+    const b = computeBuild("Ahri", null, tl(3), items);
+    expect(b.corePath).toBeNull();
+    expect(b.itemBlocks.find((x) => x.name === "Core items")!.ordered).toBeUndefined();
+  });
+  it("never repeats a core item in Situational", () => {
+    const b = computeBuild("Ahri", null, tl(12), items);
+    const sit = b.itemBlocks.find((x) => x.name === "Situational");
+    expect(sit?.items.some((i) => [3100, 3157, 3089].includes(i.id)) ?? false).toBe(false);
+  });
+});
+
+describe("keystone fallback when no game has a full rune page", () => {
+  it("lists the most played keystones even if every perks value is missing", () => {
+    const rows = [row({ perks: null, keystone: 8005 }), row({ perks: null, keystone: 8005 }, 0), row({ perks: null, keystone: 8112 })];
+    expect(keystoneStats(rows)).toEqual([{ id: 8005, games: 2, wins: 1 }, { id: 8112, games: 1, wins: 1 }]);
+    const b = computeBuild("Ahri", null, rows, items);
+    expect(b.runePages).toEqual([]); expect(b.keystones[0]).toMatchObject({ id: 8005, games: 2 });
+  });
+  it("ignores games without a keystone", () => expect(keystoneStats([row({ perks: null, keystone: null })])).toEqual([]));
 });

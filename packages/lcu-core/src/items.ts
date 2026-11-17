@@ -18,10 +18,12 @@ const SUMMONERS_RIFT = 11;
  */
 export function buildItemSet(build: Pick<ChampionBuild, "itemBlocks"> & Partial<Pick<ChampionBuild, "startItems" | "corePath">>, championKey: number, championName: string): LcuItemSet | null {
   const plain = { hideIfSummonerSpell: "", showIfSummonerSpell: "", minSummonerLevel: -1, maxSummonerLevel: -1 };
-  const lead = [["Starting items", build.startItems], ["Build order", build.corePath]] as const;
+  // When the Core block is already in build order, a separate "Build order" block would list the same three items twice.
+  const coreOrdered = build.itemBlocks.some((b) => b.ordered && b.items.length > 0);
+  const lead = [["Starting items", build.startItems], ...(coreOrdered ? [] : [["Build order", build.corePath] as const])] as const;
   const blocks = [
     ...lead.flatMap(([type, p]) => (p?.items.length ? [{ type, items: p.items.map((i) => ({ id: String(i.id), count: i.count })), ...plain }] : [])),
-    ...build.itemBlocks.filter((b) => b.items.length > 0).map((b) => ({ type: b.name, items: b.items.map((i) => ({ id: String(i.id), count: 1 })), ...plain })),
+    ...build.itemBlocks.filter((b) => b.items.length > 0).map((b) => ({ type: b.ordered ? `${b.name} (build order)` : b.name, items: b.items.map((i) => ({ id: String(i.id), count: 1 })), ...plain })),
   ];
   if (!blocks.length) return null;
   return { uid: `apex-${championKey}`, title: `${ITEM_SET_PREFIX}${championName}`.slice(0, 40), type: "custom", map: "any", mode: "any", startedFrom: "blank", sortrank: 1,

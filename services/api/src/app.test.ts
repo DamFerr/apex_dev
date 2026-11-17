@@ -28,6 +28,17 @@ describe("API", () => {
     const league = riot.league; riot.league = async (p, pl) => (await league(p, pl)).map((e) => (e.queueType === "RANKED_SOLO_5x5" ? { ...e, leaguePoints: 82, wins: 88 } : e));
     t += 10 * 60_000; const next = (await hist()).json().snapshots; expect(next.map((x: { rank: { lp: number } }) => x.rank.lp)).toEqual([64, 82]);
   });
+  it("lp-history?fresh=1 skips the 5 minute profile cache, so a rank change right after a game is recorded; without it the cache still applies", async () => {
+    let t = 1_000_000;
+    const a = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: makeStore(new DatabaseSync(":memory:")), collector: idleCollector(riot, store), defaultPlatform: "euw1", now: () => t });
+    const url = "/v1/players/Test%20Player%23EUW/lp-history";
+    await a.inject({ method: "GET", url });
+    const league = riot.league; riot.league = async (p, pl) => (await league(p, pl)).map((e) => (e.queueType === "RANKED_SOLO_5x5" ? { ...e, leaguePoints: 82, wins: 88 } : e));
+    t += 60_000;                                                           // one minute later: inside the cache
+    expect((await a.inject({ method: "GET", url })).json().snapshots).toHaveLength(1);                         // cached: the new LP is not seen
+    const fresh = (await a.inject({ method: "GET", url: `${url}?fresh=1` })).json().snapshots;
+    expect(fresh.map((x: { rank: { lp: number } }) => x.rank.lp)).toEqual([64, 82]);
+  });
   it("still shows the stored LP history when Riot cannot be reached", async () => {
     let t = 1_000_000;
     const a = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: makeStore(new DatabaseSync(":memory:")), collector: idleCollector(riot, store), defaultPlatform: "euw1", now: () => t });

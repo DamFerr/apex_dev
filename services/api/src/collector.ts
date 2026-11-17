@@ -8,7 +8,8 @@ const DIVISIONS = ["I", "II", "III", "IV"];
 const RESEED_MS = 7 * 24 * 3600_000, RETRY_MS = 10 * 60_000;
 
 export interface CollectorConfig { platforms: string[]; tiers: string[]; pages: number; matchesPerPlayer: number; recrawlMs: number; concurrency: number;
-  /** Share (0 to 1) of newly stored games that also get their timeline (skill order, starting items, build order). Each costs one more Riot request. Default 0. */ timelineShare?: number }
+  /** Share (0 to 1) of newly stored games that also get their timeline (skill order, starting items, build order). Each costs one more Riot request. Default 0. */ timelineShare?: number;
+  /** Backfill: every this many steps, fetch the timelines of a few already stored games (inside the share) that have none, newest first. 0 or unset = off. */ backfillEvery?: number }
 export interface Ladder { platform: string; tier: string; division: string }
 
 /**
@@ -17,13 +18,15 @@ export interface Ladder { platform: string; tier: string; division: string }
  * parallel (Riot limits each region separately), all at low priority so interactive requests always have room.
  */
 export class Collector {
-  status = { running: false, lastError: null as string | null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0, timelinesThisRun: 0 };
+  status = { running: false, lastError: null as string | null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0, timelinesThisRun: 0, backfilledThisRun: 0 };
   /** Workers currently busy per regional cluster (europe, americas, asia, sea). */
   private busy = new Map<string, number>();
   private stopping = false; private loops: Promise<void>[] = []; private tick = 0;
   private inFlight = new Set<string>(); private failedUntil = new Map<string, number>();
   /** Matches that were downloaded but not stored (older than the 5 kept patches, remakes), so the next crawl does not download them again. Emptied when large; it only saves requests. */
   private skipped = new Set<string>();
+  /** Backfill timelines that failed for a reason that may pass (rate limit, network): not retried until the next start, so one bad game cannot block the rest. */
+  private tlFailed = new Set<string>(); private steps = 0;
   constructor(private riot: RiotApi, private store: Store, public cfg: CollectorConfig, private now = () => Date.now(),
     private sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))) {}
 
@@ -35,7 +38,7 @@ export class Collector {
 
   start() {
     if (this.loops.length) return;
-    this.stopping = false; this.status = { running: true, lastError: null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0, timelinesThisRun: 0 };
+    this.stopping = false; this.status = { running: true, lastError: null, lastErrorAt: 0, fatal: false, errorsThisRun: 0, savedThisRun: 0, timelinesThisRun: 0, backfilledThisRun: 0 };
     const loops = Array.from({ length: Math.max(1, this.cfg.concurrency) }, () => this.run());
     this.loops = loops;
     void Promise.all(loops).finally(() => { if (this.loops === loops) { this.loops = []; this.status.running = false; } });
@@ -96,8 +99,42 @@ export class Collector {
     catch (e) { if (e instanceof HttpError && /API key/.test(e.message)) throw e; }
   }
 
+  /** How many timelines one backfill step fetches. */
+  static readonly BACKFILL_BATCH = 5;
+
+  /**
+   * Fetches timelines for stored games that have none (games collected before timelines existed, or before the share was raised).
+   * Picks the cluster with the fewest busy workers like crawlOne, goes newest game first and uses the same low priority.
+   * Riot has no timeline for a game that is too old: that (404) is remembered and never retried. Other failures are skipped until restart.
+   * Returns false when nothing is waiting.
+   */
+  private async backfillOne(): Promise<boolean> {
+    const share = this.cfg.timelineShare ?? 0; if (share <= 0) return false;
+    const clusters = [...new Set(this.cfg.platforms.map(regionOf))].sort((a, b) => (this.busy.get(a) ?? 0) - (this.busy.get(b) ?? 0));
+    for (const region of clusters) {
+      const todo = this.store.pendingTimelines(share, this.cfg.platforms.filter((p) => regionOf(p) === region), Collector.BACKFILL_BATCH + this.tlFailed.size).filter((m) => !this.tlFailed.has(m.id)).slice(0, Collector.BACKFILL_BATCH);
+      if (!todo.length) continue;
+      this.busy.set(region, (this.busy.get(region) ?? 0) + 1);
+      try {
+        for (const m of todo) {
+          if (this.stopping) break;
+          try { this.store.saveTimeline(m.id, extractTimeline(await this.riot.timeline(m.id, region, true))); this.status.backfilledThisRun++; }
+          catch (e) {
+            if (e instanceof HttpError && /API key/.test(e.message)) throw e;
+            if (e instanceof HttpError && e.status === 404) this.store.markTimelineUnavailable(m.id);
+            else { if (this.tlFailed.size >= 5_000) this.tlFailed.clear(); this.tlFailed.add(m.id); }
+          }
+        }
+      } finally { this.busy.set(region, (this.busy.get(region) ?? 1) - 1); }
+      return true;
+    }
+    return false;
+  }
+
   /** One unit of work: mostly crawling, with every third step reading a ladder first so new regions fill in early. */
   async step(): Promise<"worked" | "idle"> {
+    const every = this.cfg.backfillEvery ?? 0;
+    if (every > 0 && this.steps++ % every === every - 1 && (await this.backfillOne())) return "worked"; // a small, low-priority share of the work
     const seedFirst = this.tick++ % 3 === 0;
     if (seedFirst && (await this.seedOne())) return "worked";
     if (await this.crawlOne()) return "worked";

@@ -62,7 +62,37 @@ describe("createRealData: profiles", () => {
   it("exposes collected damage numbers by champion key and nothing for unknown champions", () => {
     const row = { id: "Ahri", games: 30, phys: 1, magic: 2, trueDmg: 3, taken: 4, cc: 5, seconds: 6 };
     const d = createRealData(stats({ profiles: [row] }), keys, tags);
-    expect(d.profile?.(1)).toEqual(row); expect(d.profile?.(2)).toBeNull(); expect(d.profile?.(99)).toBeNull();
+    expect(d.profile?.(1)).toEqual({ games: 30, phys: 1, magic: 2, trueDmg: 3, taken: 4, cc: 5, seconds: 6 }); expect(d.profile?.(2)).toBeNull(); expect(d.profile?.(99)).toBeNull();
   });
   it("works with a backend that sends no profiles at all", () => expect(createRealData(stats(), keys, tags).profile?.(1)).toBeNull());
+});
+
+describe("createRealData: baseline", () => {
+  it("is null with few games and a value with enough", () => {
+    const row = (games: number) => ({ id: "A", games, phys: 1, magic: 1, trueDmg: 0, taken: 600 * games * 30, cc: 60 * games * 30, seconds: 1800 * games });
+    expect(createRealData(stats({ profiles: [row(10)] }), keys, tags).baseline?.()).toBeNull();
+    expect(createRealData(stats({ profiles: [row(300)] }), keys, tags).baseline?.()?.takenPerMin).toBeCloseTo(600, 6);
+    expect(createRealData(stats(), keys, tags).baseline?.()).toBeNull();
+  });
+});
+
+describe("createRealData: per-role profiles", () => {
+  const mk = (id: string, role: string | undefined, games: number, phys: number) => ({ id, ...(role ? { role } : {}), games, phys, magic: 0, trueDmg: 0, taken: games * 100, cc: games, seconds: games * 1800 });
+  const d = createRealData(stats({ profiles: [mk("Ahri", "MID", 40, 4000), mk("Ahri", "SUPPORT", 30, 300), mk("Ahri", "TOP", 5, 50)] }), keys, tags);
+  it("returns the role's own numbers when it has enough games", () => {
+    expect(d.profile?.(1, "MID")).toMatchObject({ games: 40, phys: 4000 }); expect(d.profile?.(1, "SUPPORT")).toMatchObject({ games: 30, phys: 300 });
+  });
+  it("falls back to the total over all roles for a thin or unseen role, or no role", () => {
+    const all = { games: 75, phys: 4350 };
+    expect(d.profile?.(1, "TOP")).toMatchObject(all); expect(d.profile?.(1, "ADC")).toMatchObject(all); expect(d.profile?.(1)).toMatchObject(all); expect(d.profile?.(1, null)).toMatchObject(all);
+  });
+  it("treats rows without a role (older backends) as all roles", () => {
+    const old = createRealData(stats({ profiles: [mk("Ahri", undefined, 50, 5000)] }), keys, tags);
+    expect(old.profile?.(1, "MID")).toMatchObject({ games: 50 }); expect(old.profile?.(1)).toMatchObject({ games: 50 });
+  });
+  it("does not double count the baseline (role rows are summed once)", () => {
+    expect(d.baseline?.()).toBeNull();   // 75 games < 200
+    const big = createRealData(stats({ profiles: [mk("Ahri", "MID", 300, 1), mk("Ahri", "TOP", 300, 1)] }), keys, tags);
+    expect(big.baseline?.()?.takenPerMin).toBeCloseTo((100 * 60) / 1800, 6);
+  });
 });

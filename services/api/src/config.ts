@@ -17,5 +17,7 @@ export const config = {
   collectTiers: process.env.COLLECT_ONLY_TIERS ? process.env.COLLECT_ONLY_TIERS.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean) : null,
   collectPages: num(process.env.COLLECT_PAGES, 1),
   // Share of collected games that also get their timeline (skill order, starting items, build order). Each costs one extra Riot request, so 0.25 slows collection by about a fifth. 0 = off.
+  // Also fetch timelines for games stored earlier that have none (only those inside the share above), newest first, a few per few crawl steps. 0 = off. Costs a small extra share of requests.
+  collectBackfill: num(process.env.COLLECT_BACKFILL, 1) > 0,
   collectTimelines: Math.min(1, Math.max(0, num(process.env.COLLECT_TIMELINES, 0.25))),
 };

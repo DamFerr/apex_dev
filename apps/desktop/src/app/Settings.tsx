@@ -97,6 +97,8 @@ export function Settings() {
           <input aria-label="Your Riot ID" defaultValue={u.myRiotId} key={u.myRiotId} placeholder="Name#TAG" className="focus-ring h-8 w-52 px-3 rounded-md bg-raised/60 border border-line/10 text-sm placeholder:text-muted"
             onBlur={(e) => { const v = e.target.value.trim(); if (v === u.myRiotId) return; if (v === "" || RIOT_ID_RE.test(v)) u.patch({ myRiotId: v }); else { toast("Riot ID must look like Name#TAG", "error"); e.target.value = u.myRiotId; } }}
             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} /></Row>
+        <Row label="Refresh my rank after each game" hint="When a game you played ends, Apex looks up your own rank again (twice, 30 s and 2 min later) so Home, Profile and LP history are current. Needs your Riot ID and the League client; nothing else is looked up.">
+          <Toggle on={u.autoRefreshRank} onChange={(v) => u.patch({ autoRefreshRank: v })} label="Refresh my rank after each game" /></Row>
         <CollectorRow />
         <Row label="Backend" hint={u.backendUrl}><Button variant="ghost" onClick={() => void testBackend(u.backendUrl)}>Test connection</Button></Row>
       </Card>

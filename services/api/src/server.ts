@@ -17,7 +17,7 @@ const riot = new HttpRiot(config.riotKey, limiters), db = openDatabase(config.db
 store.backfillPlatform(config.platform);
 const pruned = store.pruneOldPatches(); // only the newest 5 patches are kept; older games are deleted on every start
 console.log(`Patches kept: ${pruned.kept.join(", ") || "none yet"}${pruned.removedMatches ? ` (removed ${pruned.removedMatches.toLocaleString()} games of older patches)` : ""}.`);
-const collector = new Collector(riot, store, { platforms: config.collectPlatforms ?? ALL_PLATFORMS, tiers: config.collectTiers ?? TIERS, pages: config.collectPages, matchesPerPlayer: 20, recrawlMs: 6 * 3600_000, concurrency: config.collectConcurrency, timelineShare: config.collectTimelines });
+const collector = new Collector(riot, store, { platforms: config.collectPlatforms ?? ALL_PLATFORMS, tiers: config.collectTiers ?? TIERS, pages: config.collectPages, matchesPerPlayer: 20, recrawlMs: 6 * 3600_000, concurrency: config.collectConcurrency, timelineShare: config.collectTimelines, backfillEvery: config.collectBackfill ? 4 : 0 });
 const app = await buildApp({ riot, cache, dd: ddLoader(), store, collector, defaultPlatform: config.platform });
 await app.listen({ host: "127.0.0.1", port: config.port }); // localhost only: nobody else on your network can reach it
 console.log(`Apex API running on http://127.0.0.1:${config.port} (platform ${config.platform}, limits ${config.ratePerSecond}/s and ${config.ratePer2Min}/2min). The API key is not printed.`);

@@ -91,3 +91,11 @@ test("overlay settings: off by default, opacity and position persist, preview ne
   await expect(again.getByRole("group", { name: "Overlay position" }).getByRole("button", { name: "Bottom right" })).toHaveAttribute("aria-pressed", "true");
   await expect(again.getByText("60%")).toBeVisible();
 });
+
+test("refresh my rank after each game: on by default, can be switched off and stays off after a reload", async ({ page }) => {
+  await page.goto("/#/settings");
+  const sw = page.getByRole("region", { name: "Data" }).getByRole("switch", { name: "Refresh my rank after each game" });
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await sw.click(); await expect(sw).toHaveAttribute("aria-checked", "false");
+  await page.reload(); await expect(page.getByRole("region", { name: "Data" }).getByRole("switch", { name: "Refresh my rank after each game" })).toHaveAttribute("aria-checked", "false");
+});

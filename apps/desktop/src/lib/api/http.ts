@@ -21,7 +21,7 @@ export function createHttpApi(base: () => string): ApexApi {
     getRecentMatches: async (id, limit = 10) => (await page(id, 0, limit)).items,
     getMatchDetail: (matchId, riotId) => get(`/v1/matches/${matchId}`, riotId ? { riotId } : {}),
     getMastery: (id) => get(`${player(id)}/mastery`),
-    getRankHistory: (id) => get(`${player(id)}/lp-history`),
+    getRankHistory: (id, opts) => get(`${player(id)}/lp-history`, opts?.fresh ? { fresh: "1" } : {}),
     // Champion statistics come from the games the collector has stored (Settings > Data > Collector).
     getChampions: (role, f) => get("/v1/champions", { ...(role ? { role } : {}), ...filterParams(f) }),
     getChampion: (id, f) => get(`/v1/champions/${encodeURIComponent(id)}`, filterParams(f)),

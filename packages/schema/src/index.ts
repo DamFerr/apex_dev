@@ -51,7 +51,10 @@ export interface ChampionDetail extends ChampionSummary {
 export interface RunePageStat { primaryStyleId: number; subStyleId: number; perkIds: number[]; games: number; wins: number }
 export interface BuildItem { id: number; name: string; games: number; wins: number; wpa?: ItemWpa }
 /** A titled group of items, e.g. "Boots" or "Core items". */
-export interface BuildItemBlock { name: string; items: BuildItem[] }
+/** `ordered`: the items are in their usual build order (the Core block when a build path is known). */
+export interface BuildItemBlock { name: string; items: BuildItem[]; ordered?: boolean }
+/** A keystone rune with its games, for champions without any full rune page. */
+export interface KeystoneStat { id: number; games: number; wins: number }
 export interface SpellPairStat { ids: [number, number]; games: number; wins: number }
 /** Skill priority ("max order", e.g. Q, E, W: the order the three basic skills reach rank 5) plus the most common first 9 skill points among games with that priority. */
 export interface SkillOrderStat { max: string[]; levels: string[]; games: number; wins: number }
@@ -64,7 +67,7 @@ export interface ItemPathStat { items: PathItem[]; games: number; wins: number }
  */
 export interface ChampionBuild {
   champion: string; role: Role | null; games: number;
-  runePages: RunePageStat[]; spells: SpellPairStat | null; itemBlocks: BuildItemBlock[];
+  runePages: RunePageStat[]; /** Most played keystones; shown when `runePages` is empty. */ keystones: KeystoneStat[]; spells: SpellPairStat | null; itemBlocks: BuildItemBlock[];
   /** Games of this champion that have timeline data (only a share of collected games do). The three fields below come from those. */
   timelineGames: number; skillOrder: SkillOrderStat | null; startItems: ItemPathStat | null; corePath: ItemPathStat | null;
   /** Fewest games that must have kept the same three core items before corePath is shown (it is null below that). */
@@ -77,13 +80,13 @@ export interface PoolEntry { champion: string; games: number; wins: number; poin
 
 /** Collected statistics for the draft engine: pairs are [champion, champion, games, winsOfFirst], first id alphabetically first. */
 /** Sums over the collected games of one champion that carry damage-type data: what the team composition analysis averages. */
-export interface CompProfileRow { id: string; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }
+export interface CompProfileRow { id: string; /** Role these games were played in; absent (older backends, fixtures) or null = all roles / unknown. */ role?: string | null; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }
 export interface DraftStats {
   games: number; patch?: string;
   champions: { id: string; games: number; wins: number; roles: string[] }[];
   matchups: [string, string, number, number][];   // lane opponents: same role, opposite teams
   synergies: [string, string, number, number][];  // same team
-  /** Damage split, damage taken and CC per champion (optional: older backends and test fixtures omit it). */
+  /** Damage split, damage taken and CC per champion AND role (optional: older backends and test fixtures omit it). */
   profiles?: CompProfileRow[];
 }
 /** Filters shared by every stats screen. platform: "all" or a region id; patch: "latest", "all" (= the last 5 patches, the only ones Apex keeps) or e.g. "16.22"; rank: "all" or a tier such as "EMERALD", which always means that tier AND ABOVE (Emerald IV and up). */
@@ -128,7 +131,8 @@ export interface ApexApi {
   getChampionPool(riotId: string): Promise<PoolEntry[]>;
   getMastery(riotId: string): Promise<MasteryEntry[]>;
   /** Rank snapshots Apex recorded for this player, oldest first. History starts the first time Apex looked the player up. */
-  getRankHistory(riotId: string): Promise<RankHistory>;
+  /** `fresh`: skip the backend's 5 minute profile cache, so a rank change right after a game is seen. */
+  getRankHistory(riotId: string, opts?: { fresh?: boolean }): Promise<RankHistory>;
   getChampions(role?: Role, filter?: StatsFilter): Promise<ChampionList>;
   getChampion(id: string, filter?: StatsFilter): Promise<ChampionDetail>;
   /** Most played rune pages, summoner spells and final items for a champion (role optional). */

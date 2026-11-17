@@ -1,3 +1,4 @@
+import type { Role } from "@apex/schema";
 import type { Pick } from "./engine";
 
 /** Fewer measured games than this and a champion's damage numbers are not trusted; the class-tag estimate is used instead. */
@@ -23,8 +24,8 @@ const leansAp = (tags: string[]) => tags[0] === "Mage" || tags[0] === "Support";
  * The measured path needs EVERY pick to have `MIN_PROFILE_GAMES` games; mixing damage-per-minute with pick counts would be
  * meaningless, so otherwise the whole split is the tag estimate (the same rule as before this module existed).
  */
-export function teamComp(picks: Pick[], profile: (champion: number) => CompProfile | null | undefined, tags: (champion: number) => string[]): TeamComp {
-  const profiles = picks.map((p) => profile(p.champion)).map((p) => (p && p.games >= MIN_PROFILE_GAMES && p.seconds > 0 ? p : null));
+export function teamComp(picks: Pick[], profile: (champion: number, role: Role | null) => CompProfile | null | undefined, tags: (champion: number) => string[]): TeamComp {
+  const profiles = picks.map((p) => profile(p.champion, p.role)).map((p) => (p && p.games >= MIN_PROFILE_GAMES && p.seconds > 0 ? p : null));
   const measuredPicks = profiles.filter(Boolean).length, n = picks.length;
   if (n > 0 && measuredPicks === n) {
     let phys = 0, magic = 0, tru = 0, taken = 0, cc = 0;
@@ -38,3 +39,25 @@ export function teamComp(picks: Pick[], profile: (champion: number) => CompProfi
 
 /** The larger of the two main damage types, as a 0..1 share. 0 for an empty team. */
 export const damageSkew = (c: TeamComp) => Math.max(c.ad, c.ap);
+
+/** What a typical player takes and CC's per minute, over every collected champion (not per champion). The yardstick for "enough frontline / CC". */
+export interface CompBaseline { takenPerMin: number; ccPerMin: number }
+/** Fewest player-games behind the baseline; below it there is no yardstick and the engine keeps the class-tag rules. */
+export const MIN_BASELINE_GAMES = 200;
+
+/** Time-weighted average damage taken and CC per minute over all profiles, or null with too little data. */
+export function profileBaseline(profiles: CompProfile[], minGames = MIN_BASELINE_GAMES): CompBaseline | null {
+  let games = 0, seconds = 0, taken = 0, cc = 0;
+  for (const p of profiles) { if (p.seconds <= 0) continue; games += p.games; seconds += p.seconds; taken += p.taken; cc += p.cc; }
+  if (games < minGames || seconds <= 0 || taken <= 0 || cc <= 0) return null;
+  return { takenPerMin: (taken * 60) / seconds, ccPerMin: (cc * 60) / seconds };
+}
+
+/**
+ * How far below the expected amount a team is, 0..1: 0 at `hi` (80%) of the expected value or more, 1 at `lo` (40%) or less, linear between.
+ * Continuous on purpose, so one champion more or less does not flip a penalty on and off. Hand-set thresholds, not learned.
+ */
+export function shortfall(value: number, expected: number, lo = 0.4, hi = 0.8): number {
+  if (!(expected > 0) || !Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, (hi - value / expected) / (hi - lo)));
+}

@@ -20,9 +20,16 @@ describe("store", () => {
     s.saveMatch(typed("A"), "EMERALD", "euw1"); s.saveMatch(typed("B"), "EMERALD", "euw1");
     s.saveMatch(matchFixture("C"), "EMERALD", "euw1");                       // an older game: Riot fields absent, columns NULL
     const rows = s.compProfiles({}), ahri = rows.find((r) => r.id === "Ahri")!;
-    expect(ahri).toEqual({ id: "Ahri", games: 2, phys: 12000, magic: 6000, trueDmg: 2000, taken: 40000, cc: 60, seconds: 3600 });
+    expect(ahri).toEqual({ id: "Ahri", role: expect.any(String), games: 2, phys: 12000, magic: 6000, trueDmg: 2000, taken: 40000, cc: 60, seconds: 3600 });
     expect(rows).toHaveLength(10);
     expect(s.draftStats({}).profiles).toEqual(rows);
+  });
+  it("keeps one profile row per champion and role", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    const typed = (id: string, pos: string) => matchFixture(id, { participants: Array.from({ length: 10 }, (_, i) => participant(i, { win: i < 5, ...(i === 0 ? { teamPosition: pos } : {}),
+      physicalDamageDealtToChampions: 6000, magicDamageDealtToChampions: 3000, trueDamageDealtToChampions: 1000, totalDamageTaken: 20000, timeCCingOthers: 30 })) });
+    s.saveMatch(typed("A", "TOP"), "EMERALD", "euw1"); s.saveMatch(typed("B", "MIDDLE"), "EMERALD", "euw1");
+    expect(s.compProfiles({}).filter((r) => r.id === "Ahri").map((r) => [r.role, r.games]).sort()).toEqual([["MID", 1], ["TOP", 1]]);
   });
   it("adds the damage columns to a database created by an earlier version", () => {
     const db = new DatabaseSync(":memory:");
@@ -288,5 +295,30 @@ describe("keeping only the last 5 patches", () => {
     s.saveMatch(matchFixture("EUW1_2", { participants: [participant(0, { championName: "FiddleSticks" }), ...Array.from({ length: 9 }, (_, i) => participant(i + 1))] }), "EMERALD", "euw1");
     const rows = makeStore(db).championRows({}).filter((r) => r.champion.toLowerCase() === "fiddlesticks");
     expect(rows.map((r) => r.champion)).toEqual(["Fiddlesticks"]); expect(rows[0].games).toBe(2);              // one champion, both games
+  });
+});
+
+describe("timeline backfill bookkeeping", () => {
+  it("gives every stored game a stable bucket and lists the ones without a timeline, newest first, inside the share", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    for (const id of ["EUW1_1", "EUW1_2", "EUW1_3"]) s.saveMatch(matchFixture(id), "EMERALD", "euw1");
+    expect(s.timelineBacklog(1)).toBe(3); expect(s.timelineBacklog(0)).toBe(0);
+    const all = s.pendingTimelines(1, ["euw1"], 10); expect(all.map((m) => m.id).sort()).toEqual(["EUW1_1", "EUW1_2", "EUW1_3"]);
+    expect(s.pendingTimelines(1, ["na1"], 10)).toEqual([]); expect(s.pendingTimelines(0, ["euw1"], 10)).toEqual([]); expect(s.pendingTimelines(1, ["euw1"], 2)).toHaveLength(2);
+    const some = s.pendingTimelines(0.5, ["euw1"], 10).length; expect(some).toBeLessThanOrEqual(3);
+  });
+  it("marks a game done when its timeline is stored and unavailable when Riot has none", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    s.saveMatch(matchFixture("EUW1_1"), "EMERALD", "euw1"); s.saveMatch(matchFixture("EUW1_2"), "EMERALD", "euw1");
+    s.saveTimeline("EUW1_1", new Map()); s.markTimelineUnavailable("EUW1_2");
+    expect(s.timelineBacklog(1)).toBe(0);
+  });
+  it("migrates a database from before the backfill: buckets are filled and games that already have a timeline count as done", () => {
+    const db = new DatabaseSync(":memory:"); const s1 = makeStore(db);
+    s1.saveMatch(matchFixture("EUW1_1"), "EMERALD", "euw1"); s1.saveMatch(matchFixture("EUW1_2"), "EMERALD", "euw1");
+    db.exec("UPDATE participants SET skills = '[1]' WHERE match_id = 'EUW1_1'");
+    db.exec("DROP INDEX m_tl; ALTER TABLE matches DROP COLUMN tl_bucket; ALTER TABLE matches DROP COLUMN tl_state;");
+    const s2 = makeStore(db);                                           // the second start migrates
+    expect(s2.pendingTimelines(1, ["euw1"], 10).map((m) => m.id)).toEqual(["EUW1_2"]);
   });
 });

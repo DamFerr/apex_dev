@@ -3,7 +3,7 @@ import type { Role } from "@apex/schema";
 import { roleOf } from "./mapping";
 import { canonicalChampionId, RIOT_CHAMPION_ALIASES } from "./champions";
 import type { RiotMatch } from "./riot";
-import type { PlayerTimeline } from "./timeline";
+import { timelineBucket, type PlayerTimeline } from "./timeline";
 
 /** `patches` undefined = no patch restriction (only used below the API; the API always passes a list); an empty list matches nothing. */
 export interface Filter { patches?: string[]; brackets?: string[]; platform?: string }
@@ -51,11 +51,25 @@ export function makeStore(db: DatabaseSync) {
   for (const c of ["perks", "skills", "start", "buys"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} TEXT`);
   // Damage by type, damage taken and CC time (team composition analysis). Older games have NULL here and are skipped by compProfiles.
   for (const c of ["dmg_p", "dmg_m", "dmg_t", "taken", "cc"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} INTEGER`);
+  // Timeline backfill bookkeeping: `tl_bucket` (0..999, decides membership in the timeline share), `tl_state` (NULL = not fetched yet, 1 = stored, 2 = Riot has no timeline for it, never retried).
+  const mcols = (db.prepare("PRAGMA table_info(matches)").all() as { name: string }[]).map((c) => c.name);
+  if (!mcols.includes("tl_bucket")) {
+    db.exec("ALTER TABLE matches ADD COLUMN tl_bucket INTEGER; ALTER TABLE matches ADD COLUMN tl_state INTEGER");
+    // One-time fill for games stored by earlier versions: their bucket, and "stored" for those that already have timeline data.
+    const setBucket = db.prepare("UPDATE matches SET tl_bucket = ? WHERE id = ?");
+    db.exec("BEGIN");
+    try {
+      for (const r of db.prepare("SELECT id FROM matches").all() as { id: string }[]) setBucket.run(timelineBucket(r.id), r.id);
+      db.exec("UPDATE matches SET tl_state = 1 WHERE id IN (SELECT DISTINCT match_id FROM participants WHERE skills IS NOT NULL)");
+      db.exec("COMMIT");
+    } catch (e) { db.exec("ROLLBACK"); throw e; }
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS m_tl ON matches(tl_state, ended_at)");
   // Games stored before champion ids were canonicalised (e.g. "FiddleSticks") are renamed to the Data Dragon spelling, so one champion is never split in two. Safe to repeat.
   for (const [riot, dd] of Object.entries(RIOT_CHAMPION_ALIASES)) db.prepare("UPDATE participants SET champion = ? WHERE champion = ?").run(dd, riot);
   const q = <T,>(sql: string, ...args: (string | number)[]) => db.prepare(sql).all(...args) as T[];
   const filt = (f: Filter) => { const c: string[] = [], a: string[] = []; if (f.patches) { if (f.patches.length) { c.push(`m.patch IN (${f.patches.map(() => "?").join(",")})`); a.push(...f.patches); } else c.push("1 = 0"); } if (f.platform) { c.push("m.platform = ?"); a.push(f.platform); } if (f.brackets?.length) { c.push(`m.bracket IN (${f.brackets.map(() => "?").join(",")})`); a.push(...f.brackets); } return { sql: c.map((x) => ` AND ${x}`).join(""), args: a }; };
-  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES (?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks, dmg_p, dmg_m, dmg_t, taken, cc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
+  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win, tl_bucket) VALUES (?,?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks, dmg_p, dmg_m, dmg_t, taken, cc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
 
   // The distinct patches in the database, read once and kept up to date by saveMatch and pruneOldPatches (this process is the only writer).
   let known: Set<string> | undefined;
@@ -102,10 +116,22 @@ export function makeStore(db: DatabaseSync) {
     saveTimeline(matchId: string, players: Map<string, PlayerTimeline>): number {
       const up = db.prepare("UPDATE participants SET skills = ?, start = ?, buys = ? WHERE match_id = ? AND puuid = ?"); let n = 0;
       db.exec("BEGIN");
-      try { for (const [puuid, t] of players) n += Number(up.run(JSON.stringify(t.skills), JSON.stringify(t.start), JSON.stringify(t.buys), matchId, puuid).changes); db.exec("COMMIT"); }
+      try { for (const [puuid, t] of players) n += Number(up.run(JSON.stringify(t.skills), JSON.stringify(t.start), JSON.stringify(t.buys), matchId, puuid).changes); db.prepare("UPDATE matches SET tl_state = 1 WHERE id = ?").run(matchId); db.exec("COMMIT"); }
       catch (e) { db.exec("ROLLBACK"); throw e; }
       return n;
     },
+    /** Riot has no timeline for this game (it is gone from their servers): remember it so the backfill never asks again. */
+    markTimelineUnavailable: (matchId: string) => void db.prepare("UPDATE matches SET tl_state = 2 WHERE id = ?").run(matchId),
+    /**
+     * Stored games inside the timeline share (`share` 0..1) whose timeline was never fetched, newest first (the newest patch matters most),
+     * on the given platforms. The backfill works through these.
+     */
+    pendingTimelines(share: number, platforms: string[], limit: number): { id: string; platform: string }[] {
+      if (!platforms.length || share <= 0 || limit <= 0) return [];
+      return q<{ id: string; platform: string }>(`SELECT id, platform FROM matches WHERE tl_state IS NULL AND tl_bucket < ? AND platform IN (${platforms.map(() => "?").join(",")}) ORDER BY ended_at DESC LIMIT ?`, Math.ceil(share * 1000), ...platforms, Math.floor(limit));
+    },
+    /** How many stored games still wait for a timeline inside the share. */
+    timelineBacklog: (share: number) => (db.prepare("SELECT COUNT(*) n FROM matches WHERE tl_state IS NULL AND tl_bucket < ?").get(Math.ceil(Math.max(0, share) * 1000)) as { n: number }).n,
     hasMatch: (id: string) => !!db.prepare("SELECT 1 FROM matches WHERE id = ?").get(id),
     /**
      * Returns true if the match was stored. Only Ranked Solo games longer than 5 minutes count, and only on one of the newest
@@ -119,7 +145,7 @@ export function makeStore(db: DatabaseSync) {
       if (!lastPatches([...seen, patch]).includes(patch)) return false;
       db.exec("BEGIN");
       try {
-        insM.run(id, patch, bracket, platform, i.gameEndTimestamp ?? i.gameCreation + i.gameDuration * 1000, i.gameDuration, i.participants.find((p) => p.teamId === 100)?.win ? 1 : 0);
+        insM.run(id, patch, bracket, platform, i.gameEndTimestamp ?? i.gameCreation + i.gameDuration * 1000, i.gameDuration, i.participants.find((p) => p.teamId === 100)?.win ? 1 : 0, timelineBucket(id));
         for (const p of i.participants) {
           const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6].filter((x): x is number => !!x && x > 0);
           insP.run(id, p.puuid, p.teamId, canonicalChampionId(p.championName), roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
@@ -165,9 +191,9 @@ export function makeStore(db: DatabaseSync) {
      */
     compProfiles(f: Filter) {
       const w = filt(f);
-      return q<{ id: string; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }>(
-        `SELECT p.champion id, COUNT(*) games, SUM(p.dmg_p) phys, SUM(p.dmg_m) magic, SUM(p.dmg_t) trueDmg, SUM(COALESCE(p.taken, 0)) taken, SUM(COALESCE(p.cc, 0)) cc, SUM(m.duration) seconds
-         FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.dmg_p IS NOT NULL AND p.dmg_m IS NOT NULL AND p.dmg_t IS NOT NULL${w.sql} GROUP BY p.champion`, ...w.args);
+      return q<{ id: string; role: string | null; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }>(
+        `SELECT p.champion id, p.role role, COUNT(*) games, SUM(p.dmg_p) phys, SUM(p.dmg_m) magic, SUM(p.dmg_t) trueDmg, SUM(COALESCE(p.taken, 0)) taken, SUM(COALESCE(p.cc, 0)) cc, SUM(m.duration) seconds
+         FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.dmg_p IS NOT NULL AND p.dmg_m IS NOT NULL AND p.dmg_t IS NOT NULL${w.sql} GROUP BY p.champion, p.role`, ...w.args);
     },
     /** Everything the draft engine needs, as compact arrays. Pairs with fewer than `min` games are left out. */
     draftStats(f: Filter, min = 3) {
@@ -200,9 +226,9 @@ export function makeStore(db: DatabaseSync) {
       return { games: r.games, kda: r.kda ?? 0, cs: r.cs ?? 0, damage: r.damage ?? 0, gold: r.gold ?? 0 };
     },
     /** One row per collected game of this champion (optionally in one role): its rune page, spells and final items. Input for computeBuild. */
-    buildRows(champion: string, f: Filter, role?: Role): { perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills: string | null; start: string | null; buys: string | null; duration: number }[] {
+    buildRows(champion: string, f: Filter, role?: Role): { keystone: number | null; perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills: string | null; start: string | null; buys: string | null; duration: number }[] {
       const w = filt(f);
-      return q(`SELECT p.perks, p.items, p.spell1, p.spell2, p.win, p.skills, p.start, p.buys, m.duration FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.champion = ?${role ? " AND p.role = ?" : ""}${w.sql}`, champion, ...(role ? [role] : []), ...w.args);
+      return q(`SELECT p.keystone, p.perks, p.items, p.spell1, p.spell2, p.win, p.skills, p.start, p.buys, m.duration FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.champion = ?${role ? " AND p.role = ?" : ""}${w.sql}`, champion, ...(role ? [role] : []), ...w.args);
     },
     bans(f: Filter) { const w = filt(f); return q<{ k: number; n: number }>(`SELECT b.champion_key k, COUNT(*) n FROM bans b JOIN matches m ON m.id = b.match_id WHERE 1=1${w.sql} GROUP BY k`, ...w.args); },
     /** Lane matchups: same role, opposite team. */

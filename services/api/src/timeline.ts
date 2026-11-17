@@ -26,8 +26,10 @@ export function extractTimeline(tl: RiotTimeline): Map<string, PlayerTimeline> {
   return out;
 }
 
-/** Deterministic pick of a share (0 to 1) of matches, so the same games are chosen on every run and in tests. */
-export function inShare(matchId: string, share: number): boolean {
+/** A stable number 0..999 per match (hash of its id). A game is in a timeline share when its bucket is below share * 1000, so the same games are chosen on every run, in tests, and by the backfill. */
+export function timelineBucket(matchId: string): number {
   let h = 2166136261; for (let i = 0; i < matchId.length; i++) h = Math.imul(h ^ matchId.charCodeAt(i), 16777619) >>> 0;
-  return (h % 1000) < share * 1000;
+  return h % 1000;
 }
+/** Deterministic pick of a share (0 to 1) of matches. */
+export const inShare = (matchId: string, share: number): boolean => timelineBucket(matchId) < share * 1000;

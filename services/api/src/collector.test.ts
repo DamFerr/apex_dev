@@ -148,3 +148,43 @@ describe("Collector timelines", () => {
     await expect((c as unknown as { saveTimeline(id: string, r: string): Promise<void> }).saveTimeline("EUW1_1", "europe")).rejects.toThrow(/API key/);
   });
 });
+
+describe("Collector timeline backfill", () => {
+  type Priv = { backfillOne(): Promise<boolean> };
+  /** Stores 5 games WITHOUT timelines (share 0), then turns the share on, as after raising COLLECT_TIMELINES. */
+  const stored = async (share = 1) => {
+    const { c, riot, store } = setup({}); store.addSeeds(["p0"], "EMERALD", "euw1");
+    await (c as unknown as { crawlOne(): Promise<boolean> }).crawlOne();
+    c.cfg.timelineShare = share; c.cfg.backfillEvery = 1; return { c, riot, store, run: () => (c as unknown as Priv).backfillOne() };
+  };
+  it("fetches the timelines of stored games that have none, and then has nothing left to do", async () => {
+    const { c, riot, store, run } = await stored();
+    expect(store.timelineBacklog(1)).toBe(5);
+    expect(await run()).toBe(true);
+    expect(riot.calls.timeline).toBe(5); expect(c.status.backfilledThisRun).toBe(5); expect(store.timelineBacklog(1)).toBe(0);
+    expect(store.buildRows("Ahri", {}).every((r) => r.skills && r.start && r.buys)).toBe(true);
+    expect(await run()).toBe(false);
+  });
+  it("does nothing when the share is 0", async () => { const { riot, run } = await stored(0); expect(await run()).toBe(false); expect(riot.calls.timeline).toBeUndefined(); });
+  it("never asks again for a game Riot has no timeline for", async () => {
+    const { riot, store, run } = await stored(); let calls = 0; riot.timeline = async () => { calls++; throw new HttpError(404, "Not found"); };
+    await run(); expect(calls).toBe(5); expect(store.timelineBacklog(1)).toBe(0);
+    expect(await run()).toBe(false); expect(calls).toBe(5);
+  });
+  it("skips a game after a temporary failure (until restart) without blocking the others", async () => {
+    const { c, riot, run } = await stored(); const real = riot.timeline.bind(riot); let first = true;
+    riot.timeline = async (id, r, low) => { if (first) { first = false; throw new HttpError(500, "boom"); } return real(id, r, low); };
+    await run(); expect(c.status.backfilledThisRun).toBe(4);
+    expect(await run()).toBe(false);                                  // the failed one is parked, nothing else is pending
+  });
+  it("stops the collector on a bad API key", async () => {
+    const { riot, run } = await stored(); riot.timeline = async () => { throw new HttpError(502, "Riot rejected the API key (expired or invalid)."); };
+    await expect(run()).rejects.toThrow(/API key/);
+  });
+  it("runs inside step() only every Nth step, and never when off", async () => {
+    const { c, riot } = await stored(); c.cfg.backfillEvery = 3;
+    await c.step(); await c.step(); expect(riot.calls.timeline).toBeUndefined();
+    await c.step(); expect(riot.calls.timeline).toBe(5);
+    const off = await stored(); off.c.cfg.backfillEvery = 0; for (let i = 0; i < 4; i++) await off.c.step(); expect(off.riot.calls.timeline).toBeUndefined();
+  });
+});
