@@ -126,6 +126,7 @@ export function relationStat(kind: "matchup" | "synergy", own: Tally, other: Tal
   return { expected, observed, delta: (observed - expected) * 100, raw: pair.games ? pair.wins / pair.games : 0, lo, hi };
 }
 
+export * from "./winRateBand";
 export * from "./ladder";
 export * from "./wpa";
 export * from "./patchDelta";

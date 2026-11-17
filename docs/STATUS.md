@@ -5,7 +5,7 @@ Read this first in a new chat, then the PDF (master plan) and the repo. The repo
 ## 1. Where we are
 Phase 1 (Core Desktop MVP) is complete. Phase 2 (data engine and draft) is mostly done. We are in the middle of the **champion page redesign** (owner round 2, see section 5).
 
-Last verified (build environment, no League client, no Rust toolchain): typecheck, unit tests (69 stats-core, 59 lcu-core, 54 draft-engine, 231 API) and the full e2e suite (66 tests, fake Riot + fake Data Dragon) all pass.
+Last verified (build environment, no League client, no Rust toolchain): typecheck, web build and unit tests (71 stats-core, 59 lcu-core, 54 draft-engine, 231 API) pass. The e2e suite (66 tests passed at the previous step) was NOT run for the latest step (stat strip): no browser can be installed in the build environment. Run `pnpm --filter desktop test:e2e` locally; the one new test is "champion page starts with a strip of key numbers".
 
 ## 2. How to run (Windows, PowerShell)
 ```
@@ -24,6 +24,7 @@ Set your Riot ID in Settings (or the first-run prompt). Env variables are docume
 **Champion data:**
 - Matchups and synergy (log-odds expected values, shrunk, Wilson ranges), patch history and patch deltas (50-game minimum), item WPA (win probability added, strata by game length and finished items), starting items, build order, skill order (needs 10+ timeline games), keystone fallback, boots rule (Data Dragon tag Boots, cost 800+).
 - **Build variants (AP / AD / Tank)**, grouped from the tags of finished items (`archetype`, `buildVariants` in `services/api/src/build.ts`; a variant needs 10+ games and 5% of classified games, max 3, at least 2 or none). Sort tabs Best (lower end of the 95% range) / Win rate / Common.
+- **Stat strip** (`apps/desktop/src/app/StatStrip.tsx`, top of the champion page, replaces the four stat cards): Tier (grade in the champion's busiest role, from `buildTierList`, dash when the role has too few games), adjusted win rate coloured by `winRateBand` (`packages/stats-core/src/winRateBand.ts`: bad under 48%, good over 52%, 2 tests; number always shown), change vs the previous patch (`patchDelta`, coloured only when significant, dash under 50 games in either patch), pick rate, ban rate, games with the low-data badge. Hints are tooltips, not sentences.
 - Build panel (`apps/desktop/src/app/BuildPanel.tsx`): variant list, full rune trees with chosen runes lit and 3 shard rows, two summoner spell pairs, items with arrows (starting items, build order including boots when 40%+ of games have them, situational), 18-level ability grid (levels 1-9 real, later levels follow the max order). Last fix: round highlight rings, compact layout, fixed grid cells (checked at 1100 and 1920 px).
 **LCU / overlay:** LCU connector against a mock LCU server (`packages/lcu-mock`), champ select state machine, runes/spells/item set import (client replaces the item set list, Apex only touches sets titled "Apex: ..."), Flash key setting, auto-refresh of own rank after a game. Overlay v1 = static build card, off by default, 4 corners, click-through (Rust never compiled or run here).
 **Draft engine:** layers A (log-odds champion/matchup/synergy) and B (comp: damage balance, frontline, CC; measured per champion and role when 20+ games, else class tags). Team comp analyzer panel.
@@ -43,8 +44,8 @@ Set your Riot ID in Settings (or the first-run prompt). Env variables are docume
 
 ## 5. Next steps (in order)
 **A. Finish the champion page (owner round 2).**
-1. **Stat strip on top** of the champion page (replace the four stat cards): tier, win rate (coloured), win-rate change vs previous patch (reuse `patchDelta`), pick rate, ban rate, games.
-2. **Less text, more numbers, colours and icons** on the champion page and build panel: big coloured numbers, short labels, "low data" badge, long notes shortened (the title-tooltip approach used in the build panel is the pattern). One shared `winRateColor()` helper in the design system (red under 48%, neutral near 50%, green over 52%, colour-blind safe, number always shown). Update e2e tests that look for old sentences in the same step.
+1. ~~Stat strip on top of the champion page~~ DONE (see section 3).
+2. **Less text, more numbers, colours and icons** on the champion page and build panel: big coloured numbers, short labels, "low data" badge, long notes shortened (the title-tooltip approach used in the build panel is the pattern). The shared helper now exists as `winRateBand()` in stats-core (used by the strip only so far): adopt it in the build panel, the Items/Keystone/matchup tables and the tier list instead of the current `>= 50%` good/bad split. Update e2e tests that look for old sentences in the same step.
 3. Leave out "OTP builds" and "Pro builds" lists until there is a real data source (PDF P4).
 
 **B. Match history (Profile and Home).** One shared row built around champion icons (level, win/loss strip, KDA, CS, `LoadoutIcons`, queue, short "time ago"), and a queue filter (All, Ranked Solo/Duo, Ranked Flex, Normal Draft, Blind, ARAM, Arena, Other) applied on the backend with Match-v5's `queue` parameter (`GET /v1/players/:riotId/matches?queue=`), remembered per device. Check Riot's current queue ids before hard-coding them. The collector still reads ranked solo only; this only changes what the profile shows.

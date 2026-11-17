@@ -30,6 +30,17 @@ test("opens a champion page with stats, builds and matchups", async ({ page }) =
   await expect(page.getByLabel("Recommended build").getByText(/^Skill order ·/)).toBeVisible();
 });
 
+// 40 games on 16.22 and 20 on 16.21 (see below): the change vs the last patch needs 50 in both, so the strip must show a dash, never a made-up number.
+test("champion page starts with a strip of key numbers", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const strip = page.getByLabel("Key numbers");
+  for (const label of ["Tier", "Win rate (adjusted)", "vs last patch", "Pick rate", "Ban rate", "Games"]) await expect(strip.getByText(label, { exact: true })).toBeVisible();
+  await expect(strip.getByText(/^\d+\.\d%$/).first()).toBeVisible();            // win rate with its % sign: the colour is never the only signal
+  await expect(strip.getByText("40", { exact: true })).toBeVisible();              // games
+  await expect(strip.getByText("vs last patch", { exact: true }).locator("..").getByText("–")).toBeVisible();
+  await expect(page.getByText("Low data: treat with caution")).toHaveCount(0);     // moved into the Games tooltip, no sentence left on the page
+});
+
 // The test backend has 40 games on 16.22 and 20 on 16.21; Ahri plays TOP in all of them. 20 games is under the 50 a win-rate change needs, so the change must be withheld.
 test("champion page shows patch history, and withholds a change that has too little data", async ({ page }) => {
   await page.goto("/#/champions/Ahri");
