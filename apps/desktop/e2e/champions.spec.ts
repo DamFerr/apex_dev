@@ -55,14 +55,13 @@ test("shows the recommended build (runes, spells, items) with sample sizes on th
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Recommended build");
   await expect(panel).toBeVisible();
-  await expect(panel.getByText("Summoner spells:")).toContainText("Ignite + Flash");
+  await expect(panel.getByRole("group", { name: "Summoner spells Ignite + Flash" })).toBeVisible();
   await expect(panel.getByText(/^Skill order ·/)).toBeVisible();
   await expect(panel.getByLabel("Max order Q then E then W")).toBeVisible();
   await expect(panel.getByText("First 9 levels: Q W E Q Q R Q E Q")).toBeVisible();
   await expect(panel.getByText(/^Starting items ·/)).toBeVisible();
-  await expect(panel.getByText(/^Core items · in their usual build order ·/)).toBeVisible();
-  await expect(panel.getByText(/^Core items/)).toHaveCount(1);              // one core row, not an ordered and an unordered copy
-  await expect(panel.getByText(/^Build order/)).toHaveCount(0);
+  await expect(panel.getByText(/^Build order ·/)).toBeVisible();
+  await expect(panel.getByText(/^Core items/)).toHaveCount(0);              // one row (the build order), not an ordered and an unordered copy
   await expect(panel.getByText(/collected games/).last()).toContainText("40");
 });
 
@@ -102,4 +101,61 @@ test("items show WPA (win probability added) with its explanation, on the champi
   const panel = page.getByLabel("Recommended build");
   await expect(panel.getByText(/Under each item: win rate, WPA/)).toBeVisible();
   await expect(panel.getByText(/^[+−]\d+\.\d$/).first()).toBeVisible();
+});
+
+test("the skill order shows the 18-level grid with one lit cell per level", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const grid = page.getByLabel("Recommended build").getByRole("table", { name: "Skill order by level" });
+  await expect(grid.getByRole("columnheader")).toHaveCount(18);
+  await expect(grid.locator('[data-on="true"]')).toHaveCount(18);                       // every level has exactly one skill
+  await expect(grid.locator('[data-on="true"]').first()).toHaveText("Q");
+  await expect(grid.getByLabel("Level 11: R")).toBeVisible();
+});
+
+test("the rune page shows the whole trees with the chosen runes lit and 3 chosen shards", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const panel = page.getByLabel("Recommended build");
+  const shards = panel.getByRole("group", { name: "Stat shards" });
+  await expect(shards.locator('[data-selected="true"]')).toHaveCount(3);
+  await expect(shards.locator("[data-selected]")).toHaveCount(9);                      // 3 rows of 3 options
+  await expect(panel.getByRole("group", { name: "Primary runes" }).locator('[data-selected="true"]')).toHaveCount(4);
+  await expect(panel.getByRole("group", { name: "Secondary runes" }).locator('[data-selected="true"]')).toHaveCount(2);
+});
+
+test("build variants (AP / Tank) can be switched and sorted; the build below follows the choice", async ({ page }) => {
+  await page.route("**/v1/champions/Ahri/build**", async (route) => {
+    const res = await route.fetch(), body = await res.json();
+    const mk = (label: string, games: number, wins: number, itemName: string) => ({ id: label, label, games, wins, build: { ...body, games, itemBlocks: [{ name: "Situational", items: [{ id: 3157, name: itemName, games, wins }] }], buildOrder: null, corePath: null } });
+    await route.fulfill({ json: { ...body, variants: [mk("AP", 300, 150, "Zhonya AP variant"), mk("Tank", 100, 70, "Tank variant item")] } });
+  });
+  await page.goto("/#/champions/Ahri");
+  const panel = page.getByLabel("Recommended build"), list = panel.getByRole("group", { name: "Build variants" });
+  await expect(list.getByRole("button", { name: /^AP build, 300 games/ })).toHaveAttribute("aria-pressed", "true");   // Best: the lower end of the range, AP has far more games
+  await expect(panel.getByRole("img", { name: "Zhonya AP variant" }).first()).toBeVisible();
+  await list.getByRole("button", { name: /^Tank build/ }).click();
+  await expect(panel.getByRole("img", { name: "Tank variant item" }).first()).toBeVisible();
+  await expect(panel.getByText(/with Tank builds/)).toBeVisible();
+  await list.getByRole("button", { name: "Common", exact: true }).click();
+  await expect(list.getByRole("button", { name: "Common", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(list.getByRole("listitem").first()).toContainText("AP");
+  await list.getByRole("button", { name: "Win rate", exact: true }).click();
+  await expect(list.getByRole("listitem").first()).toContainText("Tank");               // 70% beats 50%
+});
+
+test("a champion without separate builds shows no variant list", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  await expect(page.getByLabel("Recommended build")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Build variants" })).toHaveCount(0);
+});
+
+test("with Data Dragon's rune trees, every rune of the tree is listed and only the chosen ones are lit", async ({ page }) => {
+  const style = (id: number, key: string) => ({ id, key, name: key, icon: `perk-images/Styles/${key}.png`,
+    slots: [[8005, 8112, 8010], [8126, 8139, 8304], [8138, 8135, 8347], [8105, 8106, 8352]].map((r) => ({ runes: r.map((x) => ({ id: x, name: `Rune ${x}`, icon: `perk-images/${x}.png` })) })) });
+  await page.route("**/runesReforged.json", (r) => r.fulfill({ json: [style(8000, "Precision"), style(8100, "Domination"), style(8200, "Sorcery"), style(8300, "Inspiration")] }));
+  await page.goto("/#/champions/Ahri");
+  const primary = page.getByLabel("Recommended build").getByRole("group", { name: "Primary runes" }), secondary = page.getByLabel("Recommended build").getByRole("group", { name: "Secondary runes" });
+  await expect(primary.locator("[data-selected]")).toHaveCount(12);       // 4 rows of 3
+  await expect(primary.locator('[data-selected="true"]')).toHaveCount(4);
+  await expect(secondary.locator("[data-selected]")).toHaveCount(9);      // the secondary tree has no keystone row
+  await expect(secondary.locator('[data-selected="true"]')).toHaveCount(2);
 });

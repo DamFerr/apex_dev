@@ -7,21 +7,21 @@ test("build panel icons (items, spells, skills, shards) all carry names", async 
   const errors = collectErrors(page);
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Recommended build");
-  await expect(panel.getByText("Summoner spells:")).toContainText("Ignite + Flash");
+  await expect(panel.getByRole("group", { name: "Summoner spells Ignite + Flash" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Ignite" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Flash" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Zhonya's Hourglass" }).first()).toBeVisible();
   await expect(panel.getByRole("img", { name: "Q: Ahri Q" })).toBeVisible();          // ability icons: key + ability name
-  await expect(panel.getByRole("group", { name: "Stat shards" }).getByRole("img")).toHaveCount(3);
+  await expect(panel.getByRole("group", { name: "Stat shards" }).getByRole("img")).toHaveCount(9);   // 3 rows of 3 options, one chosen per row
   expect(await unnamedImages(page)).toBe(0);
   expect(errors).toEqual([]);
 });
 
-test("first 9 skill levels show the key letter on every icon and an arrow between them", async ({ page }) => {
+test("the skill grid names every lit cell and the max order icons carry their key letter", async ({ page }) => {
   await page.goto("/#/champions/Ahri");
-  const row = page.getByLabel("Recommended build").getByText("First 9 levels", { exact: true }).locator("..");
-  await expect(row.locator("span[aria-hidden]").filter({ hasText: /^[QWER]$/ })).toHaveCount(9);   // Q W E Q Q R Q E Q, each with its letter
-  await expect(row.locator("svg.lucide-chevron-right")).toHaveCount(8);                              // arrows between the nine icons
+  const panel = page.getByLabel("Recommended build");
+  await expect(panel.getByLabel("Max order Q then E then W").locator("span[aria-hidden]").filter({ hasText: /^[QWE]$/ })).toHaveCount(3);
+  await expect(panel.getByRole("table", { name: "Skill order by level" }).getByLabel(/^Level \d+: [QWER]$/)).toHaveCount(18);
 });
 
 test("everything still works, with names instead of pictures, when Data Dragon is completely offline", async ({ page }) => {
@@ -30,7 +30,7 @@ test("everything still works, with names instead of pictures, when Data Dragon i
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Recommended build");
   await expect(panel).toBeVisible();
-  await expect(panel.getByText("Summoner spells:")).toContainText("Ignite + Flash");
+  await expect(panel.getByRole("group", { name: "Summoner spells Ignite + Flash" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Zhonya's Hourglass" }).first()).toBeVisible();
   await expect(panel.getByLabel("Max order Q then E then W")).toBeVisible();
   expect(await unnamedImages(page)).toBe(0);

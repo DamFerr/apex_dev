@@ -9,6 +9,11 @@ export const SHARDS = [5008, 5008, 5011];
 /** Stat shard ids (not part of Data Dragon's rune trees) and their in-game names. */
 export const SHARD_NAMES: Record<number, string> = { 5001: "Scaling Health", 5002: "Armor", 5003: "Magic Resist", 5005: "Attack Speed", 5007: "Ability Haste", 5008: "Adaptive Force", 5010: "Move Speed", 5011: "Health", 5013: "Tenacity and Slow Resist" };
 /**
+ * The options of each stat shard row (offense, flex, defense), for showing the chosen shard among the others. Written from the game's current
+ * shard layout; the UI always adds the shard a page really uses if it is not listed, so a change by Riot cannot hide a chosen shard.
+ */
+export const SHARD_ROWS: number[][] = [[5008, 5005, 5007], [5008, 5010, 5001], [5011, 5013, 5001]];
+/**
  * Stat shard icon files under Data Dragon's `cdn/img/` (shard ids are not in runesReforged.json). Keyed like SHARD_NAMES.
  * If a file is ever missing the UI falls back to the shard's name, so a wrong entry degrades to text and never breaks a screen.
  */

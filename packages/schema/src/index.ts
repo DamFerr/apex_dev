@@ -57,7 +57,8 @@ export interface BuildItemBlock { name: string; items: BuildItem[]; ordered?: bo
 export interface KeystoneStat { id: number; games: number; wins: number }
 export interface SpellPairStat { ids: [number, number]; games: number; wins: number }
 /** Skill priority ("max order", e.g. Q, E, W: the order the three basic skills reach rank 5) plus the most common first 9 skill points among games with that priority. */
-export interface SkillOrderStat { max: string[]; levels: string[]; games: number; wins: number }
+export interface SkillOrderStat { max: string[]; levels: string[]; games: number; wins: number;
+  /** All 18 levels (one of Q, W, E, R each): levels 1-9 are the most common real sequence, 10-18 continue the max order (R at 11 and 16). Absent on old backends. */ grid?: string[] }
 export interface PathItem { id: number; name: string; count: number }
 /** A sequence of items as bought: starting items (any order), or the three core items in their usual build order. */
 export interface ItemPathStat { items: PathItem[]; games: number; wins: number }
@@ -72,7 +73,17 @@ export interface ChampionBuild {
   timelineGames: number; skillOrder: SkillOrderStat | null; startItems: ItemPathStat | null; corePath: ItemPathStat | null;
   /** Fewest games that must have kept the same three core items before corePath is shown (it is null below that). */
   minPathGames: number;
+  /** The core items AND the usual boots in the order they are bought (boots only when most of those games had them). Null when corePath is null. Absent on old backends. */
+  buildOrder?: ItemPathStat | null;
+  /** The two most played summoner spell pairs (`spells` is the first). Absent on old backends. */
+  spellPairs?: SpellPairStat[];
+  /** Separate builds by what players finished with (AP, AD, Tank), each a complete build of its own games. Only present with two or more of them that have enough games. */
+  variants?: BuildVariant[];
 }
+/** Kind of build: decided from the item tags of the final inventory (see services/api build.ts `archetype`). */
+export type BuildArchetype = "AP" | "AD" | "Tank";
+/** One build variant: the games of one archetype with their own runes, spells, items and skill order. */
+export interface BuildVariant { id: BuildArchetype; label: string; games: number; wins: number; build: Omit<ChampionBuild, "variants"> }
 
 export interface MasteryEntry { champion: string; name: string; level: number; points: number }
 

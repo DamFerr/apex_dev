@@ -1,9 +1,9 @@
-import type { BuildItem, BuildItemBlock, ChampionBuild, KeystoneStat, ItemPathStat, ItemWpa, PathItem, Role, RunePageStat, SkillOrderStat, SpellPairStat } from "@apex/schema";
+import type { BuildArchetype, BuildItem, BuildItemBlock, BuildVariant, ChampionBuild, KeystoneStat, ItemPathStat, ItemWpa, PathItem, Role, RunePageStat, SkillOrderStat, SpellPairStat } from "@apex/schema";
 import { itemWpa } from "@apex/stats-core";
 
 /** One collected game of a champion (see Store.buildRows). */
 export interface BuildRow { /** Keystone rune id: stored for every game, also those collected before full rune pages were. */ keystone?: number | null; perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills?: string | null; start?: string | null; buys?: string | null; /** Game length in seconds (needed for WPA). */ duration?: number }
-export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; boots?: boolean }
+export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; boots?: boolean; /** Data Dragon item tags (SpellDamage, Damage, Armor ...), used to tell AP, AD and Tank builds apart. */ tags?: string[] }
 
 const FLASH = 4;
 /** A build-order path needs at least this many games that kept the same core items; below it no path is shown (an arbitrary pick of 1-2 games is worse than nothing). */
@@ -62,15 +62,18 @@ export function runePages(rows: BuildRow[], limit: number = LIMITS.runePages): R
   });
 }
 
-/** The most played summoner spell pair, with Flash on the second slot (the usual F key). */
-export function spellPair(rows: BuildRow[]): SpellPairStat | null {
+/** The most played summoner spell pairs (most played first), each with Flash on the second slot (the usual F key). */
+export function spellPairs(rows: BuildRow[], limit = 2): SpellPairStat[] {
   const m = new Map<string, Tally>();
   for (const r of rows) if (r.spell1 && r.spell2 && r.spell1 !== r.spell2) bump(m, [r.spell1, r.spell2].sort((a, b) => a - b).join(","), r.win);
-  const top = ranked(m)[0]; if (!top) return null;
-  const ids = top[0].split(",").map(Number);
-  if (ids[0] === FLASH) ids.reverse();
-  return { ids: [ids[0], ids[1]], games: top[1].games, wins: top[1].wins };
+  return ranked(m).slice(0, limit).map(([key, t]) => {
+    const ids = key.split(",").map(Number);
+    if (ids[0] === FLASH) ids.reverse();
+    return { ids: [ids[0], ids[1]] as [number, number], games: t.games, wins: t.wins };
+  });
 }
+/** The most played summoner spell pair, with Flash on the second slot (the usual F key). */
+export const spellPair = (rows: BuildRow[]): SpellPairStat | null => spellPairs(rows, 1)[0] ?? null;
 
 /**
  * Item blocks from the final inventories of the games: Boots, Core items (most built) and Situational items (next most built).
@@ -117,6 +120,21 @@ export function skillPriority(skills: number[]): string[] | null {
   return [1, 2, 3].sort((a, b) => (maxedAt[a] ?? 99) - (maxedAt[b] ?? 99) || n[b] - n[a] || a - b).map((s) => SKILL[s - 1]);
 }
 
+/**
+ * All 18 skill levels for display. Levels 1-9 are the real sequence; later levels are not observed per level, so they follow the rules of the game
+ * and the max order: R at 11 and 16 (its third rank), otherwise the next skill of the max order that is not yet at rank 5. Always exactly 18 entries.
+ */
+export function skillGrid(levels: string[], max: string[]): string[] {
+  const grid = levels.slice(0, 18), n: Record<string, number> = { Q: 0, W: 0, E: 0, R: 0 };
+  for (const k of grid) n[k]++;
+  for (let lvl = grid.length + 1; lvl <= 18; lvl++) {
+    const room = (k: string) => n[k] < (k === "R" ? 3 : 5);
+    const pick = (lvl === 6 || lvl === 11 || lvl === 16) && room("R") ? "R" : [...max, "Q", "W", "E", "R"].find(room) ?? "R";
+    grid.push(pick); n[pick]++;
+  }
+  return grid;
+}
+
 /** Most played skill priority and, among games with it, the most common first 9 skill points (a real sequence, never a mix). */
 export function skillOrder(rows: BuildRow[], minGames: number = MIN_PATH_GAMES): SkillOrderStat | null {
   const groups = new Map<string, { levels: string[]; wins: number }>();
@@ -126,7 +144,8 @@ export function skillOrder(rows: BuildRow[], minGames: number = MIN_PATH_GAMES):
     const g = groups.get(pr.join("")) ?? { levels: [], wins: 0 }; g.levels.push(sk.slice(0, 9).map((x) => SKILL[x - 1]).join("")); g.wins += r.win; groups.set(pr.join(""), g);
   }
   const top = [...groups].sort((a, b) => b[1].levels.length - a[1].levels.length || (a[0] < b[0] ? -1 : 1))[0]; if (!top || top[1].levels.length < minGames) return null; // a handful of games is a coin flip, not a usual order
-  return { max: top[0].split(""), levels: mode(top[1].levels).split(""), games: top[1].levels.length, wins: top[1].wins };
+  const max = top[0].split(""), levels = mode(top[1].levels).split("");
+  return { max, levels, games: top[1].levels.length, wins: top[1].wins, grid: skillGrid(levels, max) };
 }
 
 /** Most common starting items (as a set, with counts such as 2 potions). Free items (trinkets) are left out. */
@@ -168,6 +187,54 @@ export function corePath(rows: BuildRow[], items: Map<number, ItemMeta>, minGame
   return { items: order.map((id) => ({ id, name: items.get(id)!.name, count: 1 })), games: sample.length, wins: sample.reduce((t, s) => t + s.win, 0) };
 }
 
+/**
+ * The three core items AND the usual boots in the order they are bought. Uses the same games as `corePath` (those that kept all three core items),
+ * so the sample is the same. Boots are part of the order only when at least `MIN_BOOTS_SHARE` of those games kept the same boots item (most players
+ * buy boots, but a build that skips them should not get an invented slot); the position is the average place among the core items and that boots item.
+ * Null when there is no core path.
+ */
+export const MIN_BOOTS_SHARE = 0.4;
+export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGames: number = MIN_PATH_GAMES): ItemPathStat | null {
+  const path = corePath(rows, items, minGames); if (!path) return null;
+  const core = path.items.map((i) => i.id), seqs: number[][] = [], bootsKept = new Map<number, number>();
+  for (const r of rows) {
+    const buys = json<number[]>(r.buys), final = json<number[]>(r.items); if (!buys || !final) continue;
+    const owned = new Set(final), seq: number[] = [];
+    for (const id of buys) if (owned.has(id) && (isFinished(items.get(id)) || isBoots(items.get(id))) && !seq.includes(id)) seq.push(id);
+    if (!core.every((id) => seq.includes(id))) continue;
+    seqs.push(seq); for (const id of seq) if (isBoots(items.get(id))) bootsKept.set(id, (bootsKept.get(id) ?? 0) + 1);
+  }
+  const top = [...bootsKept].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+  if (!top || top[1] / Math.max(1, seqs.length) < MIN_BOOTS_SHARE) return path;
+  const boots = top[0], ids = [...core, boots], pos = new Map<number, number>();
+  for (const id of ids) {
+    const at = seqs.filter((q) => q.includes(id)).map((q) => q.filter((x) => ids.includes(x)).indexOf(id));
+    pos.set(id, at.reduce((t, x) => t + x, 0) / at.length);
+  }
+  const order = [...ids].sort((a, b) => pos.get(a)! - pos.get(b)! || a - b);
+  return { items: order.map((id) => ({ id, name: items.get(id)!.name, count: 1 })), games: path.games, wins: path.wins };
+}
+
+/**
+ * What kind of build a game ended with, from the Data Dragon tags of its finished items (boots and components do not count):
+ * an item with SpellDamage counts for AP, with Damage or CriticalStrike for AD, and a defensive item (Armor, SpellBlock, Health) without
+ * either damage tag counts for Tank. The kind with the most items wins; ties go to AP, then AD. Fewer than three counted items (a game that
+ * ended early) is not classified (null). This is a label for grouping, not a statement about the champion's role in the team.
+ */
+export function archetype(finalItems: number[], items: Map<number, ItemMeta>): BuildArchetype | null {
+  const n = { AP: 0, AD: 0, Tank: 0 };
+  for (const id of new Set(finalItems)) {
+    const it = items.get(id); if (!isFinished(it)) continue;
+    const t = new Set(it.tags ?? []), ap = t.has("SpellDamage"), ad = t.has("Damage") || t.has("CriticalStrike");
+    if (ap) n.AP++; else if (ad) n.AD++; else if (t.has("Armor") || t.has("SpellBlock") || t.has("Health")) n.Tank++;
+  }
+  if (n.AP + n.AD + n.Tank < 3) return null;
+  return (["AP", "AD", "Tank"] as const).reduce((best, k) => (n[k] > n[best] ? k : best), "AP");
+}
+
+/** A variant needs at least this many games AND this share of the classified games (so a 2% oddity is not a "build"). */
+export const MIN_VARIANT_GAMES = 10, MIN_VARIANT_SHARE = 0.05, MAX_VARIANTS = 3;
+
 /** Game length bands in minutes: under 20, 20-25, 25-30, 30-35, 35 and longer. */
 export const lengthBand = (sec: number) => Math.min(4, Math.max(0, Math.floor(sec / 300) - 3));
 /** Most finished items counted when comparing games (5 means 5 or 6). */
@@ -199,9 +266,24 @@ export function itemWpas(rows: BuildRow[], items: Map<number, ItemMeta>): Map<nu
   return out;
 }
 
-export function computeBuild(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>): ChampionBuild {
-  const path = corePath(rows, items);
-  return { champion, role, games: rows.length, runePages: runePages(rows), keystones: keystoneStats(rows), spells: spellPair(rows),
+/** The variants of a champion's games (see `archetype`). Fewer than two that qualify = none: a single build is just "the build". Most played first. */
+export function buildVariants(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>): BuildVariant[] {
+  const groups = new Map<BuildArchetype, BuildRow[]>(); let classified = 0;
+  for (const r of rows) {
+    const ids = json<number[]>(r.items), kind = ids ? archetype(ids, items) : null; if (!kind) continue;
+    classified++; const g = groups.get(kind) ?? []; g.push(r); groups.set(kind, g);
+  }
+  const need = Math.max(MIN_VARIANT_GAMES, Math.ceil(classified * MIN_VARIANT_SHARE));
+  const out = [...groups].filter(([, g]) => g.length >= need).sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1)).slice(0, MAX_VARIANTS);
+  if (out.length < 2) return [];
+  return out.map(([id, g]) => ({ id, label: id, games: g.length, wins: g.reduce((t, r) => t + r.win, 0), build: computeBuild(champion, role, g, items, false) as Omit<ChampionBuild, "variants"> }));
+}
+
+export function computeBuild(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>, withVariants = true): ChampionBuild {
+  const path = corePath(rows, items), order = buildOrder(rows, items);
+  const variants = withVariants ? buildVariants(champion, role, rows, items) : [];
+  return { champion, role, games: rows.length, runePages: runePages(rows), keystones: keystoneStats(rows), spells: spellPair(rows), spellPairs: spellPairs(rows),
     itemBlocks: itemBlocks(rows, items, itemWpas(rows, items), path?.items.map((i) => i.id) ?? []),
-    timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: path, minPathGames: MIN_PATH_GAMES };
+    timelineGames: rows.filter((r) => r.skills || r.buys).length, skillOrder: skillOrder(rows), startItems: startItems(rows, items), corePath: path, buildOrder: order, minPathGames: MIN_PATH_GAMES,
+    ...(variants.length ? { variants } : {}) };
 }
