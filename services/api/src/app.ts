@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
+import type { ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
@@ -189,6 +189,52 @@ export async function buildApp(deps: Deps) {
       return { champion: r.champion, name: nameOf(r.champion), role: r.role as Role, games: r.games, wins: r.wins, baseGames: b.games, baseWins: b.wins }; };
     const rel = store.relations(champion, role, f);
     return { champion, role, base: own, matchups: rel.matchups.map(line), synergies: rel.synergies.map(line) };
+  });
+
+  /** Patch comparisons always span every kept patch (newest first): the patch filter is ignored, region and rank still apply. */
+  const patchScope = (q: { region?: string; rank?: string }) => filterOf({ region: q.region, rank: q.rank, patch: "all" });
+
+  /**
+   * One champion across the kept patches (newest first): its games and wins in one role (default: its busiest), its bans and the size of each
+   * patch. The client turns neighbouring patches into changes with `patchDelta` (stats-core), so this only reports counts.
+   */
+  app.get<{ Params: { id: string }; Querystring: { role?: string; region?: string; rank?: string } }>("/v1/champions/:id/patches", async (req): Promise<ChampionPatches> => {
+    const f = patchScope(req.query), data = await dd(), champion = req.params.id, key = [...data.champs].find(([, c]) => c.id === champion)?.[0];
+    const rows = store.championRowsByPatch(f, champion), perRole = new Map<string, number>();
+    for (const r of rows) if (r.role) perRole.set(r.role, (perRole.get(r.role) ?? 0) + r.games);
+    const role = roleOfQuery(req.query.role) ?? ([...perRole].sort((a, b) => b[1] - a[1])[0]?.[0] as Role | undefined);
+    if (!role) return { champion, role: null, patches: [] };
+    const matches = store.matchesByPatch(f), bans = store.bansByPatch(f);
+    const patches = (f.patches ?? []).map((patch): PatchPoint => { const r = rows.find((x) => x.patch === patch && x.role === role);
+      return { patch, games: r?.games ?? 0, wins: r?.wins ?? 0, bans: key !== undefined ? bans.get(`${patch}|${key}`) ?? 0 : 0, matches: matches.get(patch) ?? 0 }; });
+    return { champion, role, patches };
+  });
+
+  /**
+   * The newest patch next to the one before it, for every champion that really plays `role` (same 10% rule as the tier list). Needs data in two
+   * patches; otherwise `previous` is null and `rows` is empty. Counts only: the client computes the changes with `patchDelta` (stats-core).
+   */
+  app.get<{ Querystring: { role?: string; region?: string; rank?: string } }>("/v1/patch-trends", async (req): Promise<PatchTrends> => {
+    const role = roleOfQuery(req.query.role);
+    if (!role) throw new HttpError(400, "role is required (TOP, JUNGLE, MID, ADC or SUPPORT)");
+    const f = patchScope(req.query), [patch, previous] = f.patches ?? [];
+    if (!patch || !previous) return { patch: patch ?? null, previous: null, role, rows: [] };
+    const data = await dd(), matches = store.matchesByPatch(f), bans = store.bansByPatch(f), byId = new Map([...data.champs].map(([key, c]) => [c.id, { key, name: c.name }]));
+    type Acc = { all: number; role: Record<string, { games: number; wins: number }> };
+    const per = new Map<string, Acc>();
+    for (const r of store.championRowsByPatch(f)) {
+      if (r.patch !== patch && r.patch !== previous) continue;
+      const e = per.get(r.champion) ?? { all: 0, role: {} }; e.all += r.games;
+      if (r.role === role) e.role[r.patch] = { games: r.games, wins: r.wins };
+      per.set(r.champion, e);
+    }
+    const point = (id: string, p: string, e: Acc): PatchPoint => ({ patch: p, games: e.role[p]?.games ?? 0, wins: e.role[p]?.wins ?? 0, bans: bans.get(`${p}|${byId.get(id)!.key}`) ?? 0, matches: matches.get(p) ?? 0 });
+    const rows = [...per].flatMap(([id, e]): PatchTrendRow[] => {
+      const c = byId.get(id), inRole = (e.role[patch]?.games ?? 0) + (e.role[previous]?.games ?? 0);
+      if (!c || !isRealRole(inRole, e.all)) return [];
+      return [{ id, name: c.name, cur: point(id, patch, e), prev: point(id, previous, e) }];
+    }).sort((a, b) => a.id.localeCompare(b.id));
+    return { patch, previous, role, rows };
   });
 
   /** Rune pages, summoner spells and final items of collected games for one champion. role is optional; an empty result means no collected games with these filters. */

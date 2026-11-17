@@ -205,6 +205,18 @@ export function makeStore(db: DatabaseSync) {
         JOIN matches m ON m.id = a.match_id WHERE a.champion = ? AND a.role = ?${w.sql} GROUP BY b.champion, b.role HAVING games >= ${Math.max(1, Math.floor(min))} ORDER BY games DESC, b.champion LIMIT ${Math.max(1, Math.floor(limit))}`, champion, role, ...w.args);
       return { matchups: run("a.team <> b.team AND b.role = a.role"), synergies: run("a.team = b.team AND a.rowid <> b.rowid AND b.role IS NOT NULL AND b.role <> a.role") };
     },
+    /**
+     * Games and wins per patch, per champion and role, for the patches in `f` (the caller passes every kept patch). Optionally one champion.
+     * Together with matchesByPatch and bansByPatch this is everything a patch comparison needs.
+     */
+    championRowsByPatch(f: Filter, champion?: string): { patch: string; champion: string; role: string | null; games: number; wins: number }[] {
+      const w = filt(f);
+      return q(`SELECT m.patch patch, p.champion champion, p.role role, COUNT(*) games, SUM(p.win) wins FROM participants p JOIN matches m ON m.id = p.match_id WHERE 1=1${w.sql}${champion ? " AND p.champion = ?" : ""} GROUP BY m.patch, p.champion, p.role`, ...w.args, ...(champion ? [champion] : []));
+    },
+    /** Collected games per patch (the denominator of pick and ban rates). */
+    matchesByPatch(f: Filter): Map<string, number> { const w = filt(f); return new Map(q<{ patch: string; n: number }>(`SELECT m.patch patch, COUNT(*) n FROM matches m WHERE 1=1${w.sql} GROUP BY m.patch`, ...w.args).map((r) => [r.patch, r.n])); },
+    /** Bans per patch, keyed `patch|championKey`. */
+    bansByPatch(f: Filter): Map<string, number> { const w = filt(f); return new Map(q<{ patch: string; k: number; n: number }>(`SELECT m.patch patch, b.champion_key k, COUNT(*) n FROM bans b JOIN matches m ON m.id = b.match_id WHERE 1=1${w.sql} GROUP BY m.patch, b.champion_key`, ...w.args).map((r) => [`${r.patch}|${r.k}`, r.n])); },
     keystones(champion: string, f: Filter): { id: number; games: number; wins: number }[] { const w = filt(f); return q(`SELECT p.keystone id, COUNT(*) games, SUM(p.win) wins FROM participants p JOIN matches m ON m.id = p.match_id
       WHERE p.champion = ? AND p.keystone IS NOT NULL${w.sql} GROUP BY p.keystone ORDER BY games DESC LIMIT 6`, champion, ...w.args); },
     items(champion: string, f: Filter): { id: number; games: number; wins: number }[] { const w = filt(f); return q(`SELECT CAST(j.value AS INTEGER) id, COUNT(*) games, SUM(p.win) wins FROM participants p JOIN matches m ON m.id = p.match_id, json_each(p.items) j

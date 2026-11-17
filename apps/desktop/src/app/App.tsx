@@ -9,6 +9,7 @@ import { startDevLcu, startTauriLcu } from "../lib/lcu";
 import { isTauri } from "../lib/tauri";
 import { applyCompact, ensureNormalSize } from "../lib/compact";
 import { combo } from "../lib/hotkeys";
+import { useOverlayController } from "../lib/overlay";
 import { Shell } from "./Shell";
 
 export const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
@@ -18,6 +19,7 @@ export default function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => { document.documentElement.dataset.reduceMotion = String(reduceMotion); }, [reduceMotion]);
   useEffect(() => (isTauri ? startTauriLcu() : import.meta.env.DEV ? startDevLcu() : undefined), []);
+  useOverlayController();
   useEffect(() => { void ensureNormalSize(); }, []);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {

@@ -7,11 +7,13 @@ import { collectorCommand, useCollector } from "../lib/collector";
 import { platformName } from "../lib/platforms";
 import { RIOT_ID_RE } from "../lib/riotId";
 import { toast } from "../lib/toast";
-import { useUi, type Theme } from "../lib/store";
+import { useUi, type OverlayCorner, type Theme } from "../lib/store";
 import { useDraft } from "../lib/lcu";
+import { useOverlayPreview } from "../lib/overlay";
+import { isTauri } from "../lib/tauri";
 
 const Card = ({ title, children }: { title: string; children: ReactNode }) => (
-  <section className="glass rounded-lg p-5 space-y-4"><h2 className="font-display text-lg font-semibold">{title}</h2>{children}</section>);
+  <section aria-label={title} className="glass rounded-lg p-5 space-y-4"><h2 className="font-display text-lg font-semibold">{title}</h2>{children}</section>);
 const Row = ({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) => (
   <div className="flex items-center justify-between gap-6"><div><div className="text-sm">{label}</div>{hint && <div className="text-[11px] text-muted max-w-sm">{hint}</div>}</div>{children}</div>);
 
@@ -56,6 +58,20 @@ function CollectorRow() {
   );
 }
 
+const CORNERS: [OverlayCorner, string][] = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]];
+function OverlayCard() {
+  const u = useUi(), { preview, set } = useOverlayPreview();
+  return (
+    <Card title="In-game overlay">
+      <Row label="Show during games" hint={isTauri ? "A small card in the corner of the screen with the usual build of the champion you locked in (runes, skill order, items), from collected games. It appears only while a game is running, ignores your mouse and keyboard, and shows nothing that is not already known in champ select. Off by default." : "Needs the desktop app (pnpm tauri dev); the browser preview has no overlay window."}>
+        <Toggle on={u.overlayEnabled} onChange={(v) => u.patch({ overlayEnabled: v })} label="Show overlay during games" /></Row>
+      <Row label="Opacity"><div className="flex items-center gap-3"><input type="range" min={0.4} max={1} step={0.05} value={u.overlayOpacity} aria-label="Overlay opacity" onChange={(e) => u.patch({ overlayOpacity: Number(e.target.value) })} className="w-40 accent-[rgb(var(--accent))]" /><span className="w-10 text-right text-xs tabular-nums text-muted">{Math.round(u.overlayOpacity * 100)}%</span></div></Row>
+      <Row label="Position"><div className="flex flex-wrap justify-end gap-2" role="group" aria-label="Overlay position">{CORNERS.map(([k, label]) => <Chip key={k} active={u.overlayCorner === k} onClick={() => u.patch({ overlayCorner: k })}>{label}</Chip>)}</div></Row>
+      <Row label="Preview" hint="Shows the overlay now, wherever you are, to check its position and opacity. It shows the champion from your last champ select.">
+        <Button variant="ghost" disabled={!isTauri} aria-pressed={preview} onClick={() => set(!preview)}>{preview ? "Hide preview" : "Show preview"}</Button></Row>
+    </Card>);
+}
+
 export function Settings() {
   const u = useUi(), themes: Theme[] = ["dark", "light", "colorblind"], connected = useDraft((s) => s.draft.connected);
   return (
@@ -71,6 +87,7 @@ export function Settings() {
         <Row label="Flash key" hint="Which summoner spell slot Flash goes on when Apex sets your spells: left (D) or right (F). Pairs without Flash are left as they are.">
           <div className="flex gap-2" role="group" aria-label="Flash key">{(["D", "F"] as const).map((k) => <Chip key={k} active={u.flashSlot === k} onClick={() => u.patch({ flashSlot: k })}>{k === "D" ? "D (left)" : "F (right)"}</Chip>)}</div></Row>
       </Card>
+      <OverlayCard />
       <Card title="League client">
         <Row label="Status" hint="Apex finds the client by itself. If League isn’t in C:\Riot Games\League of Legends, set the LOL_LOCKFILE environment variable.">
           <span className="flex items-center gap-2 text-sm"><span className={`size-1.5 rounded-full ${connected ? "bg-good" : "bg-gold"}`} />{connected ? "Connected" : "Not detected"}</span></Row>

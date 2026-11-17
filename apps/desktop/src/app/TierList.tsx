@@ -7,7 +7,9 @@ import type { Role } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
 import { FilterBar } from "../components/FilterBar";
 import { pct } from "../components/StatRows";
+import { Tabs } from "../components/Tabs";
 import { Chip, Skeleton, spring } from "../components/ui";
+import { PatchChanges } from "./PatchChanges";
 import { useChampions } from "../lib/api";
 
 const ROLES: Role[] = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
@@ -18,7 +20,7 @@ const GRADE_STYLE: Record<Grade, string> = {
 };
 
 export function TierList() {
-  const [role, setRole] = useState<Role>("MID");
+  const [role, setRole] = useState<Role>("MID"), [view, setView] = useState<"tiers" | "changes">("tiers");
   const { data, isError, error } = useChampions(role);
   const rows = useMemo(() => {
     if (!data) return [];
@@ -30,15 +32,18 @@ export function TierList() {
   const hidden = data ? data.champions.length - rows.length : 0, bar = data ? minListedGames(data.champions.reduce((s, c) => s + c.games, 0)) : 0;
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Tier List</h1>
-    <p className="text-sm text-muted mt-1 mb-5">
+    {view === "tiers" ? <p className="text-sm text-muted mt-1 mb-5">
       Grades compare champions within one role: win-rate edge (Bayesian-adjusted) plus a small bonus for pick and ban rate.
       Champions with too little data in this role (under {bar.toLocaleString()} games) are hidden, because their numbers are often wrong.
       {hidden > 0 && ` ${hidden} hidden.`}
-    </p>
+    </p> : <p className="text-sm text-muted mt-1 mb-5">How the meta moved: each champion in this role, the newest patch against the one before it.</p>}
     <FilterBar />
     <div className="flex flex-wrap items-center gap-2 mb-4" role="group" aria-label="Role">
       {ROLES.map((r) => <Chip key={r} active={role === r} onClick={() => setRole(r)}><span className="inline-flex items-center gap-1.5"><RoleIcon role={r} size={16} decorative />{roleName(r)}</span></Chip>)}
     </div>
+    <Tabs id="tier-view" value={view} onChange={setView} tabs={[{ key: "tiers", label: "Tiers" }, { key: "changes", label: "Patch changes" }]} />
+    <div role="tabpanel" aria-label={view === "tiers" ? "Tiers" : "Patch changes"} className="pt-4">
+    {view === "changes" ? <PatchChanges role={role} /> :
     <div className="glass rounded-lg p-2 divide-y divide-line/5">
       {isError && <div role="alert" className="p-8 text-sm text-bad text-center">{(error as Error).message}</div>}
       {!data && !isError && Array.from({ length: 4 }, (_, i) => <div key={i} className="p-2"><Skeleton className="h-14" /></div>)}
@@ -61,6 +66,7 @@ export function TierList() {
             </motion.ul>
           </section>);
       })}
+    </div>}
     </div>
   </>);
 }

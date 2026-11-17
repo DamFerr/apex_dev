@@ -5,7 +5,7 @@ import { champIndex } from "./ddragon";
 import type { Role } from "@apex/schema";
 import { fetchBuild, importItemSet, importRunes, importSpells } from "./importer";
 import { isTauri } from "./tauri";
-import { initialDraft, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent } from "@apex/lcu-core";
+import { initialDraft, nextPick, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent, type OverlayPick } from "@apex/lcu-core";
 
 /** Address of the local League client simulator (packages/lcu-mock). Only used by the browser dev preview, never in the desktop app. */
 const DEV_LCU_HOST = "127.0.0.1:8765";
@@ -14,7 +14,7 @@ export const champId = (key: number): string | undefined => champIndex.get(key)?
 export const champName = (key: number) => champIndex.get(key)?.name ?? (CHAMPION_KEYS[key] ?? `Champion ${key}`).replace(/([a-z])([A-Z])/g, "$1 $2");
 
 interface DraftStore {
-  draft: DraftState; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void; log: { id: number; text: string }[];
+  draft: DraftState; /** The champion you locked, kept through the loading screen and the game (the draft itself is reset when champ select ends). */ overlayPick: OverlayPick | null; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void; log: { id: number; text: string }[];
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
 const addLog = (text: string) => useDraft.setState((s) => ({ log: [{ id: Date.now() + Math.random(), text }, ...s.log].slice(0, 8) }));
@@ -34,11 +34,11 @@ export async function runImport(championKey: number, role: Role | null) {
   }
 }
 export const useDraft = create<DraftStore>((set, get) => ({
-  draft: initialDraft, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }), log: [],
+  draft: initialDraft, overlayPick: null, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }), log: [],
   setAutoImport: (autoImport) => set({ autoImport }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });
-    set({ draft: next });
+    set({ draft: next, overlayPick: nextPick(get().overlayPick, next) });
     if (!imp) return;
     if (isTauri) void runImport(imp.championId, imp.role);
     else addLog(`Import skipped for ${champName(imp.championId)}: writing to the League client needs the desktop app.`);

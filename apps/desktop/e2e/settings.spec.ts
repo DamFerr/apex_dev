@@ -33,7 +33,9 @@ test("the compact-mode hotkey can be re-bound", async ({ page }) => {
 test("only finished settings are shown", async ({ page }) => {
   await page.goto("/#/settings");
   await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
-  for (const gone of ["Overlay", "Language", "Telemetry"]) await expect(page.getByText(gone)).toHaveCount(0);
+  // The overlay settings came back in overlay v1 (their own test is below), so only the still-unbuilt ones must stay hidden.
+  for (const gone of ["Language", "Telemetry"]) await expect(page.getByText(gone)).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "In-game overlay" })).toBeVisible();
 });
 
 test("your Riot ID can be changed and is validated", async ({ page }) => {
@@ -71,4 +73,21 @@ test("the collector is shown, covers everything, and can be paused and resumed",
   await expect(page.getByText(/Collecting · 60 games/)).toBeVisible();
   await page.getByRole("button", { name: "Pause collector" }).click();
   await expect(page.getByText(/Paused · 60 games/)).toBeVisible();
+});
+
+test("overlay settings: off by default, opacity and position persist, preview needs the desktop app", async ({ page }) => {
+  await page.goto("/#/settings");
+  const card = page.getByRole("region", { name: "In-game overlay" });
+  await expect(card.getByRole("switch", { name: "Show overlay during games" })).toHaveAttribute("aria-checked", "false");
+  await expect(card.getByText(/Needs the desktop app/)).toBeVisible();      // the browser preview has no overlay window
+  await expect(card.getByRole("button", { name: "Show preview" })).toBeDisabled();
+  await expect(card.getByRole("group", { name: "Overlay position" }).getByRole("button", { name: "Top left" })).toHaveAttribute("aria-pressed", "true");
+  await card.getByRole("group", { name: "Overlay position" }).getByRole("button", { name: "Bottom right" }).click();
+  await card.getByRole("switch", { name: "Show overlay during games" }).click();
+  await card.getByLabel("Overlay opacity").fill("0.6");
+  await page.reload();
+  const again = page.getByRole("region", { name: "In-game overlay" });
+  await expect(again.getByRole("switch", { name: "Show overlay during games" })).toHaveAttribute("aria-checked", "true");
+  await expect(again.getByRole("group", { name: "Overlay position" }).getByRole("button", { name: "Bottom right" })).toHaveAttribute("aria-pressed", "true");
+  await expect(again.getByText("60%")).toBeVisible();
 });

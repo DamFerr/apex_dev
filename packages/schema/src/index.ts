@@ -34,6 +34,14 @@ export interface ChampionRelations {
   champion: string; role: Role | null; base: { games: number; wins: number };
   matchups: RelationLine[]; /** Teammates in the OTHER four roles. */ synergies: RelationLine[];
 }
+/** One champion in one patch. `matches` is every collected game of that patch (the denominator of pick and ban rate); `bans` counts the champion's bans in them. */
+export interface PatchPoint { patch: string; games: number; wins: number; bans: number; matches: number }
+/** A champion across the kept patches, NEWEST FIRST. `role` is the role the games and pick rate are for (null = no collected games); bans are not tied to a role. */
+export interface ChampionPatches { champion: string; role: Role | null; patches: PatchPoint[] }
+/** One champion's newest patch next to the one before it, for the tier list's "changes" view. */
+export interface PatchTrendRow { id: string; name: string; cur: PatchPoint; prev: PatchPoint }
+/** The newest patch compared with the previous one for every champion that plays the role. `patch`/`previous` are null when fewer than two patches have data (then `rows` is empty). */
+export interface PatchTrends { patch: string | null; previous: string | null; role: Role | null; rows: PatchTrendRow[] }
 export interface ChampionList { patch: string; totalGames: number; champions: ChampionSummary[] }
 export interface ChampionDetail extends ChampionSummary {
   totalGames: number; builds: StatLine[]; runes: StatLine[]; matchups: StatLine[];
@@ -123,6 +131,10 @@ export interface ApexApi {
   getChampionBuild(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionBuild>;
   /** Lane matchups and teammate synergies of a champion in one role (default: the role it plays most). */
   getChampionRelations(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionRelations>;
+  /** Games, wins and bans per kept patch (newest first) for a champion in one role (default: its busiest). The patch filter is ignored; region and rank apply. */
+  getChampionPatches(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionPatches>;
+  /** Newest patch vs the previous one for every champion in a role. The patch filter is ignored; region and rank apply. */
+  getPatchTrends(role: Role, filter?: StatsFilter): Promise<PatchTrends>;
   getFilterOptions(): Promise<FilterOptions>;
   /** games is 0 when nothing has been collected for these filters yet. */
   getDraftStats(filter?: StatsFilter): Promise<DraftStats>;
