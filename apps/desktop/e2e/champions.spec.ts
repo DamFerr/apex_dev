@@ -76,6 +76,15 @@ test("shows the recommended build (runes, spells, items) with sample sizes on th
   await expect(panel.getByText(/collected games/).last()).toContainText("40");
 });
 
+test("boots are shown once: in the build order where they are bought, never again under Boots options", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const panel = page.getByLabel("Recommended build");
+  const order = panel.getByLabel(/^Build order /);
+  await expect(order).toHaveAttribute("aria-label", /Sorcerer's Shoes/);                 // every collected game bought the same boots: they are part of the order
+  await expect(panel.getByText("Boots options")).toHaveCount(0);                         // no other boots, so no second list
+  await expect(order.getByRole("img", { name: "Sorcerer's Shoes" })).toHaveCount(1);     // once in the order row (the small build summary on the left also shows the first items, so the panel as a whole has 2)
+});
+
 test("shows matchups and synergy with sample sizes and the difference from expected", async ({ page }) => {
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Matchups and synergy");

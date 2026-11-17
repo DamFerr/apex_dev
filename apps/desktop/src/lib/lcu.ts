@@ -29,7 +29,7 @@ export async function runImport(championKey: number, role: Role | null) {
     catch (e) { addLog(`Spell import failed: ${msg(e)}`); }
   }
   if (useDraft.getState().items) {
-    try { const t = await importItemSet(championKey, build); addLog(t ? `Imported item set "${t}" (final items of ${build!.games} collected games${build!.startItems || build!.corePath ? ", plus starting items and build order from timelines" : ""})` : "Item set skipped: not enough collected games for this champion yet"); }
+    try { const t = await importItemSet(championKey, build); addLog(t ? `Imported item ${t.length > 1 ? "sets" : "set"} ${t.map((x) => `"${x}"`).join(", ")} (same as the champion page, ${build!.games} collected games)` : "Item set skipped: not enough collected games for this champion yet"); }
     catch (e) { addLog(`Item set import failed: ${msg(e)}`); }
   }
 }

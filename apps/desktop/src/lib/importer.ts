@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ChampionBuild, Role, StatsFilter } from "@apex/schema";
-import { buildItemSet, buildRunePage, mergeItemSets, placeFlash, recommendSpells, runePageFromStat, RUNE_PAGE_PREFIX, SPELL_NAMES } from "@apex/lcu-core";
+import { buildItemSets, buildRunePage, mergeItemSets, pageBuild, placeFlash, recommendSpells, runePageFromStat, RUNE_PAGE_PREFIX, SPELL_NAMES, spellPairsOf } from "@apex/lcu-core";
 import { api } from "./api";
 import { champIndex, fetchDdChampions, fetchRunes } from "./ddragon";
 import { useUi } from "./store";
@@ -25,7 +25,11 @@ export async function fetchBuild(championKey: number, role: Role | null): Promis
   }
   return last;
 }
-export const hasRunes = (b: ChampionBuild | null) => (b?.runePages[0]?.games ?? 0) >= MIN_BUILD_GAMES;
+/**
+ * The importer reads the SAME build the champion page shows (`pageBuild`: the best variant, or the whole champion without variants), so the
+ * imported runes, spells and items are what the page says. Variants only change which games the numbers come from.
+ */
+export const hasRunes = (b: ChampionBuild | null) => (b ? (pageBuild(b).core.runePages[0]?.games ?? 0) >= MIN_BUILD_GAMES : false);
 
 /**
  * Writes a rune page to the real League client: the most played page of collected games, or class-based defaults when there is not enough data.
@@ -35,7 +39,7 @@ export async function importRunes(championKey: number, build: ChampionBuild | nu
   if (!champIndex.size) await fetchDdChampions();
   const champ = champIndex.get(championKey);
   if (!champ) throw new Error("Unknown champion");
-  const top = hasRunes(build) ? build!.runePages[0] : null;
+  const top = hasRunes(build) ? pageBuild(build!).core.runePages[0] : null;
   const page = top ? runePageFromStat(top, champ.name) : buildRunePage(await fetchRunes(), champ.tags, champ.name);
   const pages = await lcu<{ id: number; name: string; isEditable: boolean }[]>("GET", "/lol-perks/v1/pages");
   const mine = pages.find((p) => p.isEditable && p.name.startsWith(RUNE_PAGE_PREFIX));
@@ -46,7 +50,7 @@ export async function importRunes(championKey: number, build: ChampionBuild | nu
 
 /** Sets your two summoner spells during champ select. Only possible while a champion select session exists. */
 export async function importSpells(role: Role | null, build: ChampionBuild | null): Promise<{ text: string; source: string }> {
-  const s = build?.spells, data = s && s.games >= MIN_BUILD_GAMES ? s : null;
+  const s = build ? spellPairsOf(pageBuild(build).core)[0] : undefined, data = s && s.games >= MIN_BUILD_GAMES ? s : null;
   // The backend stays slot-agnostic (Flash second); the swap to your Flash key (Settings) happens here, on the client only.
   const [spell1Id, spell2Id] = placeFlash(data ? data.ids : recommendSpells(role), useUi.getState().flashSlot);
   await lcu("PATCH", "/lol-champ-select/v1/session/my-selection", { spell1Id, spell2Id });
@@ -54,18 +58,20 @@ export async function importSpells(role: Role | null, build: ChampionBuild | nul
 }
 
 /**
- * Writes an item set titled "Apex: <champion>". The client replaces its whole list of item sets on write, so Apex reads the list first,
- * keeps every set that is not its own exactly as it is, and writes nothing at all if the list cannot be read.
+ * Writes the item sets of a champion: one titled "Apex: <champion>" or, when the page shows build variants, one per variant ("Apex: Ahri (AP)"),
+ * each laid out like the page (starting items, build order with the boots in it, boots options, situational). The client replaces its whole list
+ * of item sets on write, so Apex reads the list first, keeps every set that is not its own exactly as it is, and writes nothing at all if the
+ * list cannot be read. Returns the titles written, or null when there was nothing to import.
  */
-export async function importItemSet(championKey: number, build: ChampionBuild | null): Promise<string | null> {
+export async function importItemSet(championKey: number, build: ChampionBuild | null): Promise<string[] | null> {
   const champ = champIndex.get(championKey);
   if (!champ || !build || build.games < MIN_BUILD_GAMES) return null;
-  const set = buildItemSet(build, championKey, champ.name);
-  if (!set) return null;
+  const sets = buildItemSets(build, championKey, champ.name);
+  if (!sets.length) return null;
   const me = await lcu<{ summonerId?: number }>("GET", "/lol-summoner/v1/current-summoner");
   if (!me?.summonerId) throw new Error("Could not read your summoner id from the League client");
   const path = `/lol-item-sets/v1/item-sets/${me.summonerId}/sets`, cur = await lcu<{ accountId?: number; itemSets?: unknown[] }>("GET", path);
   if (!Array.isArray(cur?.itemSets)) throw new Error("Could not read your existing item sets, so nothing was changed");
-  await lcu("PUT", path, { accountId: cur.accountId ?? me.summonerId, itemSets: mergeItemSets(cur.itemSets as never, set), timestamp: Date.now() });
-  return set.title;
+  await lcu("PUT", path, { accountId: cur.accountId ?? me.summonerId, itemSets: mergeItemSets(cur.itemSets as never, sets), timestamp: Date.now() });
+  return sets.map((s) => s.title);
 }

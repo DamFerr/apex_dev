@@ -1,3 +1,4 @@
+import { pageBuild } from "@apex/lcu-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { emit, listen } from "@tauri-apps/api/event";
 import { motion } from "framer-motion";
@@ -16,8 +17,11 @@ type Slot = "Q" | "W" | "E" | "R";
 const isSlot = (s: string): s is Slot => s === "Q" || s === "W" || s === "E" || s === "R";
 
 function BuildCard({ p }: { p: OverlayPayload }) {
-  const b: ChampionBuild | null = p.build, page = b?.runePages[0], boots = b?.itemBlocks.find((x) => x.name === "Boots")?.items[0];
-  const none = !b || (!page && !b.skillOrder && !b.corePath && !b.startItems && !boots);
+  const full: ChampionBuild | null = p.build, b = full ? pageBuild(full).core : null, page = b?.runePages[0];   // the same build the champion page shows (best variant)
+  // The same boots rule as the champion page: the usual boots sit inside the build order, where they are bought; a separate boots icon is only shown when the order has none.
+  const order = b?.buildOrder ?? b?.corePath ?? null, bootsList = b?.itemBlocks.find((x) => x.name === "Boots")?.items ?? [];
+  const bootsIds = new Set(bootsList.map((x) => x.id)), boots = order?.items.some((i) => bootsIds.has(i.id)) ? undefined : bootsList[0];
+  const none = !b || (!page && !b.skillOrder && !order && !b.startItems && !boots);
   return (
     <motion.div initial={{ opacity: 0, y: p.reduceMotion ? 0 : -6 }} animate={{ opacity: p.opacity, y: 0 }} transition={{ duration: p.reduceMotion ? 0 : 0.25 }}
       className="m-2 glass rounded-xl p-3 w-[316px] space-y-2.5 text-xs">
@@ -37,9 +41,9 @@ function BuildCard({ p }: { p: OverlayPayload }) {
         <Row label="Levels"><span className="flex flex-wrap gap-0.5">{b.skillOrder.levels.filter(isSlot).map((k, i) => <GameIcon key={i} kind="ability" champion={p.champion} slot={k} size={20} />)}</span></Row>
       </>}
       {b?.startItems && <Row label="Start"><Items items={b.startItems.items} /></Row>}
-      {(b?.corePath || boots) && <Row label="Items">
-        {b?.corePath && b.corePath.items.map((i, n) => <Fragment key={i.id}>{n > 0 && <Chev />}<GameIcon kind="item" id={i.id} name={i.name} size={24} /></Fragment>)}
-        {boots && <><span className="mx-0.5 h-4 w-px bg-line/15" aria-hidden /><GameIcon kind="item" id={boots.id} name={boots.name} size={24} /></>}
+      {(order || boots) && <Row label="Items">
+        {order && order.items.map((i, n) => <Fragment key={i.id}>{n > 0 && <Chev />}<GameIcon kind="item" id={i.id} name={i.name} size={24} /></Fragment>)}
+        {boots && <>{order && <span className="mx-0.5 h-4 w-px bg-line/15" aria-hidden />}<GameIcon kind="item" id={boots.id} name={boots.name} size={24} /></>}
       </Row>}
       {!none && b && <div className="text-[10px] text-muted">Most played setup of {b.games.toLocaleString()} collected games{b.timelineGames ? ` · skills and items from ${b.timelineGames.toLocaleString()}` : ""}. Stats from before the game, not live.</div>}
     </motion.div>);

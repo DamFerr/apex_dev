@@ -102,6 +102,9 @@ importers:
       '@apex/schema':
         specifier: workspace:*
         version: link:../schema
+      '@apex/stats-core':
+        specifier: workspace:*
+        version: link:../stats-core
     devDependencies:
       vitest:
         specifier: ^2.1.4

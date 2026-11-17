@@ -2,7 +2,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { RoleIcon } from "../components/RoleIcon";
 import type { BuildItem, ChampionBuild, ItemPathStat, Role, RunePageStat } from "@apex/schema";
-import { placeFlash, SHARD_ROWS, SPELL_NAMES } from "@apex/lcu-core";
+import { itemLayout, placeFlash, SHARD_ROWS, sortVariants, SPELL_NAMES, type PageCore, type VariantSort } from "@apex/lcu-core";
 import { Chip, Skeleton } from "../components/ui";
 import { pct, rate, LowBadge, Wpa, wrClass } from "../components/StatRows";
 import { useChampionBuild } from "../lib/api";
@@ -14,8 +14,7 @@ const wr = (wins: number, games: number) => { const s = rate(wins, games); retur
 const spellText = (ids: [number, number], slot: "D" | "F") => placeFlash(ids, slot).map((i) => SPELL_NAMES[i] ?? i).join(" + ");
 const Arrow = () => <ChevronRight size={14} className="text-muted/70 shrink-0" aria-hidden />;
 const Heading = ({ children }: { children: ReactNode }) => <div className="text-sm font-medium">{children}</div>;
-type Core = Omit<ChampionBuild, "variants">;
-export type VariantSort = "best" | "rate" | "common";
+type Core = PageCore;
 
 /** One rune (or shard) among the others of its row: the chosen one is lit, the rest are dimmed, like in the game's rune editor. */
 function Pick({ on, children }: { on: boolean; children: ReactNode }) {
@@ -95,9 +94,8 @@ function Starting({ p }: { p: ItemPathStat }) {
 
 function ItemsColumn({ b }: { b: Core }) {
   const stats = new Map<number, BuildItem>(b.itemBlocks.flatMap((blk) => blk.items.map((i) => [i.id, i] as const)));
-  const order = b.buildOrder ?? b.corePath, inOrder = new Set(order?.items.map((i) => i.id));
-  // With a build order the Core block IS that order (shown as a row of arrows) and boots in it are not listed again.
-  const blocks = b.itemBlocks.filter((blk) => !(order && blk.name === "Core items")).map((blk) => ({ ...blk, items: blk.items.filter((i) => !inOrder.has(i.id)) })).filter((blk) => blk.items.length > 0);
+  // The same layout the draft import writes to the client (`itemLayout` in lcu-core): every item once, boots in the order or under "Boots options".
+  const { order, groups: blocks } = itemLayout(b);
   const missing = [!b.skillOrder && "Skill order", !b.startItems && "Starting items"].filter(Boolean).join(" and ");
   return (<div className="space-y-3">
     <Heading><span title="Win rates are from final inventories (what players owned at the end), not from the order they bought things.">Items</span></Heading>
@@ -108,8 +106,8 @@ function ItemsColumn({ b }: { b: Core }) {
       <div className="flex flex-wrap items-start gap-1" aria-label={`Build order ${order.items.map((i) => i.name).join(", then ")}`}>{order.items.map((it, i) => <Fragment key={it.id}>
         {i > 0 && <span className="self-start mt-3"><Arrow /></span>}{stats.get(it.id) ? <ItemCell it={stats.get(it.id)!} /> : <GameIcon kind="item" id={it.id} name={it.name} size={40} />}</Fragment>)}</div>
     </div>}
-    {blocks.map((blk) => <div key={blk.name}>
-      <div className="text-xs text-muted mb-1">{blk.name}</div>
+    {blocks.map((blk) => <div key={blk.key}>
+      <div className="text-xs text-muted mb-1">{blk.label}</div>
       <div className="flex flex-wrap items-start gap-3">{blk.items.map((it) => <ItemCell key={it.id} it={it} />)}</div></div>)}
     {!order && b.timelineGames > 0 && b.itemBlocks.some((blk) => blk.name === "Core items") && <div className="text-xs text-muted" title="Core items are shown by popularity, not build order. The order needs timeline games that kept the same three items.">Core items by popularity · order needs {b.minPathGames}+ timeline games ({b.timelineGames.toLocaleString()} so far)</div>}
     {b.itemBlocks.some((blk) => blk.items.some((it) => it.wpa)) && <div className="text-[11px] text-muted" title="WPA = win probability added, in percentage points, vs games without the item of the same length and number of finished items. Green or red only when its 95% range excludes 0. A link, not proof.">Under each item: win rate, <span className="text-text">WPA</span>, games. A link, not proof.</div>}
@@ -171,12 +169,6 @@ function VariantList({ b, sort, setSort, selected, setSelected }: { b: ChampionB
       </button></li>))}</ul>
     <p className="text-[11px] text-muted" title="Grouped by finished items (Data Dragon tags): AP, AD or defensive. Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items</p>
   </div>);
-}
-
-/** Variants in the order of the chosen tab. Best = lower end of the Wilson range (small samples cannot win), Win rate = shrunk win rate, Common = games. */
-export function sortVariants(b: ChampionBuild, sort: VariantSort) {
-  const key = (v: { wins: number; games: number }) => { const s = rate(v.wins, v.games); return sort === "best" ? s.lo : sort === "rate" ? s.adj : v.games; };
-  return [...(b.variants ?? [])].sort((x, y) => key(y) - key(x) || y.games - x.games);
 }
 
 /** Recommended runes, summoner spells, items and skill order from collected games, as separate builds when players really build differently (AP, AD, Tank). */

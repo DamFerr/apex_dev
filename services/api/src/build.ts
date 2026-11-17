@@ -27,7 +27,7 @@ export const isFinished = (it: ItemMeta | undefined): it is ItemMeta => !!it && 
 export const MIN_BOOTS_COST = 800;
 export const isBoots = (it: ItemMeta | undefined): it is ItemMeta => !!it && !!it.boots && it.total >= MIN_BOOTS_COST;
 /** How many rune pages, boots, core items and situational items are returned. */
-export const LIMITS = { runePages: 3, boots: 2, core: 3, situational: 5 } as const;
+export const LIMITS = { runePages: 3, boots: 3, core: 3, situational: 5 } as const;
 
 interface Tally { games: number; wins: number }
 const bump = (m: Map<string, Tally>, key: string, win: number) => { const t = m.get(key) ?? { games: 0, wins: 0 }; t.games++; t.wins += win; m.set(key, t); };
@@ -197,30 +197,37 @@ export function corePath(rows: BuildRow[], items: Map<number, ItemMeta>, minGame
 }
 
 /**
- * The three core items AND the usual boots in the order they are bought. Uses the same games as `corePath` (those that kept all three core items),
- * so the sample is the same. Boots are part of the order only when at least `MIN_BOOTS_SHARE` of those games kept the same boots item (most players
- * buy boots, but a build that skips them should not get an invented slot); the position is the average place among the core items and that boots item.
- * Null when there is no core path.
+ * The three core items AND the boots in the order they are bought. Uses the same games as `corePath` (those that kept all three core items),
+ * so the sample is the same. THE boots rule of the whole app: the boots take ONE slot in the order, at the average place where players of those
+ * games bought their boots (usually 2nd), and the slot shows the most common boots. The slot exists when at least `MIN_BOOTS_SHARE` of the games
+ * ended with boots of ANY kind (not the same kind: a split between three boots must not make them vanish). The other boots go to the
+ * "Boots" block of `itemBlocks` (shown as "Boots options"), so every boots item is shown exactly once. Null when there is no core path.
  */
 export const MIN_BOOTS_SHARE = 0.4;
 export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGames: number = MIN_PATH_GAMES): ItemPathStat | null {
   const path = corePath(rows, items, minGames); if (!path) return null;
-  const core = path.items.map((i) => i.id), seqs: number[][] = [], bootsKept = new Map<number, number>();
+  const core = path.items.map((i) => i.id), BOOTS = -1;       // BOOTS stands for "whichever boots this game kept"
+  const seqs: number[][] = [], bootsKept = new Map<number, number>();
   for (const r of rows) {
     const buys = json<number[]>(r.buys), final = json<number[]>(r.items); if (!buys || !final) continue;
-    const owned = new Set(final), seq: number[] = [];
-    for (const id of buys) if (owned.has(id) && (isFinished(items.get(id)) || isBoots(items.get(id))) && !seq.includes(id)) seq.push(id);
+    const owned = new Set(final), seq: number[] = []; let boots = 0;
+    for (const id of buys) {
+      if (!owned.has(id) || seq.includes(id)) continue;
+      const it = items.get(id);
+      if (isFinished(it)) seq.push(id);
+      else if (isBoots(it) && !boots) { boots = id; seq.push(BOOTS); }   // a final inventory holds one boots item
+    }
     if (!core.every((id) => seq.includes(id))) continue;
-    seqs.push(seq); for (const id of seq) if (isBoots(items.get(id))) bootsKept.set(id, (bootsKept.get(id) ?? 0) + 1);
+    seqs.push(seq); if (boots) bootsKept.set(boots, (bootsKept.get(boots) ?? 0) + 1);
   }
-  const top = [...bootsKept].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
-  if (!top || top[1] / Math.max(1, seqs.length) < MIN_BOOTS_SHARE) return path;
-  const boots = top[0], ids = [...core, boots], pos = new Map<number, number>();
-  for (const id of ids) {
-    const at = seqs.filter((q) => q.includes(id)).map((q) => q.filter((x) => ids.includes(x)).indexOf(id));
-    pos.set(id, at.reduce((t, x) => t + x, 0) / at.length);
+  const withBoots = [...bootsKept.values()].reduce((t, n) => t + n, 0);
+  if (!withBoots || withBoots / Math.max(1, seqs.length) < MIN_BOOTS_SHARE) return path;
+  const top = [...bootsKept].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0], slots = [...core, BOOTS], pos = new Map<number, number>();
+  for (const s of slots) {
+    const at = seqs.filter((q) => q.includes(s)).map((q) => q.filter((x) => x === BOOTS || core.includes(x)).indexOf(s));
+    pos.set(s, at.reduce((t, x) => t + x, 0) / at.length);
   }
-  const order = [...ids].sort((a, b) => pos.get(a)! - pos.get(b)! || a - b);
+  const order = [...slots].sort((a, b) => pos.get(a)! - pos.get(b)! || (a === BOOTS ? 1 : b === BOOTS ? -1 : a - b)).map((s) => (s === BOOTS ? top : s));
   return { items: order.map((id) => ({ id, name: items.get(id)!.name, count: 1 })), games: path.games, wins: path.wins };
 }
 

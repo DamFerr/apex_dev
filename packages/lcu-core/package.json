@@ -12,6 +12,7 @@
     "vitest": "^2.1.4"
   },
   "dependencies": {
-    "@apex/schema": "workspace:*"
+    "@apex/schema": "workspace:*",
+    "@apex/stats-core": "workspace:*"
   }
 }

@@ -55,6 +55,12 @@ describe("itemBlocks", () => {
     expect(blocks[0].items).toEqual([{ id: 3020, name: "Sorcerer's Shoes", games: 3, wins: 2 }]);
     expect(blocks[1].items.map((i) => i.id)).toEqual([3157, 3089, 3100]);
   });
+  it("lists up to three kinds of boots, most owned first, in the Boots block", () => {
+    const ex = new Map(items); ex.set(3009, { name: "Swiftness", total: 1000, hasUpgrade: true, boots: true });
+    const rows = [...Array.from({ length: 5 }, () => row({ items: JSON.stringify([3020, 3157]) })), ...Array.from({ length: 3 }, () => row({ items: JSON.stringify([3009, 3157]) }))];
+    const boots = itemBlocks(rows, ex).find((b) => b.name === "Boots")!;
+    expect(boots.items.map((i) => i.id)).toEqual([3020, 3009]);
+  });
   it("skips components, consumables, trinkets and base boots", () => {
     const blocks = itemBlocks([r([1055, 3340, 1001, 3157])], items);
     expect(blocks.flatMap((b) => b.items.map((i) => i.id))).toEqual([3157]);

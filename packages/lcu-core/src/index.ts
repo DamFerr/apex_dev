@@ -4,6 +4,7 @@ export * from "./champions";
 export * from "./session-builder";
 export * from "./runes";
 export * from "./spells";
+export * from "./pageBuild";
 export * from "./items";
 export * from "./overlay";
 export * from "./rankRefresh";

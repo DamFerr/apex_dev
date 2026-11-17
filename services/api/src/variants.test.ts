@@ -106,6 +106,25 @@ describe("buildOrder (core items and boots in the order they are bought)", () =>
     expect(buildOrder(some, items)!.items.map((i) => i.id)).toEqual([3100, 3157, 3089]);
   });
   it("ignores boots that were sold (not in the final inventory)", () => expect(buildOrder(many(12, () => game([3020, 3100, 3157, 3089], [3100, 3157, 3089])), items)!.items.map((i) => i.id)).toEqual([3100, 3157, 3089]));
+  const withSwift = new Map<number, ItemMeta>([...items, [3009, it_("Boots of Swiftness", 1000, ["Boots"], { boots: true, hasUpgrade: true })]]);
+  it("keeps a boots slot when players split between several kinds of boots (the slot shows the most common one)", () => {
+    const kinds = [3020, 3047, 3009];                                   // 4 games each: no single kind reaches 40%, but every game has boots
+    const b = buildOrder(many(12, (i) => game([3100, kinds[i % 3], 3157, 3089])), withSwift)!;
+    expect(b.items).toHaveLength(4); expect(b.items.map((x) => x.id)).toEqual([3100, 3009, 3157, 3089]);   // tie: the lowest id wins, so the order is stable
+  });
+  it("the slot takes the most common boots, and the boots count once even when the kinds differ", () => {
+    const b = buildOrder(many(12, (i) => game([3100, i < 8 ? 3047 : 3020, 3157, 3089])), items)!;
+    expect(b.items.map((x) => x.id)).toEqual([3100, 3047, 3157, 3089]);
+    expect(b.items.filter((x) => items.get(x.id)?.boots)).toHaveLength(1);
+  });
+  it("places the boots at their average position (here mostly bought last)", () => {
+    const b = buildOrder(many(12, (i) => game(i < 10 ? [3100, 3157, 3089, 3020] : [3020, 3100, 3157, 3089])), items)!;
+    expect(b.items.map((x) => x.id)).toEqual([3100, 3157, 3089, 3020]);
+  });
+  it("games without boots do not count toward the slot, but need 40% of games to have boots", () => {
+    const some = many(12, (i) => (i < 5 ? game([3100, 3020, 3157, 3089]) : game([3100, 3157, 3089])));   // 5 of 12 = 42%
+    expect(buildOrder(some, items)!.items).toHaveLength(4);
+  });
   it("is null without a core path (too few games)", () => expect(buildOrder(many(3, () => game([3100, 3157, 3089])), items)).toBeNull());
   it("is part of computeBuild", () => expect(computeBuild("Ahri", null, many(12, () => game([3100, 3020, 3157, 3089])), items).buildOrder?.items).toHaveLength(4));
 });
