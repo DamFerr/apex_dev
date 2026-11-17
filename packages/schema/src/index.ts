@@ -72,6 +72,8 @@ export interface ItemPathStat { items: PathItem[]; games: number; wins: number }
  */
 export interface ChampionBuild {
   champion: string; role: Role | null; games: number;
+  /** Wins among `games` (all collected games of this champion and role). Optional: absent on old backends. */
+  wins?: number;
   runePages: RunePageStat[]; /** Most played keystones; shown when `runePages` is empty. */ keystones: KeystoneStat[]; spells: SpellPairStat | null; itemBlocks: BuildItemBlock[];
   /** Games of this champion that have timeline data (only a share of collected games do). The three fields below come from those. */
   timelineGames: number; skillOrder: SkillOrderStat | null; startItems: ItemPathStat | null; corePath: ItemPathStat | null;

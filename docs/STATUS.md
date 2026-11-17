@@ -3,6 +3,8 @@
 Read this first in a new chat, then the PDF (master plan) and the repo. The repo wins over the PDF where they differ.
 
 ## 1. Where we are
+
+- **Latest change (build fix, one type):** `pnpm typecheck` failed in `BuildPanel.tsx` (`SingleBuild` reads `b.wins`, but `ChampionBuild` in `@apex/schema` had no `wins`). The backend already returned it (`computeBuild`), so the schema gained `wins?: number` (optional for old backends). No behaviour change. Checked: typecheck (desktop), web build, all unit tests (74 stats-core, 59 lcu-core, 54 draft-engine, 244 API). NOT checked: the e2e suite.
 Phase 1 (Core Desktop MVP) is complete. Phase 2 (data engine and draft) is mostly done. We are in the middle of the **champion page redesign** (owner round 2, see section 5).
 
 Last verified (build environment, no League client, no Rust toolchain): typecheck, web build and unit tests (74 stats-core, 59 lcu-core, 54 draft-engine, 244 API) pass. The e2e suite (66 tests passed three steps ago) was NOT run for the last three steps (stat strip, less text + single build, match history): no browser can be installed in the build environment, so none of the new screens was looked at either. Run `pnpm --filter desktop test:e2e` and look at Profile and Home at 1100 px. New e2e tests: "a match row is built around the champion icon...", "Home shows the same match row as Profile", "queue filter: chips on Profile and Home...".
