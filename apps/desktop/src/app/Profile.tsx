@@ -1,13 +1,13 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { TierIcon } from "../components/TierIcon";
-import { RoleIcon } from "../components/RoleIcon";
 import { ChampIcon } from "../components/ChampIcon";
 import { LoadoutIcons } from "../components/LoadoutIcons";
+import { MatchRowBody, QueueFilterChips } from "../components/MatchRow";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { MatchSummary } from "@apex/schema";
+import { QUEUE_FILTERS, type MatchSummary } from "@apex/schema";
 import { Chip, ProgressRing, Skeleton } from "../components/ui";
 import { api, useScope, useSummoner } from "../lib/api";
 import { useChampName } from "../lib/ddragon";
@@ -47,17 +47,11 @@ function Detail({ id, riotId }: { id: string; riotId: string }) {
 }
 
 function MatchRow({ m, open, onToggle, riotId }: { m: MatchSummary; open: boolean; onToggle: () => void; riotId: string }) {
-  const champName = useChampName();
   return (
     <li className="glass rounded-lg overflow-hidden">
       <button aria-expanded={open} onClick={onToggle}
-        className={`focus-ring w-full h-14 px-4 flex items-center gap-4 border-l-2 text-left ${m.win ? "border-l-good" : "border-l-bad"}`}>
-        <span className="w-28 font-medium truncate" title={champName(m.champion)}>{champName(m.champion)}</span>
-        <span className="w-16 grid place-items-start text-muted"><RoleIcon role={m.role} size={20} /></span>
-        <span className="tabular-nums text-sm w-24">{m.kills}/{m.deaths}/{m.assists}</span>
-        <span className="text-xs text-muted flex-1">{m.queue} · {Math.round(m.durationSec / 60)} min · {m.cs} CS · {new Date(m.playedAt).toLocaleDateString()}</span>
-        <span className={`text-sm font-medium ${m.win ? "text-good" : "text-bad"}`}>{m.win ? "Win" : "Loss"}</span>
-        <motion.span animate={{ rotate: open ? 180 : 0 }}><ChevronDown size={16} className="text-muted" /></motion.span>
+        className={`focus-ring w-full min-h-[4.25rem] py-2 px-4 flex items-center border-l-2 text-left ${m.win ? "border-l-good" : "border-l-bad"}`}>
+        <MatchRowBody m={m} trailing={<motion.span animate={{ rotate: open ? 180 : 0 }}><ChevronDown size={16} className="text-muted" /></motion.span>} />
       </button>
       <AnimatePresence initial={false}>
         {open && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -73,11 +67,12 @@ export function Profile() {
   const recent = useUi((s) => s.recent), nav = useNavigate();
   const sum = useSummoner(id);
   const [filter, setFilter] = useState<"all" | "win" | "loss">("all");
+  const queue = useUi((s) => s.queueFilter) ?? "all", setUi = useUi((s) => s.patch);
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<"matches" | "lp" | "mastery">("matches");
   const q = useInfiniteQuery({
-    queryKey: [useScope(), "matchpages", id], initialPageParam: 0,
-    queryFn: ({ pageParam }) => api.getMatchPage(id, pageParam, 10),
+    queryKey: [useScope(), "matchpages", id, queue], initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.getMatchPage(id, pageParam, 10, queue),
     getNextPageParam: (last) => last.nextCursor ?? undefined, enabled: sum.isSuccess,
   });
   const all = q.data?.pages.flatMap((p) => p.items) ?? [];
@@ -113,7 +108,8 @@ export function Profile() {
       {tab === "mastery" && <MasteryTab id={id} />}
       {tab === "lp" && <LpHistoryTab id={id} />}
       {tab === "matches" && <>
-      <div className="flex items-center gap-2 mt-4 mb-3" role="group" aria-label="Result filter">
+      <div className="mt-4"><QueueFilterChips value={queue} onChange={(k) => { setUi({ queueFilter: k }); setOpen(null); }} /></div>
+      <div className="flex items-center gap-2 mt-3 mb-3" role="group" aria-label="Result filter">
         {(["all", "win", "loss"] as const).map((f) => <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>{f === "all" ? "All" : f === "win" ? "Wins" : "Losses"}</Chip>)}
         <span className="text-xs text-muted ml-2">{all.length} games loaded</span>
       </div>
@@ -123,7 +119,7 @@ export function Profile() {
         {items.map((m) => <MatchRow key={m.id} riotId={id} m={m} open={open === m.id} onToggle={() => setOpen(open === m.id ? null : m.id)} />)}
       </ul>
       <div ref={sentinel} className="h-10 grid place-items-center text-xs text-muted">
-        {isFetchingNextPage ? "Loading more…" : hasNextPage ? "" : all.length ? "End of history" : ""}</div>
+        {isFetchingNextPage ? "Loading more…" : hasNextPage ? "" : all.length ? "End of history" : q.isSuccess ? `No ${QUEUE_FILTERS.find((f) => f.key === queue)?.label ?? ""} games in your match history.` : ""}</div>
       </>}
     </>}
   </>);

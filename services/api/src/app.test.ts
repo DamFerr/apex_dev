@@ -65,6 +65,45 @@ describe("API", () => {
     const before = riot.calls.match; await get("/v1/players/Test%23EUW/matches?limit=10");
     expect(riot.calls.match).toBe(before); // the first page was already cached
   });
+  describe("match history queue filter", () => {
+    const hist = (q: string, extra = "") => get(`/v1/players/Test%23EUW/matches?limit=10${extra}&queue=${q}`);
+    it("asks Riot for the one queue id of a single-queue group and keeps Riot's paging", async () => {
+      const asked: (number | undefined)[] = []; riot.matchIds = async (_p, _r, start, count, queue) => { if (count > 1) asked.push(queue); return Array.from({ length: Math.min(count, 12 - start) }, (_, i) => `EUW1_${start + i}`); };
+      const p1 = (await hist("flex")).json(); expect(asked).toEqual([440]); expect(p1.items).toHaveLength(10); expect(p1.nextCursor).toBe(10);
+      const p2 = (await hist("flex", "&cursor=10")).json(); expect(p2.items).toHaveLength(2); expect(p2.nextCursor).toBeNull();
+      await hist("solo"); await hist("normal"); await hist("blind"); await hist("aram"); expect(asked.slice(2)).toEqual([420, 400, 430, 450]);
+      await get("/v1/players/Test%23EUW/matches?limit=10"); expect(asked.at(-1)).toBeUndefined();   // no filter: no queue sent to Riot
+    });
+    it("does not mix filters in the id cache", async () => {
+      const asked: (number | undefined)[] = []; riot.matchIds = async (_p, _r, start, count, queue) => { if (count > 1) asked.push(queue); return [`EUW1_${start}`]; };
+      await hist("solo"); await hist("flex"); await hist("solo"); expect(asked).toEqual([420, 440]);    // the third call is a cache hit, and flex never got solo's ids
+    });
+    it("rejects an unknown filter", async () => { const r = await hist("bogus"); expect(r.statusCode).toBe(400); expect(r.json().error).toMatch(/queue/i); });
+    it("filters Arena after loading each match (its ids vary), and finishes at the end of the history", async () => {
+      const queueOf = (id: string) => (Number(id.split("_")[1]) % 5 === 0 ? 1710 : 420), sent: (number | undefined)[] = [];
+      riot.matchIds = async (_p, _r, start, count, queue) => { sent.push(queue); return Array.from({ length: Math.min(count, 25 - start) }, (_, i) => `EUW1_${start + i}`); };
+      riot.match = async (id) => matchFixture(id, { queueId: queueOf(id) });
+      const r = (await hist("arena")).json(); expect(sent.every((q) => q === undefined)).toBe(true);          // Riot cannot filter a group of ids
+      expect(r.items.map((m: { id: string }) => m.id)).toEqual(["EUW1_0", "EUW1_5", "EUW1_10", "EUW1_15", "EUW1_20"]);
+      expect(r.items.every((m: { queueId: number }) => m.queueId === 1710)).toBe(true); expect(r.nextCursor).toBeNull();
+    });
+    it("Other is every queue that is in no named group", async () => {
+      const q = [420, 440, 400, 430, 450, 1700, 480, 490, 700, 900]; riot.matchIds = async (_p, _r, start, count) => Array.from({ length: Math.min(count, 10 - start) }, (_, i) => `EUW1_${start + i}`);
+      riot.match = async (id) => matchFixture(id, { queueId: q[Number(id.split("_")[1])] });
+      expect((await hist("other")).json().items.map((m: { queueId: number }) => m.queueId)).toEqual([480, 490, 700, 900]);
+    });
+    it("stops scanning after a bounded number of ids and hands back a cursor to continue", async () => {
+      let ids = 0; riot.matchIds = async (_p, _r, start, count) => { if (count > 1) ids += count; return Array.from({ length: count }, (_, i) => `EUW1_${start + i}`); };   // endless history, nothing matches
+      riot.match = async (id) => matchFixture(id, { queueId: 420 });
+      const r = (await hist("arena")).json(); expect(r.items).toEqual([]); expect(r.nextCursor).toBe(40); expect(ids).toBe(40);
+      const next = (await hist("arena", "&cursor=40")).json(); expect(next.nextCursor).toBe(80);                   // "load more" continues where the scan stopped
+    });
+    it("a match summary carries its queue id, champion level and loadout for the history rows", async () => {
+      riot.matchIds = async () => ["EUW1_0"]; riot.match = async (id) => { const m = matchFixture(id); m.info.participants[0].champLevel = 17; return m; };
+      const [m] = (await get("/v1/players/Test%23EUW/matches?limit=10")).json().items;
+      expect(m.queueId).toBe(420); expect(m.level).toBe(17); expect(m.loadout.items.length).toBeGreaterThan(0); expect(m.loadout.spells).toEqual([4, 14]);
+    });
+  });
   it("returns match detail and marks which player is you", async () => {
     const d = (await get("/v1/matches/EUW1_3?riotId=Test%23EUW")).json();
     expect(d.participants).toHaveLength(10); expect(d.participants.filter((p: { isYou: boolean }) => p.isYou)).toHaveLength(1);

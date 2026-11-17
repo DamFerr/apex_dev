@@ -72,3 +72,54 @@ test("a champion id in Riot's spelling (FiddleSticks) still shows the right name
   await expect(page.getByText("Fiddlesticks", { exact: true })).toBeVisible();
   await icon;                                                               // never .../FiddleSticks.png, which does not exist on Data Dragon
 });
+
+const row = (over: Record<string, unknown> = {}) => ({ id: "EUW1_1", champion: "Ahri", role: "MID", win: true, kills: 5, deaths: 2, assists: 9, cs: 187, durationSec: 1860, queue: "Ranked Solo", queueId: 420,
+  playedAt: new Date(Date.now() - 2 * 3600_000 - 60_000).toISOString(), level: 17, loadout: { items: [3157, 3020], trinket: 3340, spells: [4, 14], keystone: 8112, secondaryStyle: 8300 }, ...over });
+
+test("a match row is built around the champion icon: level, result, time ago, K/D/A, CS, loadout, queue", async ({ page }) => {
+  await page.route("**/v1/players/**/matches**", (r) => r.fulfill({ json: { items: [row(), row({ id: "EUW1_2", win: false, level: 12, kills: 0, deaths: 4, assists: 1, queue: "ARAM", queueId: 450, playedAt: new Date(Date.now() - 3 * 86400_000).toISOString() })], nextCursor: null } }));
+  await page.goto("/#/profile");
+  const first = page.locator("li button[aria-expanded]").first();
+  await expect(first.getByText("17", { exact: true })).toBeVisible();                  // champion level on the icon
+  await expect(first.getByText("Win", { exact: true })).toBeVisible();                 // the word stays next to the colour strip
+  await expect(first.getByText("2h", { exact: true })).toBeVisible();                  // short time ago
+  await expect(first.getByText("5/2/9")).toBeVisible();
+  await expect(first.getByText("187 CS")).toBeVisible();
+  await expect(first.getByText("Ranked Solo")).toBeVisible();
+  await expect(first.getByRole("group", { name: "Loadout" })).toBeVisible();           // spells, keystone, items (the same icons as the match detail)
+  const second = page.locator("li button[aria-expanded]").nth(1);
+  await expect(second.getByText("Loss", { exact: true })).toBeVisible();
+  await expect(second.getByText("3d", { exact: true })).toBeVisible();
+});
+
+test("Home shows the same match row as Profile", async ({ page }) => {
+  await page.route("**/v1/players/**/matches**", (r) => r.fulfill({ json: { items: [row()], nextCursor: null } }));
+  await page.goto("/#/");
+  const li = page.getByRole("listitem").filter({ hasText: "5/2/9" });
+  await expect(li.getByText("17", { exact: true })).toBeVisible();
+  await expect(li.getByText("2h", { exact: true })).toBeVisible();
+  await expect(li.getByRole("group", { name: "Loadout" })).toBeVisible();
+});
+
+test("queue filter: chips on Profile and Home, asked of the backend, remembered per device", async ({ page }) => {
+  const asked: string[] = [];
+  await page.route("**/v1/players/**/matches**", (r) => { asked.push(new URL(r.request().url()).searchParams.get("queue") ?? "all"); return r.fallback(); });
+  await page.goto("/#/profile");
+  const chips = page.getByRole("group", { name: "Queue filter" });
+  for (const label of ["All", "Ranked Solo/Duo", "Ranked Flex", "Normal Draft", "Blind", "ARAM", "Arena", "Other"]) await expect(chips.getByRole("button", { name: label, exact: true })).toBeVisible();
+  await expect(chips.getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("10 games loaded")).toBeVisible();
+  expect(asked.every((q) => q === "all")).toBe(true);                                   // no queue parameter until a chip is chosen
+  await chips.getByRole("button", { name: "Ranked Flex" }).click();
+  await expect.poll(() => asked.includes("flex")).toBe(true);
+  await chips.getByRole("button", { name: "Arena" }).click();                           // the test player has only ranked solo games: nothing to show, said plainly
+  await expect(page.getByText("No Arena games in your match history.")).toBeVisible();
+  await expect(page.locator("li button[aria-expanded]")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("group", { name: "Queue filter" }).getByRole("button", { name: "Arena" })).toHaveAttribute("aria-pressed", "true");   // remembered
+  await page.goto("/#/");
+  await expect(page.getByRole("group", { name: "Queue filter" }).getByRole("button", { name: "Arena" })).toHaveAttribute("aria-pressed", "true");   // Home uses the same choice
+  await expect(page.getByText("No games in this queue in your recent history.")).toBeVisible();
+  await page.getByRole("group", { name: "Queue filter" }).getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: "CS" }).first()).toBeVisible();
+});

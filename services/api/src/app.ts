@@ -11,9 +11,12 @@ import { TIERS } from "./collector";
 import { computeBuild, itemWpas } from "./build";
 import { canonicalChampionId } from "./champions";
 import type { Filter } from "./store";
+import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary } from "@apex/schema";
 
 export interface Deps { riot: RiotApi; cache: Cache; dd: () => Promise<DD>; store: Store; collector: Collector; defaultPlatform: string; hasKey?: boolean; now?: () => number }
 const MIN = 60_000, DAY = 24 * 60 * MIN;
+/** Raw match ids read per page and at most per request when the queue filter cannot be done by Riot (Arena, Other). */
+const QUEUE_SCAN_PAGE = 20, QUEUE_SCAN_MAX = 40;
 
 export async function buildApp(deps: Deps) {
   const { riot, cache, store, collector } = deps,
@@ -94,12 +97,29 @@ export async function buildApp(deps: Deps) {
     return { snapshots: store.rankHistory(acct.puuid).map((r) => ({ at: new Date(r.at).toISOString(), rank: { tier: r.tier as never, division: r.division as never, lp: r.lp, wins: r.wins, losses: r.losses } })) };
   });
 
-  app.get<{ Params: { riotId: string }; Querystring: { cursor?: string; limit?: string } }>("/v1/players/:riotId/matches", async (req): Promise<MatchPage> => {
+  /**
+   * Match history, optionally for one queue group (`?queue=solo|flex|normal|blind|aram|arena|other`, default all).
+   * Groups with one queue id are filtered by Riot (exact paging). Arena and Other have no single id, so ids are read unfiltered and each match is checked
+   * after it is loaded (matches are cached forever): at most `QUEUE_SCAN_MAX` ids per request, so a rarely played mode returns a short page with a
+   * cursor to continue instead of hammering Riot. `nextCursor` always counts RAW ids, so "load more" works the same for every filter.
+   */
+  app.get<{ Params: { riotId: string }; Querystring: { cursor?: string; limit?: string; queue?: string } }>("/v1/players/:riotId/matches", async (req): Promise<MatchPage> => {
+    const filter = req.query.queue ?? "all"; if (!isQueueFilter(filter)) throw new HttpError(400, "Unknown queue filter");
     const acct = await identity(req.params.riotId), region = regionOf(await homePlatform(acct.puuid));
     const cursor = Math.max(0, Number(req.query.cursor ?? 0) || 0), limit = Math.min(20, Math.max(1, Number(req.query.limit ?? 10) || 10));
-    const ids = await cached<string[]>(`ids:${acct.puuid}:${cursor}:${limit}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, cursor, limit));
-    const items = (await Promise.all(ids.map(async (id) => toMatchSummary(await matchOf(id, region), acct.puuid)))).filter((m) => m !== null);
-    return { items, nextCursor: ids.length === limit ? cursor + limit : null };
+    const riotQueue = riotQueueOf(filter), summaries = async (ids: string[]) => (await Promise.all(ids.map(async (id) => { const m = await matchOf(id, region); return { m, s: toMatchSummary(m, acct.puuid) }; })));
+    if (filter === "all" || riotQueue !== undefined) {
+      const ids = await cached<string[]>(`ids:${acct.puuid}:${filter}:${cursor}:${limit}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, cursor, limit, riotQueue));
+      const items = (await summaries(ids)).map((x) => x.s).filter((m) => m !== null);
+      return { items, nextCursor: ids.length === limit ? cursor + limit : null };
+    }
+    const items: MatchSummary[] = []; let at = cursor, more = true;
+    while (more && items.length < limit && at - cursor < QUEUE_SCAN_MAX) {
+      const from = at, ids = await cached<string[]>(`ids:${acct.puuid}:all:${from}:${QUEUE_SCAN_PAGE}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, from, QUEUE_SCAN_PAGE));
+      for (const { m, s } of await summaries(ids)) if (s && matchesQueueFilter(filter, m.info.queueId)) items.push(s);
+      at += ids.length; more = ids.length === QUEUE_SCAN_PAGE;
+    }
+    return { items, nextCursor: more ? at : null };
   });
 
   app.get<{ Params: { id: string }; Querystring: { riotId?: string } }>("/v1/matches/:id", async (req) => {

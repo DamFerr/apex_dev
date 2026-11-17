@@ -14,11 +14,11 @@ export function createHttpApi(base: () => string): ApexApi {
   }
   const filterParams = (f?: { platform: string; patch: string; rank: string }): Record<string, string> => (f ? { region: f.platform, patch: f.patch, rank: f.rank } : {});
   const player = (id: string) => `/v1/players/${encodeURIComponent(id)}`;
-  const page = (id: string, cursor: number, limit: number) => get<MatchPage>(`${player(id)}/matches`, { cursor: String(cursor), limit: String(limit) });
+  const page = (id: string, cursor: number, limit: number, queue?: string) => get<MatchPage>(`${player(id)}/matches`, { cursor: String(cursor), limit: String(limit), ...(queue && queue !== "all" ? { queue } : {}) });
   return {
     getSummoner: (id) => get(player(id)),
     getMatchPage: page,
-    getRecentMatches: async (id, limit = 10) => (await page(id, 0, limit)).items,
+    getRecentMatches: async (id, limit = 10, queue) => (await page(id, 0, limit, queue)).items,
     getMatchDetail: (matchId, riotId) => get(`/v1/matches/${matchId}`, riotId ? { riotId } : {}),
     getMastery: (id) => get(`${player(id)}/mastery`),
     getRankHistory: (id, opts) => get(`${player(id)}/lp-history`, opts?.fresh ? { fresh: "1" } : {}),

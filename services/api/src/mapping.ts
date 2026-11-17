@@ -3,7 +3,7 @@ import { canonicalChampionId } from "./champions";
 import { HttpError, type LeagueEntry, type RiotActiveGame, type RiotMastery, type RiotMatch, type RiotParticipant } from "./riot";
 
 const ROLES: Record<string, Role> = { TOP: "TOP", JUNGLE: "JUNGLE", MIDDLE: "MID", BOTTOM: "ADC", UTILITY: "SUPPORT" };
-const QUEUES: Record<number, string> = { 420: "Ranked Solo", 440: "Ranked Flex", 400: "Normal Draft", 430: "Normal Blind", 450: "ARAM", 480: "Swiftplay", 490: "Quickplay", 1700: "Arena", 1710: "Arena" };
+const QUEUES: Record<number, string> = { 420: "Ranked Solo", 440: "Ranked Flex", 400: "Normal Draft", 430: "Normal Blind", 450: "ARAM", 480: "Swiftplay", 490: "Quickplay", 1700: "Arena", 1710: "Arena", 1740: "Arena 3v3", 1750: "Arena 3v3" };
 export const roleOf = (pos: string | undefined): Role | null => ROLES[pos ?? ""] ?? null;
 export const queueName = (id: number) => QUEUES[id] ?? `Queue ${id}`;
 
@@ -18,7 +18,8 @@ export function toMatchSummary(m: RiotMatch, puuid: string): MatchSummary | null
   const p = m.info.participants.find((x) => x.puuid === puuid);
   if (!p) return null;
   return { id: m.metadata.matchId, champion: canonicalChampionId(p.championName), role: ROLES[p.teamPosition] ?? null, win: p.win, kills: p.kills, deaths: p.deaths, assists: p.assists,
-    cs: p.totalMinionsKilled + p.neutralMinionsKilled, durationSec: m.info.gameDuration, queue: queueName(m.info.queueId), playedAt: new Date(endTime(m)).toISOString() };
+    cs: p.totalMinionsKilled + p.neutralMinionsKilled, durationSec: m.info.gameDuration, queue: queueName(m.info.queueId), playedAt: new Date(endTime(m)).toISOString(),
+    queueId: m.info.queueId, ...(p.champLevel ? { level: p.champLevel } : {}), loadout: toLoadout(p) };
 }
 /** The items, spells and runes of one player in a finished game. Zero ids (empty slots) are dropped; the trinket is slot 6. Pure. */
 export function toLoadout(p: RiotParticipant): Loadout {

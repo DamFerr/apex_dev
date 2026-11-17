@@ -1,4 +1,6 @@
 /** Shared contract between the desktop app and the local backend (services/api). */
+import type { QueueFilter } from "./queues";
+export * from "./queues";
 export type Role = "TOP" | "JUNGLE" | "MID" | "ADC" | "SUPPORT";
 export type Tier = "IRON" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "EMERALD" | "DIAMOND" | "MASTER" | "GRANDMASTER" | "CHALLENGER";
 
@@ -12,6 +14,8 @@ export interface MatchSummary {
   id: string; champion: string; role: Role | null; win: boolean;
   kills: number; deaths: number; assists: number; cs: number;
   durationSec: number; queue: string; playedAt: string; // ISO date
+  /** Riot's queue id, champion level at the end, and what the player ran (absent on older backends). */
+  queueId?: number; level?: number; loadout?: Loadout;
 }
 /** What a player ran in one game: final items (empty slots dropped, at most 6), the trinket, the two summoner spells, and the rune choices Riot reports (keystone and secondary tree). */
 export interface Loadout { items: number[]; trinket: number | null; spells: number[]; keystone: number | null; secondaryStyle: number | null }
@@ -67,7 +71,7 @@ export interface ItemPathStat { items: PathItem[]; games: number; wins: number }
  * build order and starting items come from the timeline sample. Empty lists = not enough data.
  */
 export interface ChampionBuild {
-  champion: string; role: Role | null; games: number; /** Wins among those games (absent on old backends). */ wins?: number;
+  champion: string; role: Role | null; games: number;
   runePages: RunePageStat[]; /** Most played keystones; shown when `runePages` is empty. */ keystones: KeystoneStat[]; spells: SpellPairStat | null; itemBlocks: BuildItemBlock[];
   /** Games of this champion that have timeline data (only a share of collected games do). The three fields below come from those. */
   timelineGames: number; skillOrder: SkillOrderStat | null; startItems: ItemPathStat | null; corePath: ItemPathStat | null;
@@ -135,8 +139,9 @@ export type LiveResult = LiveGame | { inGame: false };
 /** Every screen talks to this interface only; the local backend implements it over HTTP. */
 export interface ApexApi {
   getSummoner(riotId: string): Promise<Summoner>;
-  getRecentMatches(riotId: string, limit?: number): Promise<MatchSummary[]>;
-  getMatchPage(riotId: string, cursor: number, limit: number): Promise<MatchPage>;
+  getRecentMatches(riotId: string, limit?: number, queue?: QueueFilter): Promise<MatchSummary[]>;
+  /** `queue`: only games of that queue group (default all). */
+  getMatchPage(riotId: string, cursor: number, limit: number, queue?: QueueFilter): Promise<MatchPage>;
   /** riotId marks which participant is "you" in the scoreboard (real backend only). */
   getMatchDetail(matchId: string, riotId?: string): Promise<MatchDetail>;
   getChampionPool(riotId: string): Promise<PoolEntry[]>;
