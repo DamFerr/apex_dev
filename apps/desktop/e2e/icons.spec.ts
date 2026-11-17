@@ -50,7 +50,8 @@ test("an expanded match shows every player's spells, runes and items as named ic
   await page.goto("/#/profile");
   await expect(page.getByText("10 games loaded")).toBeVisible();
   await page.locator("li button[aria-expanded]").first().click();
-  const boards = page.getByRole("group", { name: "Loadout" });
+  // only the scoreboard tables: every history row also has its own loadout icons
+  const boards = page.locator("table").getByRole("group", { name: "Loadout" });
   await expect(boards).toHaveCount(10);
   const first = boards.first();
   await expect(first.getByRole("img", { name: "Flash" })).toBeVisible();

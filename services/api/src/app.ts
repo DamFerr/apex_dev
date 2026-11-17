@@ -8,7 +8,7 @@ import type { Store } from "./store";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
-import { computeBuild, itemWpas } from "./build";
+import { computeBuild, isFinished, itemWpas } from "./build";
 import { canonicalChampionId } from "./champions";
 import type { Filter } from "./store";
 import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary } from "@apex/schema";
@@ -191,7 +191,7 @@ export async function buildApp(deps: Deps) {
     if (!me) throw new HttpError(404, "No collected games for this champion with these filters");
     const data = await dd(), line = (name: string, r: { games: number; wins: number }, id?: number | string): StatLine => ({ name, games: r.games, wins: r.wins, ...(id !== undefined ? { id } : {}) });
     const nameOf = (id: string) => [...data.champs.values()].find((c) => c.id === id)?.name ?? id;
-    const completed = store.items(req.params.id, f).filter((i) => { const it = data.items.get(i.id); return it && it.total >= 2000 && !it.hasUpgrade; }); // finished items only
+    const completed = store.items(req.params.id, f).filter((i) => isFinished(data.items.get(i.id))); // finished items only: the one shared rule, which also counts the five support upgrades
     const wpas = itemWpas(store.buildRows(req.params.id, f), data.items);   // Win Probability Added per item (all roles of this champion)
     return { ...me, totalGames: total,
       builds: completed.slice(0, 6).map((i) => ({ ...line(data.items.get(i.id)!.name, i, i.id), ...(wpas.has(i.id) ? { wpa: wpas.get(i.id) } : {}) })),

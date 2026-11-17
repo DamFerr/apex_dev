@@ -5,7 +5,7 @@ import type { RelationLine, Role } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
 import { RoleIcon } from "../components/RoleIcon";
 import { Tabs } from "../components/Tabs";
-import { LowBadge, pct } from "../components/StatRows";
+import { LowBadge, pct, wrClass } from "../components/StatRows";
 import { Chip, Skeleton, spring } from "../components/ui";
 import { useChampionRelations } from "../lib/api";
 
@@ -59,7 +59,7 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
               <td className="whitespace-nowrap"><span className="inline-flex items-center gap-2 align-middle"><ChampIcon id={l.champion} name={l.name} size={26} /><span>{l.name}</span>
                 {kind === "synergy" && <span className="inline-flex items-center gap-1 text-xs text-muted"><RoleIcon role={l.role} size={14} decorative />{l.role}</span>}</span><LowBadge games={l.games} /></td>
               <td className="text-right tabular-nums text-muted">{l.games.toLocaleString()}</td>
-              <td className="text-right tabular-nums font-medium" title={`Raw ${pct(s.raw)}`}>{pct(s.observed)}</td>
+              <td className={`text-right tabular-nums font-medium ${wrClass(s.observed)}`} title={`Raw ${pct(s.raw)}`}>{pct(s.observed)}</td>
               <td className="text-right tabular-nums text-muted pl-2">{pct(s.expected)}</td>
               <td className={`text-right tabular-nums font-medium pl-2 whitespace-nowrap ${good ? "text-good" : bad ? "text-bad" : "text-muted"}`}>{signed(s.delta)}</td>
               <td className="w-20 pl-2" aria-hidden><div className="relative h-1.5 rounded-full bg-line/10">

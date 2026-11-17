@@ -8,8 +8,17 @@ export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; bo
 const FLASH = 4;
 /** A build-order path needs at least this many games that kept the same core items; below it no path is shown (an arbitrary pick of 1-2 games is worse than nothing). */
 export const MIN_PATH_GAMES = 10;
-/** The one rule for a "finished" item (no boots, nothing it upgrades into, costs 2000+). Core items, situational items and the core path all use it, so they always agree. */
-export const isFinished = (it: ItemMeta | undefined): it is ItemMeta => !!it && !it.boots && !it.hasUpgrade && it.total >= 2000;
+/**
+ * Support quest items. World Atlas, Runic Compass and Bounty of Worlds are the quest line (they transform into each other and end the game as
+ * one of five free upgrades), so the item a support ends with costs little or nothing and used to fail the 2000-gold rule below. The five
+ * upgrades are the support's real "completed item" and are found by NAME (normalised, so a different apostrophe or case does not matter),
+ * because Data Dragon has no tag that says it. The quest line itself is never a finished item. If Riot renames one, add it here.
+ */
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+export const SUPPORT_UPGRADES = new Set(["Zaz'Zak's Realmspike", "Celestial Opposition", "Dream Maker", "Solstice Sleigh", "Bloodsong"].map(norm));
+export const isSupportUpgrade = (it: ItemMeta | undefined): boolean => !!it && SUPPORT_UPGRADES.has(norm(it.name));
+/** The one rule for a "finished" item (no boots, nothing it upgrades into, costs 2000+, or one of the five support upgrades). Core items, situational items, the champion Items table and the core path all use it, so they always agree. */
+export const isFinished = (it: ItemMeta | undefined): it is ItemMeta => !!it && !it.boots && !it.hasUpgrade && (it.total >= 2000 || isSupportUpgrade(it));
 /**
  * The one rule for boots. Boots come in three tiers (basic 300g, tier 2 around 900-1200g, tier 3 around 1850g), so a boots item that
  * "builds into" something is NOT unfinished: most players end the game in tier 2, which builds into tier 3. Only the basic tier (and
@@ -224,7 +233,7 @@ export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGa
 export function archetype(finalItems: number[], items: Map<number, ItemMeta>): BuildArchetype | null {
   const n = { AP: 0, AD: 0, Tank: 0 };
   for (const id of new Set(finalItems)) {
-    const it = items.get(id); if (!isFinished(it)) continue;
+    const it = items.get(id); if (!isFinished(it) || isSupportUpgrade(it)) continue; // the support upgrade says nothing about AP, AD or Tank
     const t = new Set(it.tags ?? []), ap = t.has("SpellDamage"), ad = t.has("Damage") || t.has("CriticalStrike");
     if (ap) n.AP++; else if (ad) n.AD++; else if (t.has("Armor") || t.has("SpellBlock") || t.has("Health")) n.Tank++;
   }

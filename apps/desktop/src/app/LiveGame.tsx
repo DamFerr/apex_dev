@@ -36,7 +36,7 @@ function PlayerCard({ p }: { p: LivePlayer }) {
         {p.rank && <TierIcon tier={p.rank.tier} division={p.rank.division} size={28} />}<div>
         <div className="font-medium text-sm">{rankText(p.rank)}</div>
         <div className="text-muted tabular-nums" title={season ? `Raw ${pct(season.raw)} over ${p.rank!.wins + p.rank!.losses} ranked games. Adjusted for sample size.` : undefined}>
-          {season && p.rank ? `${p.rank.wins}W ${p.rank.losses}L · ${pct(season.adj, 0)}` : "no ranked games"}</div>
+          {season && p.rank ? <>{p.rank.wins}W {p.rank.losses}L · <span className={wrClass(season.adj)}>{pct(season.adj, 0)}</span></> : "no ranked games"}</div>
       </div></div>
       <div className="text-right text-xs shrink-0 w-24" title="Win rate of everyone on this champion in the games Apex has collected (current patch)">
         {champ ? <><div className={`tabular-nums font-medium text-sm ${wrClass(champ.adj)}`}>{pct(champ.adj)}<LowBadge games={p.champGames} /></div><div className="text-muted">champion</div></>
