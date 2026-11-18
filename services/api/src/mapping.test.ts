@@ -48,6 +48,11 @@ describe("toLiveGame", () => {
     expect(g.players[0]).toMatchObject({ champion: "Ahri", isYou: true, jungle: true, rank: null, champGames: 0 });
     expect(g.players[1]).toMatchObject({ riotId: "Bot", championName: "Champion 9999", team: "red", isYou: false, jungle: false });
   });
+  it("keeps each player's own summoner spell order (Flash on D for one, on F for another), none for a bot", () => {
+    const two = { ...base, participants: [{ puuid: "a", riotId: "A#EUW", teamId: 100, championId: 103, spell1Id: 4, spell2Id: 14 }, { puuid: "b", riotId: "B#EUW", teamId: 200, championId: 103, spell1Id: 14, spell2Id: 4 }, base.participants[1]!] };
+    const g = toLiveGame(two, { youPuuid: "a", champs, entries: new Map(), pop: new Map() });
+    expect(g.players.map((p) => p.spells)).toEqual([[4, 14], [14, 4], []]);
+  });
   it("uses the queue name when the queue id is known", () => {
     expect(toLiveGame({ ...base, gameQueueConfigId: 450 }, { youPuuid: "x", champs, entries: new Map(), pop: new Map() }).queue).toBe("ARAM");
   });

@@ -90,7 +90,7 @@ export interface ChampionBuild {
 }
 /** The eleven kinds of build, then the nine allowed mixes of two kinds. Decided from the finished items (see services/api build.ts `archetype`). */
 export const PURE_ARCHETYPES = ["AD", "AP", "Bruiser", "Crit", "Heal & Shield", "Hybrid", "Lethality", "On-Hit", "Tank", "Utility", "Well Rounded"] as const;
-export const MIXED_ARCHETYPES = ["AP / Bruiser", "Bruiser / Lethality", "Bruiser / Tank", "Crit / Lethality", "Crit / On-Hit", "Heal & Shield / Tank", "On-Hit / AD", "On-Hit / Crit", "Tank / Utility"] as const;
+export const MIXED_ARCHETYPES = ["AP / Bruiser", "Bruiser / Lethality", "Bruiser / Tank", "Crit / Lethality", "Crit / On-Hit", "Heal & Shield / Tank", "On-Hit / AD", "On-Hit / AP", "On-Hit / Crit", "Tank / Utility"] as const;
 export type BuildArchetype = (typeof PURE_ARCHETYPES)[number] | (typeof MIXED_ARCHETYPES)[number];
 /** One build variant: the games of one archetype with their own runes, spells, items and skill order. */
 /** `id` is a URL/file-safe slug of the kind ("heal-and-shield-tank"), `label` the name shown to people. */
@@ -137,6 +137,7 @@ export interface LivePlayer {
   /** Riot's "hot streak" flag on the Ranked Solo entry (won several in a row). */ hotStreak: boolean;
   /** Carries Smite, so almost certainly the jungler. Spectator data has no role field; Apex does not guess the other roles. */ jungle: boolean;
   isYou: boolean;
+  /** The player's two summoner spells in THEIR slot order (D, then F), as the spectator data reports them; shown as they are. Empty when Riot gives none. */ spells: number[];
   /** Collected games on this champion (current patch, all roles), for a population win rate next to the player. 0 = no data. */ champGames: number; champWins: number;
 }
 export interface LiveBan { champion: string; championName: string; team: "blue" | "red" }

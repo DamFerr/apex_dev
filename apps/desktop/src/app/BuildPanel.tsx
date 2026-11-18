@@ -2,16 +2,16 @@ import { Fragment, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { RoleIcon } from "../components/RoleIcon";
 import type { BuildItem, ChampionBuild, ItemPathStat, Role, RunePageStat } from "@apex/schema";
-import { itemLayout, placeFlash, SHARD_ROWS, sortVariants, SPELL_NAMES, type PageCore, type VariantSort } from "@apex/lcu-core";
+import { itemLayout, SHARD_ROWS, sortVariants, SPELL_NAMES, type PageCore, type VariantSort } from "@apex/lcu-core";
+import { displaySpells } from "../lib/spells";
 import { Chip, Skeleton } from "../components/ui";
 import { pct, rate, LowBadge, Wpa, wrClass } from "../components/StatRows";
 import { useChampionBuild } from "../lib/api";
-import { useUi } from "../lib/store";
 import { useRuneLookup, useRunes } from "../lib/ddragon";
 import { GameIcon } from "../components/GameIcon";
 
 const wr = (wins: number, games: number) => { const s = rate(wins, games); return <span className={`tabular-nums font-medium ${wrClass(s.adj)}`} title={`Raw ${pct(s.raw)} · 95% ${pct(s.lo, 0)}–${pct(s.hi, 0)}`}>{pct(s.adj)}</span>; };
-const spellText = (ids: [number, number], slot: "D" | "F") => placeFlash(ids, slot).map((i) => SPELL_NAMES[i] ?? i).join(" + ");
+const spellText = (ids: number[]) => displaySpells(ids).map((i) => SPELL_NAMES[i] ?? i).join(" + ");
 const Arrow = () => <ChevronRight size={14} className="text-muted/70 shrink-0" aria-hidden />;
 const Heading = ({ children }: { children: ReactNode }) => <div className="text-[1rem] leading-6 font-semibold font-display">{children}</div>;
 type Core = PageCore;
@@ -72,12 +72,12 @@ function RunesColumn({ b }: { b: Core }) {
 const KEYSTONE_TIP = "Full rune pages (all runes and shards) are stored for newly collected games only. They appear as the collector gathers more.";
 
 function SpellsBlock({ b }: { b: Core }) {
-  const flashSlot = useUi((s) => s.flashSlot), pairs = b.spellPairs?.length ? b.spellPairs : b.spells ? [b.spells] : [];
+  const pairs = b.spellPairs?.length ? b.spellPairs : b.spells ? [b.spells] : [];
   if (!pairs.length) return null;
   return (<div className="space-y-3 shrink-0 w-[380px] max-w-full">
     <Heading>Summoner spells</Heading>
-    {pairs.map((p) => <div key={p.ids.join()} role="group" aria-label={`Summoner spells ${spellText(p.ids, flashSlot)}`} className="flex items-center gap-4 rounded-lg bg-raised/40 border border-line/5 px-4 py-3">
-      <span className="inline-flex items-center gap-2">{placeFlash(p.ids, flashSlot).map((sid) => <GameIcon key={sid} kind="spell" id={sid} size={40} />)}</span>
+    {pairs.map((p) => <div key={p.ids.join()} role="group" aria-label={`Summoner spells ${spellText(p.ids)}`} className="flex items-center gap-4 rounded-lg bg-raised/40 border border-line/5 px-4 py-3">
+      <span className="inline-flex items-center gap-2">{displaySpells(p.ids).map((sid) => <GameIcon key={sid} kind="spell" id={sid} size={40} />)}</span>
       <span className="text-[1rem] leading-6">{wr(p.wins, p.games)}</span><span className="text-sm text-muted ml-auto">{p.games.toLocaleString()} games<LowBadge games={p.games} /></span></div>)}
   </div>);
 }
@@ -160,7 +160,7 @@ function SingleBuild({ b }: { b: Core }) {
       <div className="text-[11px] text-muted mb-2">{b.games.toLocaleString()} games<LowBadge games={b.games} /></div>
       <BuildIcons build={b} />
     </div>
-    <p className="text-[11px] text-muted" title="Separate AP / AD / Tank builds appear when at least two of them have 10+ games and 5% of the classified games.">One build so far</p>
+    <p className="text-[11px] text-muted" title="Separate AP / AD / Tank builds appear when at least two of them have 10+ games and 2.5% of the classified games.">One build so far</p>
   </div>);
 }
 

@@ -7,10 +7,8 @@ export interface LcuItemSet {
   associatedChampions: number[]; associatedMaps: number[]; preferredItemSlots: unknown[];
   blocks: { type: string; items: { id: string; count: number }[]; hideIfSummonerSpell: string; showIfSummonerSpell: string; minSummonerLevel: number; maxSummonerLevel: number }[];
 }
-/** Apex only ever creates, replaces or removes item sets whose title starts with this prefix. Your own sets are never touched. */
+/** Apex only ever creates, replaces or removes item sets whose title starts with this prefix (or whose uid starts with "apex-"). Your own sets are never touched. */
 export const ITEM_SET_PREFIX = "Apex: ";
-/** At most this many Apex sets are kept (newest first), so the client's list never fills up. A champion with three build variants uses three. */
-export const MAX_APEX_SETS = 30;
 const SUMMONERS_RIFT = 11;
 
 /**
@@ -36,15 +34,17 @@ export function buildItemSets(build: ChampionBuild, championKey: number, champio
   return sets.filter((s): s is LcuItemSet => s !== null);
 }
 
+/** Is this client item set one of Apex's? By title prefix, or by the uid Apex gives its sets (older Apex versions used both). */
+export const isApexItemSet = (s: unknown): boolean => {
+  const { title, uid } = s as { title?: unknown; uid?: unknown };
+  return (typeof title === "string" && title.startsWith(ITEM_SET_PREFIX)) || (typeof uid === "string" && uid.startsWith("apex-"));
+};
+
 /**
- * The full list to write back to the client: every set that is not Apex's stays exactly as it is, this champion's earlier Apex sets (any variant)
- * are replaced by the new ones, and other champions' older Apex sets are trimmed to MAX_APEX_SETS. The client replaces the whole list on write,
- * so this must never drop a foreign set.
+ * The full list to write back to the client: every set that is not Apex's stays exactly as it is, and EVERY Apex set that was there (this champion's
+ * earlier ones, other champions', old formats) is dropped, so after an import the only Apex sets are the ones just built: all the builds of the
+ * current champion. Pass an empty `mine` to remove all Apex sets. The client replaces the whole list on write, so this must never drop a foreign set.
  */
-export function mergeItemSets(existing: Pick<LcuItemSet, "uid" | "title">[] & unknown[], mine: LcuItemSet | LcuItemSet[]): unknown[] {
-  const list = Array.isArray(mine) ? mine : [mine], keys = new Set(list.flatMap((s) => s.associatedChampions));
-  const isApex = (s: unknown) => typeof (s as { title?: unknown }).title === "string" && (s as { title: string }).title.startsWith(ITEM_SET_PREFIX);
-  const ofMine = (s: unknown) => { const uid = (s as { uid?: unknown }).uid; return typeof uid === "string" && [...keys].some((k) => uid === `apex-${k}` || uid.startsWith(`apex-${k}-`)); };
-  const others = existing.filter((s) => !isApex(s)), apex = existing.filter((s) => isApex(s) && !ofMine(s));
-  return [...others, ...list, ...apex.slice(0, Math.max(0, MAX_APEX_SETS - list.length))];
+export function mergeItemSets(existing: unknown[], mine: LcuItemSet | LcuItemSet[]): unknown[] {
+  return [...existing.filter((s) => !isApexItemSet(s)), ...(Array.isArray(mine) ? mine : [mine])];
 }

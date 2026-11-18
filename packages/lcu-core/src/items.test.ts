@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BuildVariant, ChampionBuild } from "@apex/schema";
-import { buildItemSet, buildItemSets, ITEM_SET_PREFIX, MAX_APEX_SETS, mergeItemSets } from "./items";
+import { buildItemSet, buildItemSets, isApexItemSet, ITEM_SET_PREFIX, mergeItemSets } from "./items";
 
 const it_ = (id: number, games = 5) => ({ id, name: `i${id}`, games, wins: Math.floor(games / 2) });
 const path = (...ids: number[]) => ({ items: ids.map((id) => ({ id, name: `i${id}`, count: 1 })), games: 9, wins: 5 });
@@ -75,21 +75,29 @@ describe("mergeItemSets", () => {
     const out = mergeItemSets([own, old], mine);
     expect(out).not.toContain(old); expect(out.filter((s) => (s as { uid: string }).uid === "apex-103")).toHaveLength(1);
   });
-  it("replaces ALL of this champion's earlier Apex sets (plain and every variant), and only this champion's", () => {
+  it("replaces ALL of this champion's earlier Apex sets (plain and every variant) and the other champions' too", () => {
     const olds = [{ uid: "apex-103", title: "Apex: Ahri" }, { uid: "apex-103-AD", title: "Apex: Ahri (AD)" }, { uid: "apex-103-Tank", title: "Apex: Ahri (Tank)" }], other = { uid: "apex-1030", title: "Apex: Other" }, jinx = { uid: "apex-222", title: "Apex: Jinx" };
     const out = mergeItemSets([own, ...olds, other, jinx], [mine]);
-    for (const o of olds) expect(out).not.toContain(o);
-    expect(out).toContain(other); expect(out).toContain(jinx); expect(out).toContain(own);          // apex-1030 is not champion 103
+    expect(out).toEqual([own, mine]);
   });
   it("writes several sets for one champion and keeps the others", () => {
     const a = { ...mine, uid: "apex-103-AP" }, b = { ...mine, uid: "apex-103-AD" };
     expect(mergeItemSets([own], [a, b])).toEqual([own, a, b]);
   });
-  it("keeps other champions' Apex sets but trims them to the limit", () => {
-    const apex = Array.from({ length: 60 }, (_, i) => ({ uid: `apex-${1000 + i}`, title: `${ITEM_SET_PREFIX}C${i}` }));
-    const out = mergeItemSets([own, ...apex], mine);
-    expect(out.filter((s) => (s as { title: string }).title.startsWith(ITEM_SET_PREFIX))).toHaveLength(MAX_APEX_SETS);
-    expect(out).toContain(own);
+  it("drops EVERY other Apex set (other champions, old formats): only the new sets stay, plus your own", () => {
+    const apex = Array.from({ length: 40 }, (_, i) => ({ uid: `apex-${1000 + i}`, title: `${ITEM_SET_PREFIX}C${i}` })), oldFormat = { uid: "apex-77-AP", title: "Something else" };
+    const out = mergeItemSets([own, ...apex, oldFormat], mine);
+    expect(out).toEqual([own, mine]);
+  });
+  it("removes all Apex sets when there is nothing new to write", () => {
+    expect(mergeItemSets([own, { uid: "apex-5", title: "Apex: Zed" }], [])).toEqual([own]);
+  });
+  it("tells Apex sets from foreign ones by title prefix or uid", () => {
+    expect(isApexItemSet({ uid: "x", title: "Apex: Ahri" })).toBe(true);
+    expect(isApexItemSet({ uid: "apex-1", title: "renamed" })).toBe(true);
+    expect(isApexItemSet({ uid: "u1", title: "apex: lowercase" })).toBe(false);
+    expect(isApexItemSet({ uid: "u1", title: "My set" })).toBe(false);
+    expect(isApexItemSet({})).toBe(false);
   });
   it("works on an empty list", () => expect(mergeItemSets([], mine)).toEqual([mine]));
 });

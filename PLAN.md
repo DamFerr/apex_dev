@@ -200,6 +200,13 @@ Rules: one step per turn; max ~4 source files plus tests; if a step grows, split
 - [x] **C.6a** Removed `SearchBox` (Home 2x, Profile 2x; component deleted). Copy now points to Ctrl+K; Profile keeps its recent-search chips. e2e: `profile.spec.ts` (first test now uses the palette) and `backend.spec.ts` (NA Riot ID lookup via the palette). Decision: LiveGame's "Riot ID to scout" form stays (it scouts a live game at `/live/<id>`, which the palette cannot do) and its spec is untouched.
 - [x] **C.6b** Removed the Champions page "Filter champions" field (table keeps role chips and sorting; sorting now copies the list so cached data is not reordered). e2e: `champions.spec.ts` asserts the field is gone and adds a palette test (`lee` opens LeeSin). Block C complete.
 
+### G. Draft rework (owner request Nov 2026, split into single-purpose steps; G.1 first, then in this order)
+- [x] **G.1** Import rules: item sets = all builds of the champion and nothing else Apex (older Apex sets deleted, foreign sets untouched); exactly one "Apex: " rune page (overwritten, extras deleted); client writes queued. Files: `lcu-core/src/items.ts`, `runes.ts`, `lib/importer.ts` + tests.
+- [ ] **G.2** Draft engine math: readable, documented layers (win rate, matchup, synergy, comp balance), shrinkage and confidence in one place, tests. Files: `packages/draft-engine/src/*`.
+- [ ] **G.3** Clickable draft: click a champion to lock it in / ban it for any slot of the session (client-side what-if state), with undo. Files: `app/Draft.tsx` + a small draft component.
+- [ ] **G.4** Draft data: show each recommendation's build (items, runes, summoner spells) from the same build data as the champion page. Files: `app/Draft*.tsx`, `lib/importer.ts` (read only).
+- [ ] **G.5** Draft layout rework and cleanup: remove the import log and everything that does not look like a user app; consistent cards, spacing, numbers over text. Files: `app/Draft.tsx` + components, `lib/lcu.ts` (log removal).
+
 ### D. Overlay (Rust involved; unverified until run on the owner's machine)
 - [ ] **D.1 (NEXT)** Overlay card content: remove runes and summoner spells, keep skill order, starting items, build order; boots follow the champion-page rule. File: `app/Overlay.tsx`.
 - [ ] **D.2** Pure position-clamping function (per monitor, scale factor, fallback to primary top-left if the saved monitor is gone) with tests. File: `packages/lcu-core/src/overlay.ts` + test.

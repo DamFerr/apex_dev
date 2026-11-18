@@ -48,3 +48,17 @@ export function runePageFromStat(stat: { primaryStyleId: number; subStyleId: num
   if (ids.length !== 9 || new Set(ids.slice(0, 6)).size !== 6 || ids.some((x) => !Number.isInteger(x) || x <= 0) || stat.primaryStyleId === stat.subStyleId) throw new Error("Rune page data is invalid");
   return { name: `${RUNE_PAGE_PREFIX}${champion}`.slice(0, 25), primaryStyleId: stat.primaryStyleId, subStyleId: stat.subStyleId, selectedPerkIds: ids, current: true };
 }
+
+/** A rune page as the client lists it (/lol-perks/v1/pages); only the fields Apex needs. */
+export interface ClientRunePage { id: number; name: string; isEditable: boolean; current?: boolean }
+
+/**
+ * Which of the client's rune pages is "the" Apex page: the one to overwrite, and the extra Apex pages to delete, so there is never more than one
+ * "Apex: ..." page (older versions, or two imports at once, could leave several). The page that is currently selected wins, else the first one.
+ * Pages that are not editable or do not start with the prefix are never touched.
+ */
+export function planApexRunePages(pages: ClientRunePage[]): { keep: number | null; remove: number[] } {
+  const mine = pages.filter((p) => p.isEditable && p.name.startsWith(RUNE_PAGE_PREFIX));
+  const keep = mine.find((p) => p.current) ?? mine[0];
+  return { keep: keep?.id ?? null, remove: mine.filter((p) => p !== keep).map((p) => p.id) };
+}

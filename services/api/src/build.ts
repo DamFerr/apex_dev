@@ -280,7 +280,7 @@ export const ITEM_KIND_OVERRIDES: ReadonlyMap<string, ItemKinds> = new Map(Objec
   "Collector": K(["Crit", "Lethality"], true), "Hubris": K(["Lethality"], true), "Opportunity": K(["Lethality"], true), "Serpent's Fang": K(["Lethality"], true), "Youmuu's Ghostblade": K(["Lethality"], true),
   "Duskblade of Draktharr": K(["Lethality"], true), "Voltaic Cyclosword": K(["Lethality"], true), "Axiom Arc": K(["Lethality"], true), "Profane Hydra": K(["Lethality"], true), "Edge of Night": K(["Lethality"], true),
   // On-Hit (and the Crit / On-Hit crossover)
-  "Kraken Slayer": K(["On-Hit", "AD"], true), "Blade of the Ruined King": K(["On-Hit", "AD"], true), "Guinsoo's Rageblade": K(["On-Hit"]), "Wit's End": K(["On-Hit"]), "Nashor's Tooth": K(["On-Hit"], false, true), "Terminus": K(["On-Hit"]),
+  "Kraken Slayer": K(["On-Hit", "AD"], true), "Blade of the Ruined King": K(["On-Hit", "AD"], true), "Guinsoo's Rageblade": K(["On-Hit", "AD"], true), "Wit's End": K(["On-Hit"]), "Nashor's Tooth": K(["On-Hit", "AP"], false, true), "Terminus": K(["On-Hit", "AD"], true),
   "Yun Tal Wildarrows": K(["Crit", "On-Hit"], true), "Runaan's Hurricane": K(["Crit", "On-Hit"], true),
 }).map(([name, v]) => [norm(name), v] as const));
 
@@ -294,7 +294,7 @@ export function itemKinds(it: ItemMeta): ItemKinds {
   const active = st.has("active") || tg.has("Active") || tg.has("Aura") || tg.has("Slow");
   const kinds: Kind[] = [];
   if (hsp) { kinds.push("Heal & Shield"); if (defence) kinds.push("Tank"); }
-  else if (onhit) { kinds.push("On-Hit"); if (crit) kinds.push("Crit"); else if (ad) kinds.push("AD"); }     // an AP item with on-hit stays plain On-Hit
+  else if (onhit) { kinds.push("On-Hit"); if (crit) kinds.push("Crit"); else if (ad) kinds.push("AD"); else if (ap) kinds.push("AP"); }     // on-hit with AD = On-Hit / AD, on-hit with only AP = On-Hit / AP
   else if (leth) { if (crit) kinds.push("Crit"); kinds.push("Lethality"); }
   else if (crit) kinds.push("Crit");
   else if (ap) { kinds.push("AP"); if (health) kinds.push("Bruiser"); }
@@ -322,7 +322,7 @@ const MIXES: { a: Kind; b: Kind; names: BuildArchetype[] }[] = (() => {
  * inventory of a group of games (up to six items).
  * 1. Fewer than three counted items is not classified (null).
  * 2. Every item counts towards one or two kinds (`itemKinds`: the override table first, else Lethality, Heal & Shield, On-Hit ... from the item text).
- * 3. Hybrid needs really mixed scaling: at least two AD and two AP items, and the smaller side at least two thirds of the larger one
+ * 3. Hybrid needs really mixed scaling from NON on-hit items (on-hit items count towards On-Hit / AD or On-Hit / AP instead): at least two AD and two AP items, and the smaller side at least two thirds of the larger one
  *    (3 AP + 3 AD or 3 + 2 is Hybrid, 4 AP + 2 AD is an AP build with some AD).
  * 4. Otherwise a named mix (AP / Bruiser, Crit / On-Hit ...) when both of its kinds have at least two items; the mix with the most items wins.
  *    Crit / On-Hit has both orders: the kind with more items goes first.
@@ -335,7 +335,8 @@ export function archetype(finalItems: number[], items: Map<number, ItemMeta>): B
   for (const id of new Set(finalItems)) {
     const it = items.get(id); if (!isFinished(it) || !(it.stats?.length || it.tags?.length)) continue;   // an item without stats or tags tells nothing
     if (isSupportUpgrade(it)) continue;                                // the support upgrade says nothing about the kind of build
-    const k = itemKinds(it); total++; if (k.ad) ad++; if (k.ap) ap++;
+    const k = itemKinds(it); total++;
+    if (!k.kinds.includes("On-Hit")) { if (k.ad) ad++; if (k.ap) ap++; }   // on-hit items (Kraken Slayer + Nashor's Tooth) must not make an On-Hit build look Hybrid
     for (const kind of k.kinds) n.set(kind, (n.get(kind) ?? 0) + 1);
   }
   if (total < 3) return null;
@@ -354,8 +355,8 @@ export function keptItems(r: BuildRow, items: Map<number, ItemMeta>): number[] {
   return [...new Set(final)].filter((id) => isFinished(items.get(id)) && !isSupportUpgrade(items.get(id)));
 }
 
-/** A variant needs at least this many games AND this share of the classified games (so a 2% oddity is not a "build"). */
-export const MIN_VARIANT_GAMES = 10, MIN_VARIANT_SHARE = 0.05, MAX_VARIANTS = 3;
+/** A variant needs at least this many games AND this share (2.5%) of the classified games (so a 1% oddity is not a "build"). */
+export const MIN_VARIANT_GAMES = 10, MIN_VARIANT_SHARE = 0.025, MAX_VARIANTS = 4;
 
 /** Game length bands in minutes: under 20, 20-25, 25-30, 30-35, 35 and longer. */
 export const lengthBand = (sec: number) => Math.min(4, Math.max(0, Math.floor(sec / 300) - 3));
@@ -390,7 +391,8 @@ export function itemWpas(rows: BuildRow[], items: Map<number, ItemMeta>): Map<nu
 
 /** Kinds named in a label: "Crit / On-Hit" -> Crit, On-Hit. Two labels are related when they share one ("On-Hit" and "On-Hit / AD"). */
 const parts = (label: BuildArchetype) => label.split(" / ");
-const related = (x: BuildArchetype, y: BuildArchetype) => parts(x).some((k) => parts(y).includes(k));
+// Related = the same label, or a bare kind and a mix of it (On-Hit and On-Hit / AD are one build). Two different mixes (On-Hit / AD vs On-Hit / AP), AP vs On-Hit / AP or Hybrid are NOT.
+const related = (x: BuildArchetype, y: BuildArchetype) => x === y || (parts(x).length === 1 && parts(x)[0] === parts(y)[0]) || (parts(y).length === 1 && parts(y)[0] === parts(x)[0]);
 
 /**
  * The variants of a champion's games, most played first; fewer than two that qualify = none (a single build is just "the build").
@@ -398,7 +400,7 @@ const related = (x: BuildArchetype, y: BuildArchetype) => parts(x).some((k) => p
  *    and independent of purchase order, so players who buy the same items in another order, or end with one odd extra item, share a core.
  * 2. Games with the same core are one group. A group is labelled once, from its usual inventory: the core plus the three items its games keep most often
  *    (`archetype`). One odd game can no longer flip its own label.
- * 3. Groups with the same label are joined. Then variants with the same three core items, or two of three and related labels (they share a kind, like
+ * 3. Groups with the same label are joined. Then variants with the same three core items, or two of three and related labels (the same label, or a bare kind and a mix of it, like
  *    On-Hit and On-Hit / AD), are joined into the bigger one: the same build never shows twice under two names.
  * Games with fewer than three kept finished items are not classified. The variant's starting items, runes, skills and items come from its own games only.
  */

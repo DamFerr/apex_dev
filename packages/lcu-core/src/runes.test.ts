@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRunePage, runePageFromStat, RUNE_PAGE_PREFIX, type RuneStyle } from "./runes";
+import { buildRunePage, planApexRunePages, runePageFromStat, RUNE_PAGE_PREFIX, type RuneStyle } from "./runes";
 
 const mk = (id: number, key: string): RuneStyle => ({ id, key, name: key, slots: [0, 1, 2, 3].map((r) => ({ runes: [0, 1, 2].map((i) => ({ id: id * 10 + r * 3 + i, name: "x" })) })) });
 const styles = [mk(8000, "Precision"), mk(8100, "Domination"), mk(8200, "Sorcery"), mk(8300, "Inspiration"), mk(8400, "Resolve")];
@@ -32,5 +32,19 @@ describe("runePageFromStat", () => {
     expect(() => runePageFromStat({ ...stat, perkIds: stat.perkIds.slice(0, 8) }, "A")).toThrow();
     expect(() => runePageFromStat({ ...stat, perkIds: [8005, 8005, 8139, 8135, 8304, 8347, 5008, 5008, 5011] }, "A")).toThrow();
     expect(() => runePageFromStat({ ...stat, subStyleId: 8000 }, "A")).toThrow();
+  });
+});
+
+describe("planApexRunePages", () => {
+  const pg = (id: number, name: string, isEditable = true, current = false) => ({ id, name, isEditable, current });
+  it("keeps the one Apex page and deletes no one when there is just one", () => {
+    expect(planApexRunePages([pg(1, "My page"), pg(2, `${RUNE_PAGE_PREFIX}Ahri`)])).toEqual({ keep: 2, remove: [] });
+  });
+  it("with several Apex pages keeps the selected one (else the first) and removes the rest", () => {
+    expect(planApexRunePages([pg(1, "Apex: Ahri"), pg(2, "Apex: Zed", true, true), pg(3, "Apex: Jinx")])).toEqual({ keep: 2, remove: [1, 3] });
+    expect(planApexRunePages([pg(5, "Apex: A"), pg(6, "Apex: B")])).toEqual({ keep: 5, remove: [6] });
+  });
+  it("creates a page (keep null) when there is none, and never touches your own or locked pages", () => {
+    expect(planApexRunePages([pg(1, "My page"), pg(2, "apex: lower"), pg(3, "Apex: Locked", false)])).toEqual({ keep: null, remove: [] });
   });
 });

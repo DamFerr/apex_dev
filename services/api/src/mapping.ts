@@ -59,7 +59,7 @@ export function toLiveGame(g: RiotActiveGame, o: { youPuuid: string; champs: Map
     players: g.participants.map((p) => {
       const c = champ(p.championId), list = p.puuid ? o.entries.get(p.puuid) ?? [] : [], solo = list.find((e) => e.queueType === "RANKED_SOLO_5x5"), pop = o.pop.get(c.id);
       return { riotId: p.riotId || (p.bot ? "Bot" : "Hidden player"), champion: c.id, championName: c.name, team: side(p.teamId), rank: toRank(list), hotStreak: !!solo?.hotStreak,
-        jungle: p.spell1Id === SMITE || p.spell2Id === SMITE, isYou: !!p.puuid && p.puuid === o.youPuuid, champGames: pop?.games ?? 0, champWins: pop?.wins ?? 0 };
+        jungle: p.spell1Id === SMITE || p.spell2Id === SMITE, spells: [p.spell1Id, p.spell2Id].filter((x): x is number => !!x), isYou: !!p.puuid && p.puuid === o.youPuuid, champGames: pop?.games ?? 0, champWins: pop?.wins ?? 0 };
     }),
   };
 }

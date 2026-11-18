@@ -84,7 +84,7 @@ export function Settings() {
         <Row label="Auto compact in champ select" hint="Shrinks the window to a narrow panel when champ select starts, and restores it after."><Toggle on={u.autoCompact} onChange={(v) => u.patch({ autoCompact: v })} label="Auto compact" /></Row>
       </Card>
       <Card title="Champ select">
-        <Row label="Flash key" hint="Which summoner spell slot Flash goes on when Apex sets your spells: left (D) or right (F). Pairs without Flash are left as they are.">
+        <Row label="Flash key" hint="Which key your Flash is on in the game: D (left) or F (right). Only used when Apex sets your spells in champ select. On the champion page Flash is always shown on the left; a player's own games and the live game show their real order. Pairs without Flash are left as they are.">
           <div className="flex gap-2" role="group" aria-label="Flash key">{(["D", "F"] as const).map((k) => <Chip key={k} active={u.flashSlot === k} onClick={() => u.patch({ flashSlot: k })}>{k === "D" ? "D (left)" : "F (right)"}</Chip>)}</div></Row>
       </Card>
       <OverlayCard />

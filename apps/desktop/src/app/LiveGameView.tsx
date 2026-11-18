@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import type { LiveGame as Game, LivePlayer } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
+import { GameIcon } from "../components/GameIcon";
 import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
 import { Button, Skeleton, spring } from "../components/ui";
 import { useLiveGame } from "../lib/api";
@@ -28,6 +29,8 @@ function PlayerCard({ p }: { p: LivePlayer }) {
           {p.hotStreak && <span className="rounded-full bg-good/15 text-good text-[10px] px-2 py-0.5" title="Riot marks this player as on a win streak">hot streak</span>}
         </div>
         <div className="text-xs text-muted truncate">{p.championName}</div>
+        {/* The player's own slot order (D, F), exactly as the spectator data reports it: not rearranged to put Flash first. */}
+        {p.spells.length > 0 && <div className="flex gap-0.5 mt-1" role="group" aria-label="Summoner spells">{p.spells.map((id, i) => <GameIcon key={i} kind="spell" id={id} size={20} />)}</div>}
       </div>
       <div className="flex items-center justify-end gap-2 text-right text-xs shrink-0 w-44">
         {p.rank && <TierIcon tier={p.rank.tier} division={p.rank.division} size={28} />}<div>
