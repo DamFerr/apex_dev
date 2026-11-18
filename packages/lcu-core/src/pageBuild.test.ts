@@ -48,5 +48,16 @@ describe("itemLayout", () => {
     const l = itemLayout({ itemBlocks: [{ name: "Core items", items: [it_(10)] }] });
     expect(l.order).toBeNull(); expect(l.groups.map((g) => g.label)).toEqual(["Core items"]);
   });
+  it("keeps the support item in the order (never under Situational) and lists the other support items as options", () => {
+    const l = itemLayout({ itemBlocks: [{ name: "Support item", items: [it_(3869), it_(3876)] }, { name: "Boots", items: [it_(1)] }, { name: "Core items", items: [it_(10)] }, { name: "Situational", items: [it_(12)] }], buildOrder: path(3869, 10, 1) });
+    expect(l.order?.items.map((i) => i.id)).toEqual([3869, 10, 1]);
+    expect(l.groups.map((g) => [g.label, g.items.map((i) => i.id)])).toEqual([["Support item options", [3876]], ["Situational", [12]]]);
+  });
+  it("calls the block just 'Support item' when the order has none (no timeline data yet), and drops it when the only support item is in the order", () => {
+    const none = itemLayout({ itemBlocks: [{ name: "Support item", items: [it_(3869)] }, { name: "Core items", items: [it_(10)] }] });
+    expect(none.groups.map((g) => g.label)).toEqual(["Support item", "Core items"]);
+    const only = itemLayout({ itemBlocks: [{ name: "Support item", items: [it_(3869)] }], buildOrder: path(3869, 10) });
+    expect(only.groups).toEqual([]);
+  });
   it("returns the starting items untouched", () => expect(itemLayout({ itemBlocks: [], startItems: path(1055) }).start?.items[0].id).toBe(1055));
 });

@@ -27,7 +27,7 @@ test("opens a champion page with stats, builds and matchups", async ({ page }) =
   await expect(page.getByText("Win rate (adjusted)").first()).toBeVisible();
   await expect(page.getByRole("tab", { name: "Matchups" })).toBeVisible();
   await expect(page.getByText("Skill order (max priority)")).toHaveCount(0);   // the skill order is shown once, in the recommended build
-  await expect(page.getByLabel("Recommended build").getByText(/^Skill order ·/)).toBeVisible();
+  await expect(page.getByLabel("Recommended build").getByText("Skill order", { exact: true })).toBeVisible();
 });
 
 // 40 games on 16.22 and 20 on 16.21 (see below): the change vs the last patch needs 50 in both, so the strip must show a dash, never a made-up number.
@@ -67,11 +67,11 @@ test("shows the recommended build (runes, spells, items) with sample sizes on th
   const panel = page.getByLabel("Recommended build");
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("group", { name: "Summoner spells Ignite + Flash" })).toBeVisible();
-  await expect(panel.getByText(/^Skill order ·/)).toBeVisible();
+  await expect(panel.getByText("Skill order", { exact: true })).toBeVisible();
   await expect(panel.getByLabel("Max order Q then E then W")).toBeVisible();
   await expect(panel.getByText("First 9 levels: Q W E Q Q R Q E Q")).toBeVisible();
-  await expect(panel.getByText(/^Starting items ·/)).toBeVisible();
-  await expect(panel.getByText(/^Build order ·/)).toBeVisible();
+  await expect(panel.getByText("Starting items", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Build order", { exact: true })).toBeVisible();
   await expect(panel.getByText(/^Core items/)).toHaveCount(0);              // one row (the build order), not an ordered and an unordered copy
   await expect(panel.getByText(/collected games/).last()).toContainText("40");
 });

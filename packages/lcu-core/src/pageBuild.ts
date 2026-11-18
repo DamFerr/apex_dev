@@ -31,14 +31,14 @@ export const spellPairsOf = (core: Pick<PageCore, "spells" | "spellPairs">): Spe
  * How the items of a build are laid out, for the page and for the item set. Every item appears exactly once:
  *  - `start`: starting items (needs timeline games),
  *  - `order`: the build order, the core items WITH the usual boots where they are bought (falls back to the core path without boots),
- *  - `groups`: the rest, without anything already in the order: "Boots options" (the other boots), "Situational", and "Core items" (by popularity) only when there is no order.
+ *  - `groups`: the rest, without anything already in the order: "Boots options" (the other boots), "Support item options" (the other support items; just "Support item" when the order has none), "Situational", and "Core items" (by popularity) only when there is no order.
  */
 export interface ItemGroup { key: string; label: string; items: BuildItem[] }
 export interface ItemLayout { start: ItemPathStat | null; order: ItemPathStat | null; groups: ItemGroup[] }
 export function itemLayout(core: Pick<PageCore, "itemBlocks"> & Partial<Pick<PageCore, "startItems" | "corePath" | "buildOrder">>): ItemLayout {
   const order = core.buildOrder ?? core.corePath ?? null, inOrder = new Set(order?.items.map((i) => i.id));
   const groups = core.itemBlocks.filter((blk) => !(order && blk.name === "Core items"))
-    .map((blk) => ({ key: blk.name, label: blk.name === "Boots" ? "Boots options" : blk.name, items: blk.items.filter((i) => !inOrder.has(i.id)) }))
+    .map((blk) => ({ key: blk.name, label: blk.name === "Boots" ? "Boots options" : blk.name === "Support item" && blk.items.some((i) => inOrder.has(i.id)) ? "Support item options" : blk.name, items: blk.items.filter((i) => !inOrder.has(i.id)) }))
     .filter((g) => g.items.length > 0);
   return { start: core.startItems ?? null, order, groups };
 }

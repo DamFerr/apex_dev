@@ -34,6 +34,15 @@ describe("buildItemSet is laid out like the champion page", () => {
     expect(s.blocks[2].items.map((i) => i.id)).toEqual(["3065"]);                                     // 3157 is in the order, so it is not repeated
     const ids = s.blocks.flatMap((b) => b.items.map((i) => i.id)); expect(new Set(ids).size).toBe(ids.length);   // every item once
   });
+  it("puts the support item in the build order, first, and only the other support items as options; never in Situational", () => {
+    const sup = { itemBlocks: [{ name: "Support item", items: [it_(3869, 9), it_(3876, 3)] }, { name: "Boots", items: [it_(3020, 9)] }, { name: "Core items", ordered: true, items: [it_(3190), it_(6617), it_(3107)] }, { name: "Situational", items: [it_(3065)] }],
+      corePath: path(3190, 6617, 3107), buildOrder: path(3869, 3190, 3020, 6617, 3107) };
+    const s = buildItemSet(sup, 526, "Rakan")!;
+    expect(s.blocks.map((b) => b.type)).toEqual(["Build order", "Support item options", "Situational"]);
+    expect(s.blocks[0].items.map((i) => i.id)).toEqual(["3869", "3190", "3020", "6617", "3107"]);
+    expect(s.blocks[1].items.map((i) => i.id)).toEqual(["3876"]);
+    expect(s.blocks[2].items.map((i) => i.id)).toEqual(["3065"]);
+  });
   it("drops the Boots options block when the usual boots are the only boots", () => {
     const s = buildItemSet({ itemBlocks: [{ name: "Boots", items: [it_(3020, 9)] }, { name: "Core items", ordered: true, items: [it_(3157)] }], corePath: path(3157), buildOrder: path(3157, 3020) }, 1, "X")!;
     expect(s.blocks.map((b) => b.type)).toEqual(["Build order"]);

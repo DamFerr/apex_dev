@@ -41,14 +41,41 @@ describe("a support's build shows the support upgrade", () => {
     expect(celestial).toMatchObject({ name: "Celestial Opposition", games: 8, wins: 4 });
     expect(sleigh).toMatchObject({ name: "Solstice Sleigh", games: 4, wins: 2 });
     expect(all.some((i) => [3865, 3866, 3867].includes(i.id))).toBe(false);     // the unfinished quest item of the odd game is not a build item
-    const core = blocks.find((b) => b.name === "Core items")!;
-    expect(core.items.map((i) => i.id)).toContain(3869);
+    const sup = blocks.find((b) => b.name === "Support item")!;                  // its own block, like the boots
+    expect(sup.items.map((i) => i.id)).toEqual([3869, 3876]);                    // most built first
+    expect(blocks.filter((b) => b.name !== "Support item").flatMap((b) => b.items).some((i) => [3869, 3876].includes(i.id))).toBe(false);   // never in Core or Situational
   });
-  it("puts the support upgrade into the usual build order at its real purchase position", () => {
-    const withBuys = many(12, (i) => row([3869, 3190, 6617, 3020], i % 2, { buys: JSON.stringify([3865, 3869, 3190, 6617, 3020]) }));
-    const path = corePath(withBuys, items)!;
-    expect(path.items.map((i) => i.id)).toEqual([3869, 3190, 6617]);          // the free upgrade is the first core item, as it is bought first
-    expect(buildOrder(withBuys, items)!.items.map((i) => i.id)).toEqual([3869, 3190, 6617, 3020]);
+  it("puts the support upgrade into the usual build order at its real purchase position (when the timeline records it)", () => {
+    const withBuys = many(12, (i) => row([3869, 3190, 6617, 3107, 3020], i % 2, { buys: JSON.stringify([3865, 3869, 3190, 6617, 3107, 3020]) }));
+    expect(corePath(withBuys, items)!.items.map((i) => i.id)).toEqual([3190, 6617, 3107]);    // the three real items: the support item is not one of the core three
+    expect(buildOrder(withBuys, items)!.items.map((i) => i.id)).toEqual([3869, 3190, 6617, 3107, 3020]);
+  });
+  it("ALWAYS puts the support item into the build order, even when the timeline never records its purchase (the quest upgrade is not a purchase)", () => {
+    const noPurchase = many(12, (i) => row([3869, 3190, 6617, 3107, 3020], i % 2, { buys: JSON.stringify([3865, 3190, 3020, 6617, 3107]) }));   // the final inventory has 3869, the buys do not
+    const order = buildOrder(noPurchase, items)!.items.map((i) => i.id);
+    expect(order).toEqual([3869, 3190, 3020, 6617, 3107]);                          // support item first (never seen in a timeline), boots where they are bought
+    const blocks = computeBuild("Rakan", "SUPPORT", noPurchase, items, false).itemBlocks;
+    expect(blocks.find((b) => b.name === "Situational")?.items.map((i) => i.id) ?? []).not.toContain(3869);
+  });
+  it("uses the place where the timeline does show the support item, averaged over the games", () => {
+    const late = many(12, (i) => row([3190, 6617, 3107, 3869], i % 2, { buys: JSON.stringify([3190, 6617, 3869, 3107]) }));
+    expect(buildOrder(late, items)!.items.map((i) => i.id)).toEqual([3190, 6617, 3869, 3107]);
+  });
+  it("the slot shows the most common support item; the others stay in the Support item block, once", () => {
+    const rows3 = many(12, (i) => row([i < 9 ? 3869 : 3876, 3190, 6617, 3107], 1, { buys: JSON.stringify([3190, 6617, 3107]) }));
+    expect(buildOrder(rows3, items)!.items[0].id).toBe(3869);
+    const sup = computeBuild("Thresh", "SUPPORT", rows3, items, false).itemBlocks.find((b) => b.name === "Support item")!;
+    expect(sup.items.map((i) => i.id)).toEqual([3869, 3876]);
+  });
+  it("is left out of the order when under 40% of the games had one, but is still listed in its own block", () => {
+    const few = many(12, (i) => row(i < 4 ? [3869, 3190, 6617, 3107] : [3190, 6617, 3107], 1, { buys: JSON.stringify([3190, 6617, 3107]) }));   // 4 of 12 = 33%
+    expect(buildOrder(few, items)!.items.map((i) => i.id)).toEqual([3190, 6617, 3107]);
+    expect(computeBuild("X", null, few, items, false).itemBlocks.find((b) => b.name === "Support item")!.items.map((i) => i.id)).toEqual([3869]);
+  });
+  it("a champion without support items gets no Support item block and an unchanged order", () => {
+    const adc = many(12, () => row([3190, 6617, 3107, 3020], 1, { buys: JSON.stringify([3190, 3020, 6617, 3107]) }));
+    expect(computeBuild("Jinx", "ADC", adc, items, false).itemBlocks.some((b) => b.name === "Support item")).toBe(false);
+    expect(buildOrder(adc, items)!.items.map((i) => i.id)).toEqual([3190, 3020, 6617, 3107]);
   });
   it("does not let the support upgrade decide whether a build is AP, AD or Tank", () => {
     // Celestial Opposition carries Health, which would count as a Tank item: with two real AP items the game must stay AP
@@ -63,5 +90,6 @@ describe("a support's build shows the support upgrade", () => {
   it("flows through computeBuild, which is what the champion page and the draft item set import use", () => {
     const b = computeBuild("Thresh", "SUPPORT", rows, items, false);
     expect(b.itemBlocks.flatMap((x) => x.items).map((i) => i.id)).toContain(3869);
+    expect(b.itemBlocks[0].name).toBe("Support item");
   });
 });
