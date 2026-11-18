@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { publicPatch } from "@apex/schema";
 import { buildApp } from "./app";
 import { diverseStore, fakeDD, fakeRiot, idleCollector, matchFixture, memoryCache, seededStore } from "./testkit";
 
-// diverseStore: 40 Emerald games on euw1 in 16.22 (blue wins 26 of them) and 20 Diamond games on na1 in 16.21 (blue wins 10).
+// diverseStore: 40 Emerald games on euw1 in 26.22 (blue wins 26 of them) and 20 Diamond games on na1 in 26.21 (blue wins 10).
 // In every game Ahri plays TOP for blue and is banned once, so Ahri has 40/26 and 20/10.
 async function appWith(store: ReturnType<typeof seededStore>) {
   const riot = fakeRiot();
@@ -10,19 +11,25 @@ async function appWith(store: ReturnType<typeof seededStore>) {
 }
 const get = (app: Awaited<ReturnType<typeof appWith>>, url: string) => app.inject({ method: "GET", url });
 
+describe("publicPatch", () => {
+  it("adds 10 to an internal major (16.22.100.1 is patch 26.22) and leaves public or unreadable versions alone", () => {
+    expect([publicPatch("16.22.100.1"), publicPatch("15.24.1"), publicPatch("16.9"), publicPatch("26.3.1"), publicPatch("unknown"), publicPatch("")]).toEqual(["26.22", "25.24", "26.9", "26.3", "unknown", ""]);
+  });
+});
+
 describe("GET /v1/champions/:id/patches", () => {
   it("lists every kept patch, newest first, with games, wins, bans and the patch size", async () => {
     const r = await get(await appWith(diverseStore()), "/v1/champions/Ahri/patches");
     expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual({ champion: "Ahri", role: "TOP", patches: [
-      { patch: "16.22", games: 40, wins: 26, bans: 40, matches: 40 },
-      { patch: "16.21", games: 20, wins: 10, bans: 20, matches: 20 }] });
+      { patch: "26.22", games: 40, wins: 26, bans: 40, matches: 40 },
+      { patch: "26.21", games: 20, wins: 10, bans: 20, matches: 20 }] });
   });
   it("ignores the patch filter (it always spans the kept patches) but applies region and rank", async () => {
     const app = await appWith(diverseStore());
-    expect((await get(app, "/v1/champions/Ahri/patches?patch=16.22")).json().patches).toHaveLength(2);
+    expect((await get(app, "/v1/champions/Ahri/patches?patch=26.22")).json().patches).toHaveLength(2);
     const euw = (await get(app, "/v1/champions/Ahri/patches?region=euw1")).json().patches;
-    expect(euw).toEqual([{ patch: "16.22", games: 40, wins: 26, bans: 40, matches: 40 }, { patch: "16.21", games: 0, wins: 0, bans: 0, matches: 0 }]);
+    expect(euw).toEqual([{ patch: "26.22", games: 40, wins: 26, bans: 40, matches: 40 }, { patch: "26.21", games: 0, wins: 0, bans: 0, matches: 0 }]);
     const diamond = (await get(app, "/v1/champions/Ahri/patches?rank=DIAMOND")).json().patches; // Diamond and above: only the older patch has such games
     expect(diamond.map((p: { games: number }) => p.games)).toEqual([0, 20]);
   });
@@ -40,13 +47,13 @@ describe("GET /v1/champions/:id/patches", () => {
 describe("GET /v1/patch-trends", () => {
   it("puts the newest patch next to the previous one for champions that play the role", async () => {
     const j = (await get(await appWith(diverseStore()), "/v1/patch-trends?role=TOP")).json();
-    expect(j).toMatchObject({ patch: "16.22", previous: "16.21", role: "TOP" });
+    expect(j).toMatchObject({ patch: "26.22", previous: "26.21", role: "TOP" });
     const ahri = j.rows.find((r: { id: string }) => r.id === "Ahri");
-    expect(ahri).toEqual({ id: "Ahri", name: "Ahri", cur: { patch: "16.22", games: 40, wins: 26, bans: 40, matches: 40 }, prev: { patch: "16.21", games: 20, wins: 10, bans: 20, matches: 20 } });
+    expect(ahri).toEqual({ id: "Ahri", name: "Ahri", cur: { patch: "26.22", games: 40, wins: 26, bans: 40, matches: 40 }, prev: { patch: "26.21", games: 20, wins: 10, bans: 20, matches: 20 } });
     expect(j.rows.every((r: { id: string }) => r.id !== "Jinx")).toBe(true); // Jinx plays JUNGLE here, never TOP
   });
   it("is empty with one patch only, and says so", async () => {
-    expect((await get(await appWith(seededStore()), "/v1/patch-trends?role=TOP")).json()).toEqual({ patch: "16.22", previous: null, role: "TOP", rows: [] });
+    expect((await get(await appWith(seededStore()), "/v1/patch-trends?role=TOP")).json()).toEqual({ patch: "26.22", previous: null, role: "TOP", rows: [] });
   });
   it("needs a valid role", async () => {
     const app = await appWith(diverseStore());
@@ -86,8 +93,8 @@ describe("caching of the patch endpoints (they scan the whole participants table
   it("does not serve an answer built for an older patch window once a new patch arrives", async () => {
     const store = diverseStore(), riot = fakeRiot(); let t = 1_000_000;
     const app = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store, collector: idleCollector(riot, store), defaultPlatform: "euw1", now: () => t });
-    expect((await get(app, "/v1/patch-trends?role=TOP")).json().patch).toBe("16.22");
-    store.saveMatch(matchFixture("NEW1", { gameVersion: "16.23.1.1" }), "Emerald", "euw1"); t += 1000; // well inside the 10 minutes
-    expect((await get(app, "/v1/patch-trends?role=TOP")).json().patch).toBe("16.23");
+    expect((await get(app, "/v1/patch-trends?role=TOP")).json().patch).toBe("26.22");
+    store.saveMatch(matchFixture("NEW1", { gameVersion: "26.23.1.1" }), "Emerald", "euw1"); t += 1000; // well inside the 10 minutes
+    expect((await get(app, "/v1/patch-trends?role=TOP")).json().patch).toBe("26.23");
   });
 });

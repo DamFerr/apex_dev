@@ -1,6 +1,7 @@
 /** Shared contract between the desktop app and the local backend (services/api). */
 import type { QueueFilter } from "./queues";
 export * from "./queues";
+export * from "./patch";
 export type Role = "TOP" | "JUNGLE" | "MID" | "ADC" | "SUPPORT";
 export type Tier = "IRON" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "EMERALD" | "DIAMOND" | "MASTER" | "GRANDMASTER" | "CHALLENGER";
 
@@ -18,7 +19,8 @@ export interface MatchSummary {
   queueId?: number; level?: number; loadout?: Loadout;
 }
 /** What a player ran in one game: final items (empty slots dropped, at most 6), the trinket, the two summoner spells, and the rune choices Riot reports (keystone and secondary tree). */
-export interface Loadout { items: number[]; trinket: number | null; spells: number[]; keystone: number | null; secondaryStyle: number | null }
+/** `items` are the normal item slots (item0..item5, empty ones dropped); `roleItem` is the separate role quest slot of season 2026 (ADC boots, jungle pet, support item), shown in its own place. */
+export interface Loadout { items: number[]; roleItem?: number | null; trinket: number | null; spells: number[]; keystone: number | null; secondaryStyle: number | null }
 export interface Participant {
   name: string; loadout: Loadout; champion: string; team: "blue" | "red"; kills: number; deaths: number; assists: number;
   cs: number; damage: number; gold: number; vision: number; isYou?: boolean;
@@ -106,10 +108,10 @@ export interface DraftStats {
   /** Damage split, damage taken and CC per champion AND role (optional: older backends and test fixtures omit it). */
   profiles?: CompProfileRow[];
 }
-/** Filters shared by every stats screen. platform: "all" or a region id; patch: "latest", "all" (= the last 5 patches, the only ones Apex keeps) or e.g. "16.22"; rank: "all" or a tier such as "EMERALD", which always means that tier AND ABOVE (Emerald IV and up). */
+/** Filters shared by every stats screen. platform: "all" or a region id; patch: "latest", "all" (= the last 5 patches, the only ones Apex keeps) or e.g. "26.22"; rank: "all" or a tier such as "EMERALD", which always means that tier AND ABOVE (Emerald IV and up). */
 export interface StatsFilter { platform: string; patch: string; rank: string }
 export interface FilterOption { id: string; matches: number }
-/** What the collected data actually contains, so the UI only offers filters that have data. `patches` is at most the 5 newest, newest first. */
+/** What the collected data actually contains, so the UI only offers filters that have data. `patches` is at most the 5 newest, newest first. Each list counts games under the OTHER two active filters. */
 export interface FilterOptions { platforms: FilterOption[]; ranks: FilterOption[]; patches: FilterOption[] }
 
 /** Post-game recap: one finished game compared with collected averages, the player's own recent games, and the lobby. */
@@ -161,7 +163,7 @@ export interface ApexApi {
   getChampionPatches(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionPatches>;
   /** Newest patch vs the previous one for every champion in a role. The patch filter is ignored; region and rank apply. */
   getPatchTrends(role: Role, filter?: StatsFilter): Promise<PatchTrends>;
-  getFilterOptions(): Promise<FilterOptions>;
+  getFilterOptions(filter?: StatsFilter): Promise<FilterOptions>;
   /** games is 0 when nothing has been collected for these filters yet. */
   getDraftStats(filter?: StatsFilter): Promise<DraftStats>;
   /** One finished game (the latest when matchId is omitted) compared with averages. */

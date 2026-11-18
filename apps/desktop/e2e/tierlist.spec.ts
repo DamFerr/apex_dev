@@ -23,7 +23,7 @@ test("tier list has a patch changes view that is honest about too little data", 
   await page.getByRole("tab", { name: "Patch changes" }).click();
   await expect(page.getByRole("tab", { name: "Patch changes" })).toHaveAttribute("aria-selected", "true");
   const view = page.getByLabel("Patch changes", { exact: true }).last();
-  await expect(view).toContainText("16.22"); await expect(view).toContainText("16.21");
+  await expect(view).toContainText("26.22"); await expect(view).toContainText("26.21");
   await expect(view.getByText(/No champion has enough games in both patches/)).toBeVisible();
   await page.getByRole("tab", { name: "Tiers" }).click();
   await expect(page.getByText(/Not enough collected games for this role/)).toBeVisible();

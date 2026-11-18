@@ -17,12 +17,3 @@ export function extraItemFields(p: RiotParticipant): { field: string; id: number
   return out;
 }
 export const extraItems = (p: RiotParticipant): number[] => extraItemFields(p).map((x) => x.id);
-
-let warned = false;
-/** Says once per run which extra item fields real matches carry, so a wrong guess about a field name is visible in the log. */
-export function noteExtraFields(p: RiotParticipant, log: (m: string) => void = console.warn): void {
-  if (warned) return;
-  const f = extraItemFields(p); if (!f.length) return;
-  warned = true; log(`Apex: matches carry extra item fields (${f.map((x) => `${x.field}=${x.id}`).join(", ")}); they are stored as items.`);
-}
-export const resetNoteForTests = () => { warned = false; };

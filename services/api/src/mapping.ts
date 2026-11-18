@@ -22,10 +22,14 @@ export function toMatchSummary(m: RiotMatch, puuid: string): MatchSummary | null
     cs: p.totalMinionsKilled + p.neutralMinionsKilled, durationSec: m.info.gameDuration, queue: queueName(m.info.queueId), playedAt: new Date(endTime(m)).toISOString(),
     queueId: m.info.queueId, ...(p.champLevel ? { level: p.champLevel } : {}), loadout: toLoadout(p) };
 }
-/** The items, spells and runes of one player in a finished game. Zero ids (empty slots) are dropped; the trinket is slot 6. Pure. */
+/**
+ * The items, spells and runes of one player in a finished game. Zero ids (empty slots) are dropped; the trinket is slot 6.
+ * The role quest slot (extra item fields) is kept apart as `roleItem`: merged into `items` it only showed when a normal slot was free. Pure.
+ */
 export function toLoadout(p: RiotParticipant): Loadout {
-  const items = [...new Set([p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, ...extraItems(p)].filter((x): x is number => !!x))];   // + the role quest slot (ADC boots)
-  return { items, trinket: p.item6 || null, spells: [p.summoner1Id, p.summoner2Id].filter((x): x is number => !!x),
+  const items = [...new Set([p.item0, p.item1, p.item2, p.item3, p.item4, p.item5].filter((x): x is number => !!x))];
+  const roleItem = extraItems(p).find((x) => !items.includes(x));
+  return { items, ...(roleItem ? { roleItem } : {}), trinket: p.item6 || null, spells: [p.summoner1Id, p.summoner2Id].filter((x): x is number => !!x),
     keystone: p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, secondaryStyle: p.perks?.styles?.[1]?.style ?? null };
 }
 export function toMatchDetail(m: RiotMatch, puuid?: string): MatchDetail {

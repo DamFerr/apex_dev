@@ -5,10 +5,12 @@ import { HttpError } from "./riot";
 import { fakeRiot, matchFixture } from "./testkit";
 import { makeStore } from "./store";
 
-const base: CollectorConfig = { platforms: ["euw1"], tiers: ["EMERALD"], pages: 1, matchesPerPlayer: 5, recrawlMs: 1000, concurrency: 1 };
+const base: CollectorConfig = { platforms: ["euw1"], tiers: ["EMERALD"], pages: 1, matchesPerPlayer: 6, recrawlMs: 1000, concurrency: 1 };
 function setup(over: Partial<CollectorConfig> = {}) {
   const riot = fakeRiot(), store = makeStore(new DatabaseSync(":memory:")); let t = 10_000;
   // The fake sleep advances the clock and yields to the event loop, so idle workers cannot spin forever.
+  // Every player has 5 games, fewer than a slice (6), so one crawl reads the whole history unless a test sets up a longer one.
+  riot.matchIds = async (_p, _r, start, count) => Array.from({ length: Math.max(0, Math.min(count, 5 - start)) }, (_, i) => `EUW1_${start + i}`);
   const c = new Collector(riot, store, { ...base, ...over }, () => t, async () => { t += 250; await new Promise((r) => setImmediate(r)); });
   return { riot, store, c, advance: (ms: number) => { t += ms; } };
 }
@@ -17,7 +19,7 @@ const own = (riot: ReturnType<typeof fakeRiot>) => { riot.ladder = async (pf, ti
 describe("Collector and patches", () => {
   it("does not store a game older than the 5 newest patches, and does not download it again on the next crawl", async () => {
     const { c, riot, store } = setup(); own(riot);
-    const versions = ["16.13", "16.12", "16.11", "16.10", "16.9", "16.8"];           // newest first, like Riot's match list; 16.8 is the 6th newest
+    const versions = ["26.13", "26.12", "26.11", "26.10", "26.9", "26.8"];           // newest first, like Riot's match list; 26.8 is the 6th newest
     let fetched = 0;
     riot.matchIds = async () => versions.map((_, i) => `EUW1_${i}`);
     riot.match = async (id) => { fetched++; const i = Number(id.split("_")[1]); return matchFixture(id, { gameVersion: `${versions[i]}.1.1`, gameEndTimestamp: 1_700_000_000_000 - i }); };
@@ -25,9 +27,9 @@ describe("Collector and patches", () => {
     const crawl = () => (c as unknown as { crawlOne(): Promise<boolean> }).crawlOne();
     await crawl();
     expect(fetched).toBe(6);
-    expect(store.recentPatches()).toEqual(["16.13", "16.12", "16.11", "16.10", "16.9"]);
+    expect(store.recentPatches()).toEqual(["26.13", "26.12", "26.11", "26.10", "26.9"]);
     expect(store.counts().matches).toBe(5);
-    expect(store.hasMatch("EUW1_5")).toBe(false);                                     // the 16.8 game was refused
+    expect(store.hasMatch("EUW1_5")).toBe(false);                                     // the 26.8 game was refused
     store.markCrawled("p0", 0); await crawl();                                        // the same player again
     expect(fetched).toBe(6);                                                          // nothing was downloaded twice, not even the refused game
   });
@@ -125,6 +127,36 @@ describe("Collector", () => {
     await new Promise((r) => setTimeout(r, 60)); await c.halt();
     expect(c.status.running).toBe(false);
     expect(crawls).toBeGreaterThan(4); expect(overlap).toBe(false);
+  });
+});
+
+describe("Collector order: latest patch first", () => {
+  const crawlOf = (c: Collector) => (c as unknown as { crawlOne(): Promise<boolean> }).crawlOne.bind(c);
+  it("reads every player's newest games before anyone's older ones, then stops at the end of the history", async () => {
+    const { c, riot, store } = setup({ matchesPerPlayer: 2 }); store.addSeeds(["a", "b"], "EMERALD", "euw1");
+    const asked: number[] = [];
+    riot.matchIds = async (p, _r, start, count) => { asked.push(start); return Array.from({ length: Math.max(0, Math.min(count, 5 - start)) }, (_, i) => `${p}_${start + i}`); };
+    const crawl = crawlOf(c);
+    for (let i = 0; i < 6; i++) expect(await crawl()).toBe(true);
+    expect(asked).toEqual([0, 0, 2, 2, 4, 4]);                                        // both players' newest slice, then both second slices, ...
+    expect(store.counts().matches).toBe(10);
+    expect(await crawl()).toBe(false);                                                // history done (the last slice was short), nobody is due until the recrawl
+  });
+  it("does not go deeper once a slice holds only games older than the 5 kept patches", async () => {
+    const { c, riot, store } = setup({ matchesPerPlayer: 2 });
+    ["26.13", "26.12", "26.11", "26.10", "26.9"].forEach((v, i) => store.saveMatch(matchFixture(`EUW1_pre${i}`, { gameVersion: `${v}.1.1` }), "EMERALD", "euw1"));
+    store.addSeeds(["a"], "EMERALD", "euw1"); const asked: number[] = [];
+    riot.matchIds = async (p, _r, start, count) => { asked.push(start); return Array.from({ length: Math.min(count, 6 - start) }, (_, i) => `${p}_${start + i}`); };
+    riot.match = async (id) => matchFixture(id, { gameVersion: Number(id.split("_")[1]) < 2 ? "26.13.1.1" : "26.8.1.1" });   // the 2nd slice is the 6th patch
+    const crawl = crawlOf(c); await crawl(); await crawl();
+    expect(asked).toEqual([0, 2]); expect(await crawl()).toBe(false);                // the old slice was read once and nothing more is asked
+    expect(store.hasMatch("a_0")).toBe(true); expect(store.hasMatch("a_2")).toBe(false);
+  });
+  it("never reads more than MAX_DEPTH slices of one player in a round", async () => {
+    const { c, riot, store } = setup({ matchesPerPlayer: 2 }); store.addSeeds(["a"], "EMERALD", "euw1"); const asked: number[] = [];
+    riot.matchIds = async (p, _r, start, count) => { asked.push(start); return Array.from({ length: count }, (_, i) => `${p}_${start + i}`); };   // endless history
+    const crawl = crawlOf(c); for (let i = 0; i < 8; i++) await crawl();
+    expect(asked).toEqual([0, 2, 4, 6, 8]); expect(Collector.MAX_DEPTH).toBe(5);
   });
 });
 

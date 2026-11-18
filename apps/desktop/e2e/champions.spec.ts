@@ -40,7 +40,7 @@ test("opens a champion page with stats, builds and matchups", async ({ page }) =
   await expect(page.getByLabel("Recommended build").getByText("Skill order", { exact: true })).toBeVisible();
 });
 
-// 40 games on 16.22 and 20 on 16.21 (see below): the change vs the last patch needs 50 in both, so the strip must show a dash, never a made-up number.
+// 40 games on 26.22 and 20 on 26.21 (see below): the change vs the last patch needs 50 in both, so the strip must show a dash, never a made-up number.
 test("champion page starts with a strip of key numbers", async ({ page }) => {
   await page.goto("/#/champions/Ahri");
   const strip = page.getByLabel("Key numbers");
@@ -51,17 +51,17 @@ test("champion page starts with a strip of key numbers", async ({ page }) => {
   await expect(page.getByText("Low data: treat with caution")).toHaveCount(0);     // moved into the Games tooltip, no sentence left on the page
 });
 
-// The test backend has 40 games on 16.22 and 20 on 16.21; Ahri plays TOP in all of them. 20 games is under the 50 a win-rate change needs, so the change must be withheld.
+// The test backend has 40 games on 26.22 and 20 on 26.21; Ahri plays TOP in all of them. 20 games is under the 50 a win-rate change needs, so the change must be withheld.
 test("champion page shows patch history, and withholds a change that has too little data", async ({ page }) => {
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Patch history");
   await expect(panel.getByRole("heading", { name: "Patch history" })).toBeVisible();
   const rows = panel.locator("tbody tr");
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText("16.22"); await expect(rows.nth(0)).toContainText("newest"); await expect(rows.nth(0)).toContainText("40");
-  await expect(rows.nth(1)).toContainText("16.21"); await expect(rows.nth(1)).toContainText("20");
+  await expect(rows.nth(0)).toContainText("26.22"); await expect(rows.nth(0)).toContainText("newest"); await expect(rows.nth(0)).toContainText("40");
+  await expect(rows.nth(1)).toContainText("26.21"); await expect(rows.nth(1)).toContainText("20");
   await expect(rows.nth(0).getByTitle(/Needs at least 50 games in both patches/)).toHaveText("–");
-  await expect(panel.getByRole("img", { name: /Adjusted win rate by patch: 16\.21 .*16\.22/ })).toBeVisible();
+  await expect(panel.getByRole("img", { name: /Adjusted win rate by patch: 26\.21 .*26\.22/ })).toBeVisible();
 });
 
 test.describe("with the backend not running", () => {

@@ -117,7 +117,7 @@ describe("API", () => {
 describe("champion statistics API", () => {
   it("lists champions with games, wins, bans and roles from collected games", async () => {
     const r = (await get("/v1/champions")).json();
-    expect(r.patch).toBe("16.22"); expect(r.totalGames).toBe(40);
+    expect(r.patch).toBe("26.22"); expect(r.totalGames).toBe(40);
     const ahri = r.champions.find((c: { id: string }) => c.id === "Ahri");
     expect(ahri).toMatchObject({ name: "Ahri", tags: ["Mage"], games: 40, wins: 26, bans: 40 });
     expect(ahri.roles).toContain("TOP");
@@ -197,7 +197,7 @@ describe("champion statistics API", () => {
   });
   it("404s for a champion without collected games", async () => { expect((await get("/v1/champions/Teemo")).statusCode).toBe(404); });
   it("reports collector status and only accepts start/stop with the X-Apex header", async () => {
-    expect((await get("/v1/collector")).json()).toMatchObject({ running: false, matches: 40, ladders: { seeded: 0, total: 4 }, workers: 1, latestPatch: "16.22" });
+    expect((await get("/v1/collector")).json()).toMatchObject({ running: false, matches: 40, ladders: { seeded: 0, total: 4 }, workers: 1, latestPatch: "26.22" });
     expect((await app.inject({ method: "POST", url: "/v1/collector/start" })).statusCode).toBe(403);
     const ok = await app.inject({ method: "POST", url: "/v1/collector/start", headers: { "x-apex": "1" } });
     expect(ok.statusCode).toBe(200); expect(ok.json().running).toBe(true);
@@ -218,15 +218,28 @@ describe("filters API", () => {
   beforeEach(async () => { diverse = diverseStore(); fapp = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: diverse, collector: idleCollector(riot, diverse), defaultPlatform: "euw1" }); });
   const fget = (url: string) => fapp.inject({ method: "GET", url });
   it("lists the regions, ranks and patches that have data", async () => {
-    const f = (await fget("/v1/filters")).json();
+    const f = (await fget("/v1/filters?patch=all")).json();
     const count = (list: { id: string; matches: number }[], id: string) => list.find((x) => x.id === id)?.matches;
     expect(f.platforms).toHaveLength(17);                                           // every region is always offered
     expect([count(f.platforms, "euw1"), count(f.platforms, "na1"), count(f.platforms, "kr")]).toEqual([40, 20, 0]);
-    expect(f.patches.map((p: { id: string }) => p.id)).toEqual(["16.22", "16.21"]);
+    expect(f.patches.map((p: { id: string }) => p.id)).toEqual(["26.22", "26.21"]);
     // ranks are cumulative: Emerald = Emerald and above
     expect([count(f.ranks, "IRON"), count(f.ranks, "EMERALD"), count(f.ranks, "DIAMOND"), count(f.ranks, "MASTER")]).toEqual([60, 60, 20, 0]);
   });
-  it("defaults to the latest patch and all regions and ranks", async () => { expect((await fget("/v1/champions")).json()).toMatchObject({ patch: "16.22", totalGames: 40 }); });
+  it("counts every menu under the other two active filters (the latest patch by default)", async () => {
+    const count = (list: { id: string; matches: number }[], id: string) => list.find((x) => x.id === id)?.matches;
+    const latest = (await fget("/v1/filters")).json();                              // latest patch 26.22: only euw1 Emerald games (40)
+    expect([count(latest.platforms, "euw1"), count(latest.platforms, "na1")]).toEqual([40, 0]);
+    expect([count(latest.ranks, "IRON"), count(latest.ranks, "DIAMOND")]).toEqual([40, 0]);
+    expect(latest.patches.map((p: { id: string; matches: number }) => [p.id, p.matches])).toEqual([["26.22", 40], ["26.21", 20]]);   // the patch menu ignores the patch filter itself
+    const old = (await fget("/v1/filters?patch=26.21")).json();                     // patch 26.21: only na1 Diamond games (20)
+    expect([count(old.platforms, "euw1"), count(old.platforms, "na1")]).toEqual([0, 20]); expect([count(old.ranks, "EMERALD"), count(old.ranks, "DIAMOND")]).toEqual([20, 20]);
+    const na = (await fget("/v1/filters?patch=all&region=na1")).json();             // region na1: only its games, in the patch menu too
+    expect(na.patches.map((p: { id: string; matches: number }) => [p.id, p.matches])).toEqual([["26.22", 0], ["26.21", 20]]); expect(count(na.platforms, "euw1")).toBe(40);   // the region menu ignores its own filter
+    expect((await fget("/v1/filters?rank=MASTER&patch=all")).json().platforms.every((p: { matches: number }) => p.matches === 0)).toBe(true);
+    expect((await fget("/v1/filters?rank=NOPE")).statusCode).toBe(400);
+  });
+  it("defaults to the latest patch and all regions and ranks", async () => { expect((await fget("/v1/champions")).json()).toMatchObject({ patch: "26.22", totalGames: 40 }); });
   it("combines patch, region and rank filters", async () => {
     expect((await fget("/v1/champions?patch=all")).json().totalGames).toBe(60);
     expect((await fget("/v1/champions?patch=all&region=na1")).json().totalGames).toBe(20);
@@ -234,7 +247,7 @@ describe("filters API", () => {
     expect((await fget("/v1/champions?patch=all&rank=EMERALD")).json().totalGames).toBe(60);     // Emerald means Emerald and above, so Diamond games count too
     expect((await fget("/v1/champions?patch=all&rank=EMERALD%2B")).json().totalGames).toBe(60);  // "+" is accepted but means the same
     expect((await fget("/v1/champions?patch=all&rank=MASTER")).json().totalGames).toBe(0);
-    expect((await fget("/v1/champions?patch=16.21&region=euw1")).json().totalGames).toBe(0);
+    expect((await fget("/v1/champions?patch=26.21&region=euw1")).json().totalGames).toBe(0);
   });
   it("applies the same filters to champion detail, and says so when nothing matches", async () => {
     expect((await fget("/v1/champions/Ahri?patch=all&region=na1")).json().games).toBe(20);
@@ -245,13 +258,13 @@ describe("filters API", () => {
   });
   it("'all patches' means the last 5 patches: older data is gone and the menu lists only those", async () => {
     const six = makeStore(new DatabaseSync(":memory:"));
-    for (const [i, p] of ["16.9", "16.10", "16.11", "16.12", "16.13", "16.14"].entries()) for (let n = 0; n < 2; n++) six.saveMatch(matchFixture(`S${i}_${n}`, { gameVersion: `${p}.1.1`, gameEndTimestamp: 1_700_000_000_000 + i * 10 + n }), "EMERALD", "euw1");
+    for (const [i, p] of ["26.9", "26.10", "26.11", "26.12", "26.13", "26.14"].entries()) for (let n = 0; n < 2; n++) six.saveMatch(matchFixture(`S${i}_${n}`, { gameVersion: `${p}.1.1`, gameEndTimestamp: 1_700_000_000_000 + i * 10 + n }), "EMERALD", "euw1");
     const sapp = await buildApp({ riot, cache: memoryCache(), dd: fakeDD, store: six, collector: idleCollector(riot, six), defaultPlatform: "euw1" });
     const sget = (url: string) => sapp.inject({ method: "GET", url });
-    expect((await sget("/v1/filters")).json().patches).toEqual([16.14, 16.13, 16.12, 16.11, 16.10].map((p, i) => ({ id: p.toFixed(2), matches: 2 })));
+    expect((await sget("/v1/filters")).json().patches).toEqual([26.14, 26.13, 26.12, 26.11, 26.10].map((p, i) => ({ id: p.toFixed(2), matches: 2 })));
     expect((await sget("/v1/champions?patch=all")).json()).toMatchObject({ patch: "all", totalGames: 10 });   // 6 patches were stored, 5 are kept
-    expect((await sget("/v1/champions")).json()).toMatchObject({ patch: "16.14", totalGames: 2 });
-    expect((await sget("/v1/champions?patch=16.9")).json().totalGames).toBe(0);                                // a removed patch has no data
+    expect((await sget("/v1/champions")).json()).toMatchObject({ patch: "26.14", totalGames: 2 });
+    expect((await sget("/v1/champions?patch=26.9")).json().totalGames).toBe(0);                                // a removed patch has no data
     expect((await sget("/v1/draft/data?patch=all")).json()).toMatchObject({ patch: "all", games: 10 });
   });
   it("rejects an unknown rank", async () => { expect((await fget("/v1/champions?rank=PLASTIC")).statusCode).toBe(400); });
@@ -294,7 +307,7 @@ describe("searching players in any region", () => {
 describe("draft data and champion pool APIs", () => {
   it("serves collected draft statistics that follow the filters", async () => {
     const d = (await get("/v1/draft/data")).json();
-    expect(d.games).toBe(40); expect(d.patch).toBe("16.22");
+    expect(d.games).toBe(40); expect(d.patch).toBe("26.22");
     expect(d.champions.find((c: { id: string }) => c.id === "Ahri")).toMatchObject({ games: 40, wins: 26 });
     expect(d.matchups.length).toBeGreaterThan(0); expect(d.synergies.length).toBeGreaterThan(0);
     expect(d.profiles).toEqual([]);                                  // the fixture games carry no damage-type data, so nothing is invented

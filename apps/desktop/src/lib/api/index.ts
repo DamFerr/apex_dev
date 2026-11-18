@@ -24,7 +24,9 @@ export const useChampionRelations = (id: string, role?: Role) => { const f = use
 const useRegionRank = () => useUi((s) => s.statsFilter.platform + "|" + s.statsFilter.rank);
 export const useChampionPatches = (id: string, role?: Role) => { const f = useUi((s) => s.statsFilter), k = useRegionRank(); return useQuery({ queryKey: [useScope(), "patches", id, role ?? "any", k], queryFn: () => api.getChampionPatches(id, role, f) }); };
 export const usePatchTrends = (role: Role) => { const f = useUi((s) => s.statsFilter), k = useRegionRank(); return useQuery({ queryKey: [useScope(), "patchtrends", role, k], queryFn: () => api.getPatchTrends(role, f) }); };
-export const useFilterOptions = () => useQuery({ queryKey: [useScope(), "filters"], queryFn: () => api.getFilterOptions(), staleTime: 10_000 });
+const NO_FILTER = { platform: "all", patch: "all", rank: "all" };
+/** The filter menus' counts. `scoped` (default) follows the active filters; false = everything collected (Settings coverage). Keeps the old counts while new ones load, so the menus do not flicker. */
+export const useFilterOptions = (scoped = true) => { const active = useFilter(), f = scoped ? active : NO_FILTER; return useQuery({ queryKey: [useScope(), "filters", f], queryFn: () => api.getFilterOptions(f), staleTime: 10_000, placeholderData: keepPreviousData }); };
 export const useMastery = (id: string) => useQuery({ queryKey: [useScope(), "mastery", id], queryFn: () => api.getMastery(id), enabled: !!id });
 export const useRankHistory = (id: string) => useQuery({ queryKey: [useScope(), "lphistory", id], queryFn: () => api.getRankHistory(id), enabled: !!id });
 export const usePool = (id: string) => useQuery({ queryKey: [useScope(), "pool", id], queryFn: () => api.getChampionPool(id), enabled: !!id });

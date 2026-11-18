@@ -6,6 +6,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { NAV, SETTINGS_ITEM, buildPaletteEntries, type NavItem, type PaletteEntry } from "../lib/nav";
 import { ChampIcon } from "../components/ChampIcon";
 import { useUi } from "../lib/store";
+import { publicPatch } from "@apex/schema";
 import { useStoredPlayers } from "../lib/api";
 import { win } from "../lib/tauri";
 import { Skeleton, spring } from "../components/ui";
@@ -72,7 +73,7 @@ function StatusArea() {
   return (
     <footer className="h-7 flex items-center justify-between px-4 text-[11px] text-muted border-t border-line/10 bg-surface/60">
       <span className="flex items-center gap-2"><span className={`size-1.5 rounded-full ${connected ? "bg-good" : "bg-gold"}`} /> League client: {connected ? "connected" : "not connected"}</span>
-      <span title={ver ? `Data Dragon ${ver}` : undefined}>{ver ? `Patch ${ver.split(".").slice(0, 2).join(".")}` : "Patch unavailable (offline)"}</span>
+      <span title={ver ? `Data Dragon ${ver}` : undefined}>{ver ? `Patch ${publicPatch(ver)}` : "Patch unavailable (offline)"}</span>
     </footer>
   );
 }

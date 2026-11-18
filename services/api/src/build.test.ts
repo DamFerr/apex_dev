@@ -102,7 +102,7 @@ describe("store + computeBuild", () => {
       items TEXT NOT NULL, spell1 INTEGER, spell2 INTEGER, kills INTEGER, deaths INTEGER, assists INTEGER, cs INTEGER, damage INTEGER, gold INTEGER);
       INSERT INTO participants VALUES ('OLD', 'x', 100, 'Ahri', 'MID', 1, 8005, '[3157]', 4, 14, 1, 1, 1, 1, 1, 1);`);
     const s = makeStore(db);
-    db.exec("INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('OLD', '16.20', 'EMERALD', 'euw1', 1, 1800, 1)");
+    db.exec("INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('OLD', '26.20', 'EMERALD', 'euw1', 1, 1800, 1)");
     expect(s.buildRows("Ahri", {})).toHaveLength(1);
     expect(computeBuild("Ahri", null, s.buildRows("Ahri", {}), items).runePages).toEqual([]);
   });

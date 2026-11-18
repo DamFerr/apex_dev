@@ -145,7 +145,7 @@ export async function buildApp(deps: Deps) {
   // ---- Champion statistics, computed from the games the collector has stored ----
   const ROLES = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
   /**
-   * patch: latest (default) | all | 16.22. "all" means the last 5 patches, the only ones Apex keeps. region: all | euw1 ... rank: all | EMERALD.
+   * patch: latest (default) | all | 26.22. "all" means the last 5 patches, the only ones Apex keeps. region: all | euw1 ... rank: all | EMERALD.
    * A rank always means that tier AND ABOVE ("EMERALD+" is accepted too). `label` is what the response reports as its patch ("all" or one patch).
    */
   function filterOf(q: { patch?: string; region?: string; rank?: string }): Filter & { label: string } {
@@ -279,8 +279,9 @@ export async function buildApp(deps: Deps) {
   });
 
   /** Every region and rank is always offered (counts may be zero while the collector fills in). Ranks are cumulative: Emerald = Emerald and above. */
-  app.get("/v1/filters", async (): Promise<FilterOptions> => {
-    const f = store.facets(), count = (list: { id: string; matches: number }[], id: string) => list.find((x) => x.id === id)?.matches ?? 0;
+  /** Counts follow the active filters (patch, region, rank as on every stats route): each menu shows the games its options would give with the other two filters applied. */
+  app.get<{ Querystring: { patch?: string; region?: string; rank?: string } }>("/v1/filters", async (req): Promise<FilterOptions> => {
+    const f = store.facets(filterOf(req.query)), count = (list: { id: string; matches: number }[], id: string) => list.find((x) => x.id === id)?.matches ?? 0;
     return { platforms: PLATFORM_IDS.map((id) => ({ id, matches: count(f.platforms, id) })), patches: f.patches,
       ranks: TIERS.map((id, i) => ({ id, matches: TIERS.slice(i).reduce((s, t) => s + count(f.ranks, t), 0) })) };
   });

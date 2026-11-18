@@ -1,6 +1,6 @@
-import { extraItems, noteExtraFields } from "./participantItems";
+import { extraItems } from "./participantItems";
 import type { DatabaseSync } from "./sqlite";
-import type { Role } from "@apex/schema";
+import { publicPatch, type Role } from "@apex/schema";
 import { roleOf } from "./mapping";
 import { canonicalChampionId, RIOT_CHAMPION_ALIASES } from "./champions";
 import type { RiotMatch } from "./riot";
@@ -16,9 +16,9 @@ const RANKED_SOLO = 420, MIN_SECONDS = 300; // remakes and early surrenders are 
 /** Apex keeps data for the newest KEEP_PATCHES patches only (the newest one seen in the collected games, never decided by the clock). */
 export const KEEP_PATCHES = 5;
 const PATCH_RE = /^(\d+)\.(\d+)$/;
-/** "16.22" style patch (major.minor). Anything else, like the "unknown" of a match without a version, is not a patch. */
+/** "26.22" style patch (major.minor). Anything else, like the "unknown" of a match without a version, is not a patch. */
 export const isPatch = (p: string) => PATCH_RE.test(p);
-/** Numeric comparison, negative when `a` is older than `b`: 16.9 is older than 16.10 (a string sort gets this wrong). */
+/** Numeric comparison, negative when `a` is older than `b`: 26.9 is older than 26.10 (a string sort gets this wrong). */
 export function comparePatch(a: string, b: string): number {
   const [a1, a2] = a.split(".").map(Number), [b1, b2] = b.split(".").map(Number);
   return a1 - b1 || a2 - b2;
@@ -45,6 +45,10 @@ export function makeStore(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS seeds (puuid TEXT PRIMARY KEY, tier TEXT NOT NULL, platform TEXT, crawled_at INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS rank_snapshots (puuid TEXT NOT NULL, at INTEGER NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, lp INTEGER NOT NULL, wins INTEGER NOT NULL, losses INTEGER NOT NULL, PRIMARY KEY (puuid, at));
     CREATE TABLE IF NOT EXISTS ladder_runs (platform TEXT NOT NULL, tier TEXT NOT NULL, division TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (platform, tier, division));`);
+  // Games stored with the game's internal version (16.22) get Riot's public patch number (26.22); see publicPatch. Safe to repeat.
+  db.exec("UPDATE matches SET patch = (CAST(substr(patch, 1, instr(patch, '.') - 1) AS INTEGER) + 10) || substr(patch, instr(patch, '.')) WHERE patch GLOB '1[0-9].*'");
+  // Databases created by earlier versions lack the crawl depth (which slice of a player's history is read next, 0 = the newest games).
+  if (!(db.prepare("PRAGMA table_info(seeds)").all() as { name: string }[]).some((c) => c.name === "depth")) db.exec("ALTER TABLE seeds ADD COLUMN depth INTEGER NOT NULL DEFAULT 0");
   // Databases created by earlier versions lack the platform columns.
   for (const t of ["matches", "seeds"]) if (!(db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).some((c) => c.name === "platform")) db.exec(`ALTER TABLE ${t} ADD COLUMN platform TEXT`);
   // Databases created by earlier versions lack these columns (full rune page, and the timeline data: skill order, starting items, purchases). Old rows stay NULL and are ignored by those stats.
@@ -150,13 +154,12 @@ export function makeStore(db: DatabaseSync) {
     saveMatch(m: RiotMatch, bracket: string, platform: string): boolean {
       const i = m.info;
       if (i.queueId !== RANKED_SOLO || i.gameDuration < MIN_SECONDS || this.hasMatch(m.metadata.matchId)) return false;
-      const id = m.metadata.matchId, patch = (i.gameVersion ?? "unknown").split(".").slice(0, 2).join("."), seen = knownPatches();
+      const id = m.metadata.matchId, patch = publicPatch(i.gameVersion ?? "unknown"), seen = knownPatches();
       if (!lastPatches([...seen, patch]).includes(patch)) return false;
       db.exec("BEGIN");
       try {
         insM.run(id, patch, bracket, platform, i.gameEndTimestamp ?? i.gameCreation + i.gameDuration * 1000, i.gameDuration, i.participants.find((p) => p.teamId === 100)?.win ? 1 : 0, timelineBucket(id));
         for (const p of i.participants) {
-          noteExtraFields(p);
           const items = [...new Set([p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6, ...extraItems(p)].filter((x): x is number => !!x && x > 0))];   // + the role quest slot (ADC boots)
           insP.run(id, p.puuid, p.teamId, canonicalChampionId(p.championName), roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
             p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p),
@@ -183,17 +186,23 @@ export function makeStore(db: DatabaseSync) {
      */
     claimSeed(olderThan: number, now: number, platforms?: string[]) {
       const only = platforms?.length ? ` AND platform IN (${platforms.map(() => "?").join(",")})` : "";
-      const row = db.prepare(`SELECT puuid, platform, tier FROM seeds WHERE crawled_at < ? AND platform IS NOT NULL${only} ORDER BY crawled_at, RANDOM() LIMIT 1`).get(olderThan, ...(platforms ?? [])) as { puuid: string; platform: string; tier: string } | undefined;
+      // Shallow slices first: every player's newest games (the latest patch) are read before anyone's older ones. A player with depth > 0 is mid-history and due at once.
+      const row = db.prepare(`SELECT puuid, platform, tier, depth FROM seeds WHERE (crawled_at < ? OR depth > 0) AND platform IS NOT NULL${only} ORDER BY depth, crawled_at, RANDOM() LIMIT 1`).get(olderThan, ...(platforms ?? [])) as { puuid: string; platform: string; tier: string; depth: number } | undefined;
       if (row) db.prepare("UPDATE seeds SET crawled_at = ? WHERE puuid = ?").run(now, row.puuid);
       return row;
     },
     /** Rows written before platforms were tracked belong to the platform the collector was configured for. */
     backfillPlatform(platform: string) { db.prepare("UPDATE matches SET platform = ? WHERE platform IS NULL").run(platform); db.prepare("UPDATE seeds SET platform = ? WHERE platform IS NULL").run(platform); },
-    /** What the collected data contains, for the filter menus. */
-    facets() {
-      const g = (col: string) => q<{ id: string; matches: number }>(`SELECT ${col} id, COUNT(*) matches FROM matches WHERE ${col} IS NOT NULL GROUP BY ${col} ORDER BY matches DESC`);
-      const per = new Map(q<{ id: string; matches: number }>("SELECT patch id, COUNT(*) matches FROM matches GROUP BY patch").map((r) => [r.id, r.matches]));
-      return { platforms: g("platform"), ranks: g("bracket"), patches: this.recentPatches().map((id) => ({ id, matches: per.get(id) ?? 0 })) }; // the kept patches, newest first (numerically)
+    /**
+     * What the collected data contains, for the filter menus. Each menu counts the games that pass the OTHER two active filters in `f`
+     * (the regions under the chosen patch and rank, and so on) and ignores its own, so every option shows what choosing it would give.
+     * No filter = everything. Ranks come back per tier; the caller makes them cumulative.
+     */
+    facets(f: Filter = {}) {
+      const g = (col: string, w: Filter) => { const x = filt(w); return q<{ id: string; matches: number }>(`SELECT m.${col} id, COUNT(*) matches FROM matches m WHERE m.${col} IS NOT NULL${x.sql} GROUP BY m.${col} ORDER BY matches DESC`, ...x.args); };
+      const per = new Map(g("patch", { platform: f.platform, brackets: f.brackets }).map((r) => [r.id, r.matches]));
+      return { platforms: g("platform", { patches: f.patches, brackets: f.brackets }), ranks: g("bracket", { patches: f.patches, platform: f.platform }),
+        patches: this.recentPatches().map((id) => ({ id, matches: per.get(id) ?? 0 })) }; // the kept patches, newest first (numerically)
     },
     /**
      * Per champion sums for the team composition analysis: damage to champions by type, damage taken, CC time and the seconds played,
@@ -215,6 +224,8 @@ export function makeStore(db: DatabaseSync) {
         .map((r) => { const o = r as unknown as { x: string; y: string; g: number; w: number }; return [o.x, o.y, o.g, o.w] as [string, string, number, number]; });
       return { games: this.matchCount(f), champions: [...per].map(([id, e]) => ({ id, games: e.games, wins: e.wins, roles: [...e.roles].filter(([, g]) => g >= Math.max(2, e.games * 0.1)).map(([r]) => r) })), matchups: pairs(false), synergies: pairs(true), profiles: this.compProfiles(f) };
     },
+    /** Which slice of this player's match history the next crawl reads (0 = the newest games; back to 0 once the history is done). */
+    setSeedDepth: (puuid: string, depth: number) => void db.prepare("UPDATE seeds SET depth = ? WHERE puuid = ?").run(depth, puuid),
     markCrawled: (puuid: string, at: number) => void db.prepare("UPDATE seeds SET crawled_at = ? WHERE puuid = ?").run(at, puuid),
     counts: () => ({ matches: (db.prepare("SELECT COUNT(*) n FROM matches").get() as { n: number }).n, seeds: (db.prepare("SELECT COUNT(*) n FROM seeds").get() as { n: number }).n,
       crawled: (db.prepare("SELECT COUNT(*) n FROM seeds WHERE crawled_at > 0").get() as { n: number }).n }),

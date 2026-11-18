@@ -80,12 +80,20 @@ export class Collector {
       if (!seed) continue;
       this.busy.set(region, (this.busy.get(region) ?? 0) + 1);
       try {
-        for (const id of await this.riot.matchIds(seed.puuid, region, 0, this.cfg.matchesPerPlayer, 420, true)) {
-          if (this.stopping) break;
-          if (this.store.hasMatch(id) || this.skipped.has(id)) continue;
-          if (this.store.saveMatch(await this.riot.match(id, region, true), seed.tier, seed.platform)) { this.status.savedThisRun++; await this.saveTimeline(id, region); }
+        // One slice of the player's history per visit, newest first (Riot lists games newest to oldest). The store hands out depth 0 for every player
+        // before depth 1 for anyone, so the latest patch is filled first and older patches follow, down to the 5th kept one.
+        const per = this.cfg.matchesPerPlayer, depth = seed.depth ?? 0, ids = await this.riot.matchIds(seed.puuid, region, depth * per, per, 420, true);
+        let inWindow = false, done = true;
+        for (const id of ids) {
+          if (this.stopping) { done = false; break; }
+          if (this.store.hasMatch(id)) { inWindow = true; continue; }
+          if (this.skipped.has(id)) continue;
+          if (this.store.saveMatch(await this.riot.match(id, region, true), seed.tier, seed.platform)) { inWindow = true; this.status.savedThisRun++; await this.saveTimeline(id, region); }
           else { if (this.skipped.size >= 50_000) this.skipped.clear(); this.skipped.add(id); }
         }
+        // Go one slice deeper only while this slice still held games of the kept patches; otherwise the history is done and the player waits for the next recrawl.
+        const deeper = done && inWindow && ids.length >= per && depth + 1 < Collector.MAX_DEPTH;
+        this.store.setSeedDepth(seed.puuid, deeper ? depth + 1 : 0);
       } finally { this.busy.set(region, (this.busy.get(region) ?? 1) - 1); }
       return true;
     }
@@ -99,6 +107,8 @@ export class Collector {
     catch (e) { if (e instanceof HttpError && /API key/.test(e.message)) throw e; }
   }
 
+  /** At most this many slices of `matchesPerPlayer` games are read per player and round (5 x 20 = Riot's 100 games). */
+  static readonly MAX_DEPTH = 5;
   /** How many timelines one backfill step fetches. */
   static readonly BACKFILL_BATCH = 5;
 

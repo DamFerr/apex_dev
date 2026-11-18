@@ -12,7 +12,7 @@ export const participant = (i: number, over: Partial<RiotParticipant> = {}): Rio
   item0: 3157, item1: 3020, item2: i % 2 ? 3089 : 3157, item3: 1055, item4: 3100, item5: 3089, item6: 3340, summoner1Id: 4, summoner2Id: 14,
   perks: { styles: [{ style: i % 2 ? 8100 : 8000, selections: [{ perk: i % 2 ? 8112 : 8005 }, { perk: 8126 }, { perk: 8139 }, { perk: 8135 }] }, { style: i % 2 ? 8300 : 8200, selections: [{ perk: 8304 }, { perk: 8347 }] }], statPerks: { offense: 5008, flex: 5008, defense: 5011 } }, ...over });
 export const matchFixture = (id: string, over: Partial<RiotMatch["info"]> = {}, blueWin = true): RiotMatch => ({ metadata: { matchId: id },
-  info: { gameDuration: 1800, gameCreation: 1_700_000_000_000, gameEndTimestamp: 1_700_001_800_000, queueId: 420, gameVersion: "16.22.100.1",
+  info: { gameDuration: 1800, gameCreation: 1_700_000_000_000, gameEndTimestamp: 1_700_001_800_000, queueId: 420, gameVersion: "26.22.100.1",
     participants: Array.from({ length: 10 }, (_, i) => participant(i, { win: (i < 5) === blueWin })),
     teams: [{ teamId: 100, bans: [{ championId: 103 }, { championId: 0 }] }, { teamId: 200, bans: [{ championId: 222 }] }], ...over } });
 /** A timeline where every player maxes Q, then E, then W; starts Doran's Blade + 2 potions + trinket; buys boots, misclicks Lich Bane (undone), then Zhonya, Rabadon, Lich Bane. */
@@ -44,7 +44,7 @@ export function seededStore(db = new DatabaseSync(":memory:")): Store {
 /** seededStore plus 20 older-patch Diamond games on North America, so region, patch and rank filters have something to separate. */
 export function diverseStore(): Store {
   const store = seededStore();
-  for (let n = 0; n < 20; n++) store.saveMatch(matchFixture(`NA1_${n}`, { gameVersion: "16.21.9.9", gameEndTimestamp: 1_600_000_000_000 + n }, n % 2 === 0), "DIAMOND", "na1");
+  for (let n = 0; n < 20; n++) store.saveMatch(matchFixture(`NA1_${n}`, { gameVersion: "26.21.9.9", gameEndTimestamp: 1_600_000_000_000 + n }, n % 2 === 0), "DIAMOND", "na1");
   return store;
 }
 export const idleCollector = (riot: RiotApi, store: Store) => new Collector(riot, store, { platforms: ["euw1"], tiers: ["EMERALD"], pages: 1, matchesPerPlayer: 5, recrawlMs: 1000, concurrency: 1 });

@@ -20,7 +20,7 @@ test.describe("with the backend not running", () => {
 
 test("Champions page shows real collected statistics with their sample size", async ({ page }) => {
   await page.goto("/#/champions");
-  await expect(page.getByText(/Collected data: 40 games, patch 16\.22/)).toBeVisible();
+  await expect(page.getByText(/Collected data: 40 games, patch 26\.22/)).toBeVisible();
   const rows = page.locator("main tbody tr");
   await expect(rows).toHaveCount(10);
   await expect(rows.filter({ hasText: "Ahri" })).toContainText("56.7%"); // 26 wins in 40 games, shrunk toward 50%
@@ -40,8 +40,8 @@ test("champion page shows collected items, keystones and matchups", async ({ pag
 
 test("filters: region, patch and rank change the numbers, persist, and reset", async ({ page }) => {
   await page.goto("/#/champions");
-  await expect(page.getByText(/Collected data: 40 games, patch 16\.22/)).toBeVisible();   // default: latest patch, all regions and ranks
-  await expect(page.getByLabel("Patch").locator("option")).toHaveText([/Latest patch/, /Last 5 patches/, /Patch 16\.22/, /Patch 16\.21/]);   // only the kept patches, newest first
+  await expect(page.getByText(/Collected data: 40 games, patch 26\.22/)).toBeVisible();   // default: latest patch, all regions and ranks
+  await expect(page.getByLabel("Patch").locator("option")).toHaveText([/Latest patch/, /Last 5 patches/, /Patch 26\.22/, /Patch 26\.21/]);   // only the kept patches, newest first
   await page.getByLabel("Patch").selectOption("all");
   await expect(page.getByText(/Collected data: 60 games, last 5 patches/)).toBeVisible();
   await page.getByLabel("Region").selectOption("na1");
@@ -61,18 +61,22 @@ test("filters: region, patch and rank change the numbers, persist, and reset", a
   await page.reload();                                                                       // choices survive a restart
   await expect(page.getByLabel("Region")).toHaveValue("na1");
   await page.getByRole("button", { name: "Reset filters" }).click();
-  await expect(page.getByText(/Collected data: 40 games, patch 16\.22/)).toBeVisible();
+  await expect(page.getByText(/Collected data: 40 games, patch 26\.22/)).toBeVisible();
 });
 
 test("every region and rank is always offered, and ranks are cumulative", async ({ page }) => {
   await page.goto("/#/champions");
   await expect(page.getByLabel("Region").locator("option")).toHaveCount(18);                 // "all" + all 17 Riot regions
   await expect(page.getByLabel("Region").locator("option", { hasText: "Korea" })).toHaveText(/no data yet/);
-  const ranks = await page.getByLabel("Rank").locator("option").allTextContents();
-  expect(ranks[0]).toMatch(/All ranks \(Iron\+\)/);
-  expect(ranks.some((r) => /^Emerald\+ · 60 games/.test(r))).toBe(true);                    // cumulative count: Emerald and above
-  expect(ranks.some((r) => /^Diamond\+ · 20 games/.test(r))).toBe(true);
-  expect(ranks.some((r) => /^Emerald( |$)/.test(r))).toBe(false);                            // there is no "exactly Emerald" option
+  const rank = (re: RegExp) => page.getByLabel("Rank").locator("option", { hasText: re });
+  await expect(page.getByLabel("Rank").locator("option").first()).toHaveText(/All ranks \(Iron\+\)/);
+  await expect(rank(/^Emerald\+ · 40 games/)).toHaveCount(1);                                // counts follow the active filters: the latest patch has 40 Emerald games
+  await expect(rank(/^Diamond\+ · no data yet/)).toHaveCount(1);                             // the 20 Diamond games are on the older patch
+  await page.getByLabel("Patch").selectOption("all");
+  await expect(rank(/^Emerald\+ · 60 games/)).toHaveCount(1);                                // cumulative count: Emerald and above
+  await expect(rank(/^Diamond\+ · 20 games/)).toHaveCount(1);
+  await expect(page.getByLabel("Region").locator("option", { hasText: /^North America · 20 games/ })).toHaveCount(1);
+  await expect(rank(/^Emerald( |$)/)).toHaveCount(0);                                        // there is no "exactly Emerald" option
 });
 
 test("searching a Riot ID finds the player in any region, without choosing one", async ({ page }) => {

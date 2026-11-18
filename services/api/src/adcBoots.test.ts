@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildOrder, computeBuild, repairBoots, type BuildRow, type ItemMeta } from "./build";
-import { extraItemFields, extraItems, noteExtraFields, resetNoteForTests } from "./participantItems";
+import { extraItemFields, extraItems } from "./participantItems";
 import { toLoadout } from "./mapping";
 import type { RiotParticipant } from "./riot";
 
@@ -17,15 +17,15 @@ describe("extra item fields (the role quest slot)", () => {
     expect(extraItems(part({ item0: 1, item1: 2 }))).toEqual([]);
   });
   it("is case-insensitive and reads any slot number above 6", () => expect(extraItems(part({ ITEM9: 5, Item8: 6 }))).toEqual([5, 6]));
-  it("warns once, naming the field, so a wrong guess about the field name shows in the log", () => {
-    resetNoteForTests(); const log = vi.fn();
-    noteExtraFields(part({ roleBoundItem: 3006 }), log); noteExtraFields(part({ roleBoundItem: 3006 }), log); noteExtraFields(part({}), log);
-    expect(log).toHaveBeenCalledTimes(1); expect(log.mock.calls[0][0]).toContain("roleBoundItem=3006");
-  });
-  it("does not warn when there are none", () => { resetNoteForTests(); const log = vi.fn(); noteExtraFields(part({ item0: 1 }), log); expect(log).not.toHaveBeenCalled(); });
-  it("the match history shows the boots from the extra slot, and the trinket stays slot 6", () => {
+  it("the match history keeps the extra slot apart as roleItem, and the trinket stays slot 6", () => {
     const l = toLoadout(part({ item0: 3031, item1: 3036, item6: 3340, item7: 3006 }));
-    expect(l.items).toEqual([3031, 3036, 3006]); expect(l.trinket).toBe(3340);
+    expect(l.items).toEqual([3031, 3036]); expect(l.roleItem).toBe(3006); expect(l.trinket).toBe(3340);
+  });
+  it("shows the role item whether or not the six normal slots are full, and not at all when there is none", () => {
+    const full = toLoadout(part({ item0: 1, item1: 2, item2: 3, item3: 4, item4: 5, item5: 6, roleBoundItem: 3006 }));
+    expect(full.items).toEqual([1, 2, 3, 4, 5, 6]); expect(full.roleItem).toBe(3006);
+    expect(toLoadout(part({ item0: 1 })).roleItem).toBeUndefined();
+    expect(toLoadout(part({ item0: 3006, roleBoundItem: 3006 })).roleItem).toBeUndefined();   // not shown twice
   });
 });
 

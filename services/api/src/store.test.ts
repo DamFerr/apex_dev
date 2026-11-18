@@ -40,10 +40,10 @@ describe("store", () => {
   });
   it("derives the patch and reports the latest one", () => {
     const s = makeStore(new DatabaseSync(":memory:"));
-    s.saveMatch(matchFixture("A", { gameVersion: "16.21.5.9", gameEndTimestamp: 1000 }), "X", "euw1");
-    s.saveMatch(matchFixture("B", { gameVersion: "16.22.1.1", gameEndTimestamp: 2000 }), "X", "euw1");
-    expect(s.latestPatch()).toBe("16.22");
-    expect(s.matchCount({ patches: ["16.21"] })).toBe(1);
+    s.saveMatch(matchFixture("A", { gameVersion: "26.21.5.9", gameEndTimestamp: 1000 }), "X", "euw1");
+    s.saveMatch(matchFixture("B", { gameVersion: "26.22.1.1", gameEndTimestamp: 2000 }), "X", "euw1");
+    expect(s.latestPatch()).toBe("26.22");
+    expect(s.matchCount({ patches: ["26.21"] })).toBe(1);
     expect(s.matchCount({})).toBe(2);
   });
   it("aggregates champion games and wins, per role when asked", () => {
@@ -76,31 +76,54 @@ describe("store", () => {
     expect(new Set([first.puuid, second.puuid])).toEqual(new Set(["a", "b"]));   // claimed, so the next caller gets the other one
     expect(s.claimSeed(1000, 2000)).toBeUndefined();                              // everyone was crawled too recently
     expect(s.claimSeed(3000, 4000)).toBeDefined();                                // later, they are due again
+    s.addSeeds(["deep", "fresh"], "EMERALD", "euw1"); s.setSeedDepth("deep", 2); s.markCrawled("deep", 5000);
+    expect(s.claimSeed(1000, 6000)?.puuid).toBe("fresh");                          // depth 0 comes first, even though "deep" is due too (mid-history)
+    expect(s.claimSeed(1000, 6000)).toMatchObject({ puuid: "deep", depth: 2 });   // and a mid-history player is due at once, without waiting for the recrawl
   });
 });
 
 describe("store filters", () => {
   it("filters by region, patch and rank (exact or tier and above)", () => {
-    const s = diverseStore();                                   // 40 euw1 Emerald (16.22) + 20 na1 Diamond (16.21)
+    const s = diverseStore();                                   // 40 euw1 Emerald (26.22) + 20 na1 Diamond (26.21)
     expect(s.matchCount({})).toBe(60);
     expect(s.matchCount({ platform: "na1" })).toBe(20);
-    expect(s.matchCount({ patches: ["16.21"] })).toBe(20);
+    expect(s.matchCount({ patches: ["26.21"] })).toBe(20);
     expect(s.matchCount({ brackets: ["DIAMOND"] })).toBe(20);
     expect(s.matchCount({ brackets: ["EMERALD", "DIAMOND"] })).toBe(60);
-    expect(s.matchCount({ platform: "na1", patches: ["16.22"] })).toBe(0);
+    expect(s.matchCount({ platform: "na1", patches: ["26.22"] })).toBe(0);
     expect(s.championRows({ platform: "na1" }).find((r) => r.champion === "Ahri")?.games).toBe(20);
   });
   it("lists what the data contains for the filter menus, newest patch first", () => {
     const f = diverseStore().facets();
     expect(f.platforms).toEqual([{ id: "euw1", matches: 40 }, { id: "na1", matches: 20 }]);
     expect(f.ranks.map((r) => r.id).sort()).toEqual(["DIAMOND", "EMERALD"]);
-    expect(f.patches.map((p) => p.id)).toEqual(["16.22", "16.21"]);
+    expect(f.patches.map((p) => p.id)).toEqual(["26.22", "26.21"]);
+  });
+  it("facets count each menu under the other two filters only", () => {
+    const s = diverseStore(), f = s.facets({ patches: ["26.22"] });
+    expect(f.platforms).toEqual([{ id: "euw1", matches: 40 }]); expect(f.ranks).toEqual([{ id: "EMERALD", matches: 40 }]);
+    expect(f.patches.map((p) => p.matches)).toEqual([40, 20]);                      // the patch menu ignores the patch filter
+    expect(s.facets({ platform: "na1" }).patches.map((p) => p.matches)).toEqual([0, 20]);
+    expect(s.facets({ patches: [] }).platforms).toEqual([]);                        // an empty patch list matches nothing
+  });
+  it("stores Riot's public patch number: the game's internal 16.x is patch 26.x", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    s.saveMatch(matchFixture("EUW1_1", { gameVersion: "16.22.100.1" }), "EMERALD", "euw1"); s.saveMatch(matchFixture("EUW1_2", { gameVersion: "26.21.1.1" }), "EMERALD", "euw1");
+    expect(s.recentPatches()).toEqual(["26.22", "26.21"]);                              // internal 16.22 became 26.22, a version that is already public stays
+  });
+  it("renames patches stored with the internal number (16.x to 26.x) when the database is opened, and only those", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`CREATE TABLE matches (id TEXT PRIMARY KEY, patch TEXT NOT NULL, bracket TEXT, platform TEXT, ended_at INTEGER NOT NULL, duration INTEGER NOT NULL, blue_win INTEGER NOT NULL);
+      INSERT INTO matches VALUES ('A', '16.22', 'EMERALD', 'euw1', 1, 1800, 1), ('B', '16.9', 'EMERALD', 'euw1', 1, 1800, 1), ('C', '26.1', 'EMERALD', 'euw1', 1, 1800, 1), ('D', 'unknown', 'EMERALD', 'euw1', 1, 1800, 1);`);
+    const s = makeStore(db);
+    expect(s.recentPatches()).toEqual(["26.22", "26.9", "26.1"]); makeStore(db);          // a second open changes nothing
+    expect((db.prepare("SELECT patch FROM matches ORDER BY id").all() as { patch: string }[]).map((r) => r.patch)).toEqual(["26.22", "26.9", "26.1", "unknown"]);
   });
   it("upgrades a database made before platforms were tracked, keeping its data", () => {
     const db = new DatabaseSync(":memory:");
     db.exec(`CREATE TABLE matches (id TEXT PRIMARY KEY, patch TEXT NOT NULL, bracket TEXT, ended_at INTEGER NOT NULL, duration INTEGER NOT NULL, blue_win INTEGER NOT NULL);
       CREATE TABLE seeds (puuid TEXT PRIMARY KEY, tier TEXT NOT NULL, crawled_at INTEGER NOT NULL DEFAULT 0);
-      INSERT INTO matches VALUES ('OLD_1', '16.20', 'EMERALD', 1, 1800, 1); INSERT INTO seeds VALUES ('old-player', 'EMERALD', 0);`);
+      INSERT INTO matches VALUES ('OLD_1', '26.20', 'EMERALD', 1, 1800, 1); INSERT INTO seeds VALUES ('old-player', 'EMERALD', 0);`);
     const s = makeStore(db);
     expect(s.matchCount({ platform: "euw1" })).toBe(0);         // platform unknown until backfilled
     s.backfillPlatform("euw1");
@@ -136,7 +159,7 @@ describe("draft statistics", () => {
   });
   it("respects filters and drops pairs below the minimum", () => {
     const s = diverseStore();
-    expect(s.draftStats({ platform: "na1", patches: ["16.21"] }).games).toBe(20);
+    expect(s.draftStats({ platform: "na1", patches: ["26.21"] }).games).toBe(20);
     expect(s.draftStats({}, 61).matchups).toEqual([]);          // the busiest pair has 60 games
   });
 });
@@ -194,18 +217,18 @@ const onPatch = (id: string, patch: string) => matchFixture(id, { gameVersion: `
 const rows = (db: DatabaseSync, table: string) => (db.prepare(`SELECT COUNT(*) n FROM ${table}`).get() as { n: number }).n;
 
 describe("patch order", () => {
-  it("compares numerically: 16.9 is older than 16.10", () => {
-    expect(comparePatch("16.9", "16.10")).toBeLessThan(0);
-    expect(comparePatch("16.10", "16.9")).toBeGreaterThan(0);
-    expect(comparePatch("17.1", "16.24")).toBeGreaterThan(0);
-    expect(comparePatch("16.22", "16.22")).toBe(0);
-    expect(["16.9", "16.10", "16.2"].sort((a, b) => b.localeCompare(a))).toEqual(["16.9", "16.2", "16.10"]);   // what a string sort would do wrong
+  it("compares numerically: 26.9 is older than 26.10", () => {
+    expect(comparePatch("26.9", "26.10")).toBeLessThan(0);
+    expect(comparePatch("26.10", "26.9")).toBeGreaterThan(0);
+    expect(comparePatch("27.1", "26.24")).toBeGreaterThan(0);
+    expect(comparePatch("26.22", "26.22")).toBe(0);
+    expect(["26.9", "26.10", "26.2"].sort((a, b) => b.localeCompare(a))).toEqual(["26.9", "26.2", "26.10"]);   // what a string sort would do wrong
   });
   it("orders newest first, drops duplicates and values that are not patches, and takes the newest n", () => {
-    expect(patchOrder(["16.9", "16.10", "unknown", "16.2", "16.10", "", "16.10.1"])).toEqual(["16.10", "16.9", "16.2"]);
-    expect(lastPatches(["16.1", "16.2", "16.3", "16.4", "16.5", "16.6", "16.7"])).toHaveLength(KEEP_PATCHES);
-    expect(lastPatches(["16.1", "16.2", "16.3", "16.4", "16.5", "16.6", "16.7"])).toEqual(["16.7", "16.6", "16.5", "16.4", "16.3"]);
-    expect(lastPatches(["16.9", "16.10"], 1)).toEqual(["16.10"]);
+    expect(patchOrder(["26.9", "26.10", "unknown", "26.2", "26.10", "", "26.10.1"])).toEqual(["26.10", "26.9", "26.2"]);
+    expect(lastPatches(["26.1", "26.2", "26.3", "26.4", "26.5", "26.6", "26.7"])).toHaveLength(KEEP_PATCHES);
+    expect(lastPatches(["26.1", "26.2", "26.3", "26.4", "26.5", "26.6", "26.7"])).toEqual(["26.7", "26.6", "26.5", "26.4", "26.3"]);
+    expect(lastPatches(["26.9", "26.10"], 1)).toEqual(["26.10"]);
     expect(lastPatches([])).toEqual([]);
   });
 });
@@ -215,21 +238,21 @@ describe("keeping only the last 5 patches", () => {
 
   it("refuses a game from a patch older than the 5 newest known, and one without a readable patch", () => {
     const s = makeStore(new DatabaseSync(":memory:"));
-    fill(s, ["16.8", "16.9", "16.10", "16.11", "16.12"]);
-    expect(s.saveMatch(onPatch("OLD1", "16.7"), "EMERALD", "euw1")).toBe(false);          // 6th newest
+    fill(s, ["26.8", "26.9", "26.10", "26.11", "26.12"]);
+    expect(s.saveMatch(onPatch("OLD1", "26.7"), "EMERALD", "euw1")).toBe(false);          // 6th newest
     expect(s.hasMatch("OLD1")).toBe(false);
-    expect(s.saveMatch(onPatch("OK1", "16.8"), "EMERALD", "euw1")).toBe(true);            // still inside the window
+    expect(s.saveMatch(onPatch("OK1", "26.8"), "EMERALD", "euw1")).toBe(true);            // still inside the window
     expect(s.saveMatch(matchFixture("NOVER", { gameVersion: undefined }), "EMERALD", "euw1")).toBe(false);
-    expect(s.recentPatches()).toEqual(["16.12", "16.11", "16.10", "16.9", "16.8"]);
+    expect(s.recentPatches()).toEqual(["26.12", "26.11", "26.10", "26.9", "26.8"]);
   });
   it("removes the oldest patch (games, players and bans) when a sixth patch appears, comparing numerically", () => {
     const db = new DatabaseSync(":memory:"), s = makeStore(db);
-    fill(s, ["16.9", "16.10", "16.11", "16.12", "16.13"]);                                // a string sort would call 16.9 the NEWEST
+    fill(s, ["26.9", "26.10", "26.11", "26.12", "26.13"]);                                // a string sort would call 26.9 the NEWEST
     expect([rows(db, "matches"), rows(db, "participants"), rows(db, "bans")]).toEqual([10, 100, 20]);
-    s.saveMatch(onPatch("NEW1", "16.14"), "EMERALD", "euw1");
-    expect(s.recentPatches()).toEqual(["16.14", "16.13", "16.12", "16.11", "16.10"]);
-    expect(s.matchCount({ patches: ["16.9"] })).toBe(0);
-    expect(s.matchCount({ patches: ["16.10"] })).toBe(2);                                 // 16.10 survived, 16.9 did not
+    s.saveMatch(onPatch("NEW1", "26.14"), "EMERALD", "euw1");
+    expect(s.recentPatches()).toEqual(["26.14", "26.13", "26.12", "26.11", "26.10"]);
+    expect(s.matchCount({ patches: ["26.9"] })).toBe(0);
+    expect(s.matchCount({ patches: ["26.10"] })).toBe(2);                                 // 26.10 survived, 26.9 did not
     expect([rows(db, "matches"), rows(db, "participants"), rows(db, "bans")]).toEqual([9, 90, 18]);
     expect(db.prepare("SELECT COUNT(*) n FROM participants WHERE match_id NOT IN (SELECT id FROM matches)").get()).toEqual({ n: 0 });   // nothing orphaned
     expect(db.prepare("SELECT COUNT(*) n FROM bans WHERE match_id NOT IN (SELECT id FROM matches)").get()).toEqual({ n: 0 });
@@ -237,7 +260,7 @@ describe("keeping only the last 5 patches", () => {
   it("does not touch rank snapshots (LP history) or seeds when deleting old patches", () => {
     const db = new DatabaseSync(":memory:"), s = makeStore(db);
     s.saveRankSnapshot("me", { tier: "EMERALD", division: "II", lp: 10, wins: 1, losses: 1 }, 1000); s.addSeeds(["x"], "EMERALD", "euw1");
-    fill(s, ["16.1", "16.2", "16.3", "16.4", "16.5", "16.6", "16.7"]);
+    fill(s, ["26.1", "26.2", "26.3", "26.4", "26.5", "26.6", "26.7"]);
     expect(rows(db, "rank_snapshots")).toBe(1); expect(rows(db, "seeds")).toBe(1);
     expect(s.rankHistory("me")).toHaveLength(1);
   });
@@ -245,11 +268,11 @@ describe("keeping only the last 5 patches", () => {
     const db = new DatabaseSync(":memory:"), s = makeStore(db);
     // Simulate data written by an older version: insert straight into the tables, bypassing the retention rule.
     db.exec("DROP INDEX IF EXISTS m_patch");
-    for (const [i, p] of ["16.5", "16.6", "16.7", "16.8", "16.9", "16.10", "16.11"].entries()) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('L${i}', '${p}', 'EMERALD', 'euw1', ${i + 1}, 1800, 1);
+    for (const [i, p] of ["26.5", "26.6", "26.7", "26.8", "26.9", "26.10", "26.11"].entries()) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('L${i}', '${p}', 'EMERALD', 'euw1', ${i + 1}, 1800, 1);
       INSERT INTO participants (match_id, puuid, team, champion, win, items) VALUES ('L${i}', 'x', 100, 'Ahri', 1, '[]'); INSERT INTO bans VALUES ('L${i}', 103);`);
-    expect(s.pruneOldPatches()).toEqual({ kept: ["16.11", "16.10", "16.9", "16.8", "16.7"], removedMatches: 2 });
+    expect(s.pruneOldPatches()).toEqual({ kept: ["26.11", "26.10", "26.9", "26.8", "26.7"], removedMatches: 2 });
     expect([rows(db, "matches"), rows(db, "participants"), rows(db, "bans")]).toEqual([5, 5, 5]);
-    expect(s.pruneOldPatches()).toEqual({ kept: ["16.11", "16.10", "16.9", "16.8", "16.7"], removedMatches: 0 });
+    expect(s.pruneOldPatches()).toEqual({ kept: ["26.11", "26.10", "26.9", "26.8", "26.7"], removedMatches: 0 });
   });
   it("never empties the database when no stored patch is valid", () => {
     const db = new DatabaseSync(":memory:"), s = makeStore(db);
@@ -259,18 +282,18 @@ describe("keeping only the last 5 patches", () => {
   });
   it("decides the newest patch from the data, not from game end times: an old-patch game ending late does not become the latest", () => {
     const s = makeStore(new DatabaseSync(":memory:"));
-    s.saveMatch(matchFixture("A", { gameVersion: "16.10.1.1", gameEndTimestamp: 1000 }), "X", "euw1");
-    s.saveMatch(matchFixture("B", { gameVersion: "16.9.1.1", gameEndTimestamp: 9_000_000 }), "X", "euw1");   // finished later, but on an older patch
-    expect(s.latestPatch()).toBe("16.10");
+    s.saveMatch(matchFixture("A", { gameVersion: "26.10.1.1", gameEndTimestamp: 1000 }), "X", "euw1");
+    s.saveMatch(matchFixture("B", { gameVersion: "26.9.1.1", gameEndTimestamp: 9_000_000 }), "X", "euw1");   // finished later, but on an older patch
+    expect(s.latestPatch()).toBe("26.10");
   });
   it("lists only the kept patches in the filter menus, newest first, with their real sample sizes", () => {
     const s = makeStore(new DatabaseSync(":memory:"));
-    fill(s, ["16.1", "16.2", "16.3", "16.4", "16.5", "16.6"], 3);
-    expect(s.facets().patches).toEqual([{ id: "16.6", matches: 3 }, { id: "16.5", matches: 3 }, { id: "16.4", matches: 3 }, { id: "16.3", matches: 3 }, { id: "16.2", matches: 3 }]);
+    fill(s, ["26.1", "26.2", "26.3", "26.4", "26.5", "26.6"], 3);
+    expect(s.facets().patches).toEqual([{ id: "26.6", matches: 3 }, { id: "26.5", matches: 3 }, { id: "26.4", matches: 3 }, { id: "26.3", matches: 3 }, { id: "26.2", matches: 3 }]);
   });
   it("an empty patch list matches nothing, and undefined means no restriction", () => {
-    const s = makeStore(new DatabaseSync(":memory:")); fill(s, ["16.1", "16.2"]);
-    expect(s.matchCount({ patches: [] })).toBe(0); expect(s.matchCount({})).toBe(4); expect(s.matchCount({ patches: ["16.1", "16.2"] })).toBe(4);
+    const s = makeStore(new DatabaseSync(":memory:")); fill(s, ["26.1", "26.2"]);
+    expect(s.matchCount({ patches: [] })).toBe(0); expect(s.matchCount({})).toBe(4); expect(s.matchCount({ patches: ["26.1", "26.2"] })).toBe(4);
   });
   it("relations: lane opponents share the role, teammates are the other four roles", () => {
     const r = seededStore().relations("Ahri", "TOP", {});
@@ -280,9 +303,9 @@ describe("keeping only the last 5 patches", () => {
   });
   it("relations: pairs under the minimum are left out, the limit keeps the busiest, and filters apply", () => {
     const s = diverseStore();
-    expect(s.relations("Ahri", "TOP", { patches: ["16.22"] }, 41).matchups).toEqual([]);          // 40 games is under a minimum of 41
+    expect(s.relations("Ahri", "TOP", { patches: ["26.22"] }, 41).matchups).toEqual([]);          // 40 games is under a minimum of 41
     expect(s.relations("Ahri", "TOP", {}, 5, 2).synergies).toHaveLength(2);
-    expect(s.relations("Ahri", "TOP", { patches: ["16.21"] }).matchups[0]).toMatchObject({ games: 20, wins: 10 });
+    expect(s.relations("Ahri", "TOP", { patches: ["26.21"] }).matchups[0]).toMatchObject({ games: 20, wins: 10 });
     expect(s.relations("Ahri", "TOP", { brackets: ["MASTER"] }).matchups).toEqual([]);
     expect(s.relations("Ahri", "JUNGLE", {}).matchups).toEqual([]);                                  // Ahri never plays jungle
   });
@@ -331,17 +354,17 @@ describe("store.compact (shrinking the file after a cleanup)", () => {
       const db = new DatabaseSync(file), s = makeStore(db);
       // Old-patch games written straight into the tables (bypasses the retention rule, like data from an older version), with fat rows.
       db.exec("BEGIN");
-      for (let i = 0; i < 3000; i++) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('O${i}', '${i < 2900 ? "16.1" : "16.9"}', 'EMERALD', 'euw1', 1, 1800, 1);
+      for (let i = 0; i < 3000; i++) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('O${i}', '${i < 2900 ? "26.1" : "26.9"}', 'EMERALD', 'euw1', 1, 1800, 1);
         INSERT INTO participants (match_id, puuid, team, champion, win, items, perks) VALUES ('O${i}', 'x', 100, 'Ahri', 1, '[]', '${"x".repeat(2000)}');`);
       db.exec("COMMIT");
       s.recentPatches(); // loads the patch list
-      for (const p of ["16.2", "16.3", "16.4", "16.5", "16.6"]) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('N${p}', '${p}', 'EMERALD', 'euw1', 1, 1800, 1)`);
+      for (const p of ["26.2", "26.3", "26.4", "26.5", "26.6"]) db.exec(`INSERT INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win) VALUES ('N${p}', '${p}', 'EMERALD', 'euw1', 1, 1800, 1)`);
       const fresh = makeStore(db); // a second store reads the patches again, like a restart
       expect(fresh.pruneOldPatches().removedMatches).toBe(2901);
       const before = statSync(file).size;
       expect(fresh.compact()).toBe(true);
       expect(statSync(file).size).toBeLessThan(before / 5); // most of the file was deleted games
-      expect(db.prepare("SELECT COUNT(*) AS n FROM matches").get()).toEqual({ n: 104 }); // 100 of 16.9 + 4 single-game patches (16.2 left the window too)
+      expect(db.prepare("SELECT COUNT(*) AS n FROM matches").get()).toEqual({ n: 104 }); // 100 of 26.9 + 4 single-game patches (26.2 left the window too)
       expect(db.prepare("SELECT COUNT(*) AS n FROM participants").get()).toEqual({ n: 100 });
       db.close();
     } finally { rmSync(dir, { recursive: true, force: true }); }

@@ -43,7 +43,7 @@ async function testBackend(base: string) {
 }
 
 function CollectorRow() {
-  const { data, refetch } = useCollector(), base = useUi((s) => s.backendUrl), cover = useFilterOptions().data;
+  const { data, refetch } = useCollector(), base = useUi((s) => s.backendUrl), cover = useFilterOptions(false).data;
   const act = async (cmd: "start" | "stop") => { try { await collectorCommand(base, cmd); await refetch(); } catch { toast("Can't reach the local backend. Start it with: pnpm api", "error"); } };
   const withData = (cover?.platforms ?? []).filter((p) => p.matches > 0).sort((a, b) => b.matches - a.matches);
   return (
