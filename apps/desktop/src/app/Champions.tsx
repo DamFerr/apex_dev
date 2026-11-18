@@ -13,15 +13,15 @@ const ROLES: Role[] = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
 type SortKey = "name" | "win" | "pick" | "ban" | "games";
 
 export function Champions() {
-  const [role, setRole] = useState<Role | undefined>(); const [q, setQ] = useState("");
+  const [role, setRole] = useState<Role | undefined>();
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: "win", dir: -1 });
   const { data, isError, error } = useChampions(role), nav = useNavigate();
   const rows = useMemo(() => {
     if (!data) return [];
     const v = (c: (typeof data.champions)[number]) => ({ name: c.name, win: rate(c.wins, c.games).adj, pick: c.games / data.totalGames, ban: c.bans / data.totalGames, games: c.games })[sort.k];
-    return data.champions.filter((c) => c.name.toLowerCase().includes(q.toLowerCase()))
+    return [...data.champions]   // a copy: sorting must not reorder the cached query data
       .sort((a, b) => { const x = v(a), y = v(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
-  }, [data, q, sort]);
+  }, [data, sort]);
   const th = (k: SortKey, label: string, left = false) => (
     <th className={`font-normal ${left ? "text-left" : "text-right"}`} aria-sort={sort.k === k ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
       <button className="focus-ring hover:text-text" onClick={() => setSort({ k, dir: sort.k === k ? (-sort.dir as 1 | -1) : -1 })}>{label}{sort.k === k ? (sort.dir === 1 ? " ↑" : " ↓") : ""}</button></th>);
@@ -34,8 +34,6 @@ export function Champions() {
     <div className="flex flex-wrap items-center gap-2 mb-4">
       <Chip active={!role} onClick={() => setRole(undefined)}>All</Chip>
       {ROLES.map((r) => <Chip key={r} active={role === r} onClick={() => setRole(r)}>{roleName(r)}</Chip>)}
-      <input aria-label="Filter champions" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter…"
-        className="focus-ring ml-auto h-8 w-48 px-3 rounded-md bg-raised/60 border border-line/10 text-sm" />
     </div>
     <div className="glass rounded-lg p-2">
       <table className="w-full text-sm">

@@ -15,8 +15,18 @@ test("lists the collected champions, filters by role and sorts", async ({ page }
   await expect(rows.first()).toContainText("Zed");
   await header.click();
   await expect(rows.first()).toContainText("Ahri");
-  await page.getByLabel("Filter champions").fill("lee");
-  await expect(rows).toHaveCount(1);
+  await expect(page.getByLabel("Filter champions")).toHaveCount(0);   // searching moved to the Ctrl+K palette
+});
+
+test("a champion is reached through the palette", async ({ page }) => {
+  await page.goto("/#/champions");
+  await page.keyboard.press("Control+k");
+  const dialog = page.getByRole("dialog", { name: "Command palette" });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.type("lee");
+  await expect(dialog.getByRole("option").filter({ hasText: "LeeSin" })).toBeVisible();   // champion list from Data Dragon has loaded
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/champions\/LeeSin/);
 });
 
 test("opens a champion page with stats, builds and matchups", async ({ page }) => {

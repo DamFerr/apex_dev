@@ -7,6 +7,7 @@
     "dev:web": "vite",
     "build:web": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "tauri": "tauri",
     "test:e2e": "playwright test"
   },
@@ -36,6 +37,7 @@
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "vitest": "^2.1.4"
   }
 }

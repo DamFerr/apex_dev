@@ -77,7 +77,11 @@ test("every region and rank is always offered, and ranks are cumulative", async 
 
 test("searching a Riot ID finds the player in any region, without choosing one", async ({ page }) => {
   await page.goto("/#/");
-  const box = page.getByLabel("Riot ID", { exact: true }); await box.fill("Na Player#NA1"); await box.press("Enter");
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+  await page.keyboard.type("Na Player#NA1");
+  await expect(page.getByRole("option").filter({ hasText: "Look up Na Player#NA1" })).toBeVisible();
+  await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Na Player#NA1" })).toBeVisible();
   await expect(page.getByText(/Level 77 · NA1/)).toBeVisible();                              // found on North America automatically
 });

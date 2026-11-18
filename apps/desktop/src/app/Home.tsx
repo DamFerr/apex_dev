@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { useUi } from "../lib/store";
 import { shrink, wilson, sampleBadge } from "@apex/stats-core";
 import { Skeleton, StatCard, ProgressRing } from "../components/ui";
-import { SearchBox } from "../components/SearchBox";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { MatchRowBody, QueueFilterChips } from "../components/MatchRow";
 import { useMatches, useSummoner } from "../lib/api";
@@ -19,14 +18,12 @@ export function Home() {
   const r = sum.data?.rank;
   if (!me) return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Home</h1>
-    <p className="text-sm text-muted mt-1 mb-6">Search any player, or add your own Riot ID to see your rank and recent games here.</p>
-    <div className="mb-6"><SearchBox /></div>
+    <p className="text-sm text-muted mt-1 mb-6">Press Ctrl+K to search any player, or add your own Riot ID to see your rank and recent games here.</p>
     <RiotIdPrompt />
   </>);
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Home</h1>
     <p className="text-sm text-muted mt-1 mb-6">Your recent games. Win rates show their uncertainty.</p>
-    <div className="mb-6"><SearchBox /></div>
     <div className="grid grid-cols-3 gap-4">
       <div className="glass rounded-lg p-5 flex items-center gap-4">
         {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} /><TierIcon tier={r.tier} division={r.division} size={44} />

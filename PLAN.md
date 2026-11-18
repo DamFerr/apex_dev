@@ -189,15 +189,18 @@ Rules: one step per turn; max ~4 source files plus tests; if a step grows, split
 - [ ] **B.2** UI: champion and role filter chips on Profile (shared with Home). Files: `components/FilterBar.tsx` or `MatchRow.tsx`, `lib/store.ts`, e2e.
 
 ### C. One search bar (A.2c is done, unblocked)
-- [ ] **C.1 (NEXT)** Pure matching function (case, space and apostrophe-insensitive: "kaisa", "wukong") with unit tests. Files: new `apps/desktop/src/lib/searchMatch.ts` + test.
-- [ ] **C.2** Recent searches and favourites store: confirm what `lib/store.ts` already holds; add only what is missing, with tests.
-- [ ] **C.3** Ctrl+K palette: group "Champions" (icon) using C.1. Files: palette component, `lib/nav.ts`.
-- [ ] **C.4** Palette: group "Players" = recents, favourites, players already stored by the backend (small endpoint if needed) + a "Look up name#tag" entry when the text looks like a Riot ID. No Riot calls while typing (Riot has no name-prefix search).
-- [ ] **C.5** Palette: group "Pages"; keyboard (arrows, Enter, Esc); e2e test.
-- [ ] **C.6** Remove the other search boxes (Home quick search, Champions search, Profile search field); update e2e specs.
+- [x] **C.1** Pure matching function (case, space and apostrophe-insensitive: "kaisa", "wukong") with unit tests. Files: new `apps/desktop/src/lib/searchMatch.ts` + test.
+- [x] **C.2** Recent searches and favourites store: confirm what `lib/store.ts` already holds; add only what is missing, with tests.
+- [x] **C.3** Ctrl+K palette: group "Champions" (icon) using C.1. Files: palette component, `lib/nav.ts`.
+- [x] **C.4a** Palette group "Players": favourites + recents (star toggle, Shift+Enter) and a "Look up name#tag" row for a full Riot ID; no Riot calls while typing.
+- [x] **C.4b** Backend: `GET /v1/players?q=&limit=` lists players this backend already looked up (read from the local `acct:` cache rows via new `Cache.scan`; no Riot call, q needs 2+ characters). Note: there is no players table; names only exist for Riot IDs looked up through the backend (participants store puuids only).
+- [x] **C.4c** Client: `useStoredPlayers` (`lib/api`, debounced 200 ms, 2+ characters, never throws) feeds the palette Players group via `buildPaletteEntries` option `stored`; deduped against favourites/recents.
+- [x] **C.5** Palette keyboard and e2e: new `apps/desktop/e2e/palette.spec.ts` (6 tests: arrows/Enter/Esc, champion `LEE sin`, Riot ID lookup + recents, Shift+Enter favourite + reload, stored player, backend offline). Written and parsed but NOT run (no browser in the build environment): owner runs `pnpm --filter desktop test:e2e palette`.
+- [x] **C.6a** Removed `SearchBox` (Home 2x, Profile 2x; component deleted). Copy now points to Ctrl+K; Profile keeps its recent-search chips. e2e: `profile.spec.ts` (first test now uses the palette) and `backend.spec.ts` (NA Riot ID lookup via the palette). Decision: LiveGame's "Riot ID to scout" form stays (it scouts a live game at `/live/<id>`, which the palette cannot do) and its spec is untouched.
+- [x] **C.6b** Removed the Champions page "Filter champions" field (table keeps role chips and sorting; sorting now copies the list so cached data is not reordered). e2e: `champions.spec.ts` asserts the field is gone and adds a palette test (`lee` opens LeeSin). Block C complete.
 
 ### D. Overlay (Rust involved; unverified until run on the owner's machine)
-- [ ] **D.1** Overlay card content: remove runes and summoner spells, keep skill order, starting items, build order; boots follow the champion-page rule. File: `app/Overlay.tsx`.
+- [ ] **D.1 (NEXT)** Overlay card content: remove runes and summoner spells, keep skill order, starting items, build order; boots follow the champion-page rule. File: `app/Overlay.tsx`.
 - [ ] **D.2** Pure position-clamping function (per monitor, scale factor, fallback to primary top-left if the saved monitor is gone) with tests. File: `packages/lcu-core/src/overlay.ts` + test.
 - [ ] **D.3** Settings store: saved free position per monitor, version bump and migration. File: `lib/store.ts`.
 - [ ] **D.4** Rust: "move mode" window commands (not click-through while moving, visible frame, leave move mode on game-phase change). Files: `src-tauri/src/overlay.rs`, `lib.rs`, `capabilities/overlay.json`.

@@ -1,7 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ApexApi, QueueFilter, Role } from "@apex/schema";
 import { createHttpApi } from "./http";
 import { useUi } from "../store";
+import { normalizeSearch } from "../searchMatch";
+import { fetchStoredPlayers } from "./storedPlayers";
 
 /** Screens only ever use this. It always talks to the local backend (services/api). */
 export const api: ApexApi = createHttpApi(() => useUi.getState().backendUrl);
@@ -30,3 +33,22 @@ export const useDraftStats = () => { const f = useFilter(); return useQuery({ qu
 export const useLiveGame = (id: string) => useQuery({ queryKey: [useScope(), "live", id], queryFn: () => api.getLiveGame(id), enabled: !!id, retry: false, staleTime: 15_000,
   refetchInterval: (q) => (q.state.data?.inGame ? 30_000 : false) });
 export const useRecap = (id: string, matchId?: string) => useQuery({ queryKey: [useScope(), "recap", id, matchId ?? "latest"], queryFn: () => api.getRecap(id, matchId), enabled: !!id, retry: false, staleTime: 60_000 });
+
+/**
+ * Players the local backend already stored, matching the palette text (debounced 200 ms, only for 2+ meaningful characters).
+ * The backend never calls Riot for this; if it is offline the list is simply empty. Always returns Riot IDs (strings).
+ */
+const NONE: string[] = [];
+export function useStoredPlayers(text: string, enabled = true): string[] {
+  const base = useScope(), [debounced, setDebounced] = useState("");
+  useEffect(() => { const t = setTimeout(() => setDebounced(text.trim()), 200); return () => clearTimeout(t); }, [text]);
+  // `live` follows the text at once (an emptied box clears the list immediately); the request itself waits for the debounce. While the
+  // debounce is pending the previous answer stays, and the palette filters it again against the current text.
+  const q = debounced, live = enabled && normalizeSearch(text).length >= 2, on = live && normalizeSearch(q).length >= 2;
+  const { data } = useQuery({
+    queryKey: [base, "stored-players", q], enabled: on, retry: false, staleTime: 30_000, placeholderData: keepPreviousData,
+    queryFn: ({ signal }) => fetchStoredPlayers(base, q, signal),
+  });
+  // Memoised: the palette recomputes its rows (and scrolls the highlighted one into view) whenever this array changes.
+  return useMemo(() => (live && data ? data.map((p) => p.riotId) : NONE), [live, data]);
+}

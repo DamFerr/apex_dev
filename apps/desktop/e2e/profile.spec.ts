@@ -1,12 +1,15 @@
 import { expect, test } from "./helpers";
 
 
-test("search validates Riot IDs and opens a profile", async ({ page }) => {
+test("the palette opens a profile from a Riot ID and says so when nothing matches", async ({ page }) => {
   await page.goto("/#/");
-  const box = page.getByLabel("Riot ID", { exact: true });
-  await box.fill("nohashtag"); await box.press("Enter");
-  await expect(page.getByText("Enter a Riot ID like Name#TAG")).toBeVisible();
-  await box.fill("Test Player#EUW"); await box.press("Enter");
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+  await page.keyboard.type("nohashtag");
+  await expect(page.getByRole("dialog").getByText(/Nothing matches/)).toBeVisible();    // not a Riot ID: no lookup row
+  await page.keyboard.press("Control+a"); await page.keyboard.type("Test Player#EUW");
+  await expect(page.getByRole("option").filter({ hasText: "Look up Test Player#EUW" })).toBeVisible();
+  await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Test Player#EUW" })).toBeVisible();
   await expect(page.getByText("Emerald II")).toBeVisible();
 });

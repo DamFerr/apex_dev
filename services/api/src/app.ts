@@ -10,6 +10,7 @@ import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGam
 import { TIERS } from "./collector";
 import { computeBuild, isFinished, itemWpas } from "./build";
 import { canonicalChampionId } from "./champions";
+import { ACCOUNT_PREFIX, searchStoredPlayers, type StoredPlayer } from "./players";
 import type { Filter } from "./store";
 import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary } from "@apex/schema";
 
@@ -85,6 +86,11 @@ export async function buildApp(deps: Deps) {
     const out = { ...toSummoner(`${acct.gameName}#${acct.tagLine}`, s.summonerLevel, entries), platform };
     if (out.rank) store.saveRankSnapshot(acct.puuid, out.rank, now());
     return out;
+  });
+  /** Players this backend has already looked up, filtered by name (`?q=`, at least 2 characters). Local data only, no Riot call: it feeds the app's search palette. */
+  app.get<{ Querystring: { q?: string; limit?: string } }>("/v1/players", async (req): Promise<StoredPlayer[]> => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
+    return searchStoredPlayers(cache.scan(ACCOUNT_PREFIX, 500), req.query.q ?? "", limit);
   });
   app.get<{ Params: { riotId: string } }>("/v1/players/:riotId", async (req) => {
     const acct = await identity(req.params.riotId), platform = await homePlatform(acct.puuid);

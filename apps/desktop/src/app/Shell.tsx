@@ -1,10 +1,12 @@
 import { Suspense } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Minus, Search, Square, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Minus, Search, Square, Star, User, UserSearch, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { NAV, SETTINGS_ITEM, type NavItem } from "../lib/nav";
+import { NAV, SETTINGS_ITEM, buildPaletteEntries, type NavItem, type PaletteEntry } from "../lib/nav";
+import { ChampIcon } from "../components/ChampIcon";
 import { useUi } from "../lib/store";
+import { useStoredPlayers } from "../lib/api";
 import { win } from "../lib/tauri";
 import { Skeleton, spring } from "../components/ui";
 import { preload } from "./lazyPages";
@@ -76,12 +78,16 @@ function StatusArea() {
 }
 
 function CommandPalette() {
-  const { paletteOpen, setPalette } = useUi();
+  const { paletteOpen, setPalette, favourites, recent, addRecent, toggleFavourite } = useUi();
   const nav = useNavigate();
+  const listRef = useRef<HTMLUListElement>(null);
   const [q, setQ] = useState(""); const [i, setI] = useState(0);
   const prevFocus = useRef<HTMLElement | null>(null);
   useEffect(() => { if (paletteOpen) prevFocus.current = document.activeElement as HTMLElement; else prevFocus.current?.focus?.(); }, [paletteOpen]);
-  const items = useMemo(() => [...NAV, SETTINGS_ITEM].filter((n) => n.label.toLowerCase().includes(q.toLowerCase())), [q]);
+  const champs = useDdChampions().data, stored = useStoredPlayers(q, paletteOpen);
+  const items = useMemo(() => buildPaletteEntries(q, champs, { favourites, recent, stored }), [q, champs, favourites, recent, stored]);
+  // Keep the highlighted row visible when arrowing through a long list (no smooth scrolling: respects reduce motion).
+  useEffect(() => { listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); }, [i, items]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(!useUi.getState().paletteOpen); }
@@ -90,7 +96,12 @@ function CommandPalette() {
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, [setPalette]);
   useEffect(() => { if (paletteOpen) { setQ(""); setI(0); } }, [paletteOpen]);
-  const go = (n?: NavItem) => { if (n) { nav(n.path); setPalette(false); } };
+  const go = (e?: PaletteEntry) => {
+    if (!e) return;
+    // Opening a player (or a looked-up Riot ID) puts it at the top of the recent searches.
+    if (e.kind === "player" || e.kind === "lookup") addRecent(e.riotId);
+    nav(e.kind === "page" ? e.item.path : e.path); setPalette(false);
+  };
   return (
     <AnimatePresence>
       {paletteOpen && (
@@ -99,22 +110,39 @@ function CommandPalette() {
           <motion.div role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(e) => e.stopPropagation()}
             initial={{ y: -12, scale: 0.97 }} animate={{ y: 0, scale: 1 }} exit={{ y: -8, opacity: 0 }} transition={spring}
             className="glass rounded-xl w-[560px] overflow-hidden">
-            <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setI(0); }} placeholder="Go to…"
+            <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setI(0); }} placeholder="Search pages, champions and players…"
               onKeyDown={(e) => {
                 if (e.key === "ArrowDown") { e.preventDefault(); setI((i + 1) % Math.max(items.length, 1)); }
                 if (e.key === "ArrowUp") { e.preventDefault(); setI((i - 1 + items.length) % Math.max(items.length, 1)); }
-                if (e.key === "Enter") go(items[i]);
+                if (e.key === "Enter" && e.shiftKey) { const p = items[i]; if (p && (p.kind === "player" || p.kind === "lookup")) toggleFavourite(p.riotId); }
+                else if (e.key === "Enter") go(items[i]);
                 if (e.key === "Tab") e.preventDefault(); // keep focus inside the dialog
               }}
               className="w-full h-12 px-4 bg-transparent outline-none border-b border-line/10 text-sm" />
-            <ul className="p-2 max-h-72 overflow-auto" role="listbox">
-              {items.map((n, idx) => (
-                <li key={n.path} role="option" aria-selected={idx === i} onMouseEnter={() => setI(idx)} onClick={() => go(n)}
-                  className={`flex items-center gap-3 h-10 px-3 rounded-md text-sm cursor-pointer ${idx === i ? "bg-accent/20" : ""}`}>
-                  <n.icon size={16} className="text-muted" /> {n.label}
-                </li>
+            <ul ref={listRef} className="p-2 max-h-72 overflow-auto" role="listbox">
+              {items.map((e, idx) => (
+                <Fragment key={e.key}>
+                  {(idx === 0 || items[idx - 1].group !== e.group) && (
+                    <li role="presentation" className="px-3 pt-2 pb-1 text-[0.6875rem] uppercase tracking-wide text-muted">{e.group}</li>
+                  )}
+                  <li role="option" aria-selected={idx === i} onMouseEnter={() => setI(idx)} onClick={() => go(e)}
+                    className={`flex items-center gap-3 h-10 px-3 rounded-md text-sm cursor-pointer ${idx === i ? "bg-accent/20" : ""}`}>
+                    {e.kind === "page" ? <><e.item.icon size={16} className="text-muted" /> {e.item.label}</>
+                      : e.kind === "champion" ? <><ChampIcon id={e.champion.id} name={e.champion.name} size={24} /> {e.champion.name}</>
+                      : e.kind === "lookup" ? <><UserSearch size={16} className="text-accent" /> <span className="truncate">Look up {e.riotId}</span></>
+                      : <><User size={16} className="text-muted" /> <span className="truncate">{e.riotId}</span></>}
+                    {(e.kind === "player" || e.kind === "lookup") && (
+                      <button type="button" tabIndex={-1} title={(e.kind === "player" && e.favourite ? "Remove from favourites" : "Add to favourites") + " (Shift+Enter)"}
+                        aria-label={e.kind === "player" && e.favourite ? "Remove from favourites" : "Add to favourites"} aria-pressed={e.kind === "player" && e.favourite}
+                        onClick={(ev) => { ev.stopPropagation(); toggleFavourite(e.riotId); }}
+                        className="focus-ring ml-auto grid place-items-center w-7 h-7 rounded-md text-muted hover:text-text">
+                        <Star size={14} className={e.kind === "player" && e.favourite ? "text-gold fill-current" : ""} />
+                      </button>
+                    )}
+                  </li>
+                </Fragment>
               ))}
-              {!items.length && <li className="px-3 py-6 text-sm text-muted">No pages match “{q}”.</li>}
+              {!items.length && <li className="px-3 py-6 text-sm text-muted">Nothing matches “{q}”. For a player, type the full Name#TAG.</li>}
             </ul>
           </motion.div>
         </motion.div>

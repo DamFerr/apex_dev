@@ -45,16 +45,16 @@ describe("ADC build with the boots missing from the final inventory", () => {
   const adc = () => many(30, () => row([3031, 3036, 3094], [3006, 3031, 3036, 3094]));
   it("the boots take their slot in the build order (2nd, where they are bought), not missing", () => {
     expect(buildOrder(adc(), items)!.items.map((i) => i.id)).toEqual([3031, 3036, 3094]);   // the raw rows have no boots: that was the bug
-    const b = computeBuild("Jinx", "BOTTOM", adc(), items);
+    const b = computeBuild("Jinx", "ADC", adc(), items);
     expect(b.buildOrder?.items.map((i) => i.id)).toEqual([3006, 3031, 3036, 3094]);
     expect(b.itemBlocks.find((x) => x.name === "Boots")?.items.map((i) => i.id)).toEqual([3006]);   // counted in the Boots block (the page lists boots that are in the order only there)
   });
   it("without a timeline nothing can be repaired, and nothing is invented", () => {
-    const b = computeBuild("Jinx", "BOTTOM", many(30, () => row([3031, 3036, 3094], null)), items);
+    const b = computeBuild("Jinx", "ADC", many(30, () => row([3031, 3036, 3094], null)), items);
     expect(b.buildOrder ?? null).toBeNull(); expect(b.itemBlocks.flatMap((x) => x.items).some((i) => i.id === 3006)).toBe(false);
   });
   it("games whose final inventory already has boots (new collections) are unchanged", () => {
-    const b = computeBuild("Jinx", "BOTTOM", many(30, () => row([3031, 3036, 3094, 3006], [3006, 3031, 3036, 3094])), items);
+    const b = computeBuild("Jinx", "ADC", many(30, () => row([3031, 3036, 3094, 3006], [3006, 3031, 3036, 3094])), items);
     expect(b.buildOrder?.items.map((i) => i.id)).toEqual([3006, 3031, 3036, 3094]);
   });
 });

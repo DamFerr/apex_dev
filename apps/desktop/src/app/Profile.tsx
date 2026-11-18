@@ -16,7 +16,6 @@ import { Tabs } from "../components/Tabs";
 import { MasteryTab } from "./ProfileTabs";
 import { LpHistoryTab } from "./LpHistory";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
-import { SearchBox } from "../components/SearchBox";
 
 function Detail({ id, riotId }: { id: string; riotId: string }) {
   const champName = useChampName();
@@ -87,16 +86,15 @@ export function Profile() {
   const r = sum.data?.rank;
   if (!id) return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight mb-1">Profile</h1>
-    <p className="text-sm text-muted mb-6">Search any Name#TAG, or add your own Riot ID.</p>
-    <div className="mb-6"><SearchBox /></div>
+    <p className="text-sm text-muted mb-6">Press Ctrl+K to search any Name#TAG, or add your own Riot ID.</p>
     <RiotIdPrompt />
   </>);
   return (<>
     <div className="flex items-start justify-between gap-6 mb-6">
       <div><h1 className="font-display text-3xl font-semibold tracking-tight">{id}</h1>
-        <p className="text-sm text-muted mt-1">{riotId ? "Profile data." : "Showing your Riot ID (set it in Settings). Search any Name#TAG."}</p></div>
-      <div className="space-y-2"><SearchBox />
-        <div className="flex gap-2 flex-wrap">{recent.map((x) => <Chip key={x} onClick={() => nav(`/profile/${encodeURIComponent(x)}`)}>{x}</Chip>)}</div></div>
+        <p className="text-sm text-muted mt-1">{riotId ? "Profile data." : "Showing your Riot ID (set it in Settings). Press Ctrl+K to search any Name#TAG."}</p></div>
+      <div>
+        <div className="flex gap-2 flex-wrap justify-end">{recent.map((x) => <Chip key={x} onClick={() => nav(`/profile/${encodeURIComponent(x)}`)}>{x}</Chip>)}</div></div>
     </div>
     {sum.isError ? <div className="glass rounded-lg p-8 text-sm text-bad">{(sum.error as Error).message}</div> : <>
       <div className="glass rounded-lg p-5 flex items-center gap-5 max-w-md">
