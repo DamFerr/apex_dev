@@ -76,7 +76,7 @@ test("shows the recommended build (runes, spells, items) with sample sizes on th
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Recommended build");
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("group", { name: "Summoner spells Ignite + Flash" })).toBeVisible();
+  await expect(panel.getByRole("group", { name: "Summoner spells Flash + Ignite" })).toBeVisible();
   await expect(panel.getByText("Skill order", { exact: true })).toBeVisible();
   await expect(panel.getByLabel("Max order Q then E then W")).toBeVisible();
   await expect(panel.getByText("First 9 levels: Q W E Q Q R Q E Q")).toBeVisible();

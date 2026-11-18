@@ -98,7 +98,8 @@ export interface BuildVariant { id: string; label: BuildArchetype; games: number
 
 export interface MasteryEntry { champion: string; name: string; level: number; points: number }
 
-export interface PoolEntry { champion: string; games: number; wins: number; points: number }
+/** One champion of your pool. `games`/`wins`: your last 20 games on it; `points`: mastery. `byRole`: those games split by role (games whose role is unknown are only in `games`); absent on older backends. */
+export interface PoolEntry { champion: string; games: number; wins: number; points: number; byRole?: { role: Role; games: number; wins: number }[] }
 
 /** Collected statistics for the draft engine: pairs are [champion, champion, games, winsOfFirst], first id alphabetically first. */
 /** Sums over the collected games of one champion that carry damage-type data: what the team composition analysis averages. */

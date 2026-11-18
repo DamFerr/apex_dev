@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluate, guessRoles, recommend, type DraftData, type Pick } from "./index";
+import { compPenalties, compTerms, evaluate, guessRoles, matchupTerms, recommend, strengthTerm, synergyTerms, type DraftData, type Pick } from "./index";
 
 /** Deterministic test fixture (not shipped): class-vs-class edges plus hash noise, so the engine has structure to work on. */
 function rand(seed: number) { let s = seed | 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -60,4 +60,27 @@ describe("recommend", () => {
     const t = performance.now(); recommend([P(1, "TOP"), P(2, "JUNGLE"), P(3, "ADC")], [P(4, "TOP"), P(5, "MID"), P(6, "SUPPORT")], "MID", all, data);
     expect(performance.now() - t).toBeLessThan(150);
   });
+});
+
+describe("layers", () => {
+  const A = [P(1, "TOP"), P(2, "MID"), P(9, "ADC")], E = [P(4, "TOP"), P(5, "MID"), P(6, "SUPPORT")];
+  const z = (t: { z: number }[]) => t.reduce((s, x) => s + x.z, 0);
+  it("each layer is antisymmetric: swapping the teams flips its sum", () => {
+    for (const layer of [strengthTerm, matchupTerms, synergyTerms, compTerms]) expect(z(layer(A, E, data))).toBeCloseTo(-z(layer(E, A, data)), 9);
+  });
+  it("matchups only pair players in the same role", () => {
+    const m = matchupTerms(A, E, data);
+    expect(m.map((t) => t.champs)).toEqual([[1, 4], [2, 5]]);
+  });
+  it("synergies cover every pair inside both teams", () => expect(synergyTerms(A, E, data).length).toBe(3 + 3));
+  it("evaluate's factors are exactly the non-zero layer terms and sum to the logit", () => {
+    const ev = evaluate(A, E, data), all = [...strengthTerm(A, E, data), ...matchupTerms(A, E, data), ...synergyTerms(A, E, data), ...compTerms(A, E, data)];
+    expect(ev.factors.reduce((s, f) => s + f.z, 0)).toBeCloseTo(z(all), 9);
+    expect(ev.factors.every((f) => Math.abs(f.pp - f.z * 25) < 1e-9)).toBe(true);
+  });
+  it("comp penalties are never positive and skip small teams", () => {
+    expect(Object.values(compPenalties([P(1), P(7), P(13), P(19)], data)).every((v) => v <= 0)).toBe(true);
+    expect(compPenalties([P(1), P(7)], data)).toEqual({ "Damage balance": 0, Frontline: 0, "Crowd control": 0 });
+  });
+  it("uses the shared band function", () => expect(evaluate(A, E, data).band).toBeCloseTo(0.02 + (0.1 * 4) / 10, 12));
 });

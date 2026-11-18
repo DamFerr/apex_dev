@@ -1,4 +1,8 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
+import { ChevronDown } from "lucide-react";
+import type { Role } from "@apex/schema";
+import { BuildStrip } from "./DraftBuild";
 import { RoleIcon } from "../components/RoleIcon";
 import type { BanSuggestion, Evaluation, Factor, Recommendation, TeamComp } from "@apex/draft-engine";
 import { ChampIcon } from "../components/ChampIcon";
@@ -35,19 +39,27 @@ export function WinProbability({ ev, source, games }: { ev: Evaluation; source: 
 }
 
 export function Recommendations({ recs, role, source }: { recs: Recommendation[]; role: string; source: string }) {
+  // The build under a suggestion opens on click; the top suggestion starts open. "none" = the person closed it.
+  const [open, setOpen] = useState<number | "none" | undefined>(undefined);
+  const shown = open === undefined ? recs[0]?.champion : open;
   return (
     <section className="glass rounded-lg p-4" aria-label="Pick recommendations">
       <div className="font-display text-lg font-semibold mb-3">Suggested picks <span className="text-xs text-muted font-normal inline-flex items-center gap-1.5 align-middle">(<RoleIcon role={role} size={14} decorative />{role} · {source})</span></div>
-      <ul className="space-y-2">
-        {recs.map((r, i) => (
-          <motion.li key={r.champion} layout transition={spring} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 h-11">
-            <span className="w-4 text-xs text-muted">{i + 1}</span>
-            {champId(r.champion) && <ChampIcon id={champId(r.champion)!} name={champName(r.champion)} size={32} />}
-            <span className="w-28 text-sm font-medium truncate">{champName(r.champion)}</span>
-            <span className="tabular-nums text-sm w-14">{(r.winProb * 100).toFixed(1)}%</span>
-            <span className={`tabular-nums text-xs w-14 ${r.deltaPP >= 0 ? "text-good" : "text-bad"}`}>{sign(r.deltaPP)}</span>
-            <span className="text-xs text-muted truncate">{r.why ? `${sign(r.why.pp)}% ${describe(r.why)}` : ""}{r.note && <span className="text-gold"> · {r.note}</span>}</span>
-          </motion.li>))}
+      <ul className="space-y-1">
+        {recs.map((r, i) => { const isOpen = shown === r.champion, id = champId(r.champion); return (
+          <motion.li key={r.champion} layout transition={spring} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }}>
+            <button type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? "none" : r.champion)} title={`${isOpen ? "Hide" : "Show"} the suggested build`}
+              className="focus-ring w-full flex items-center gap-3 h-11 rounded-md text-left hover:bg-raised/40">
+              <span className="w-4 text-xs text-muted">{i + 1}</span>
+              {id && <ChampIcon id={id} name={champName(r.champion)} size={32} />}
+              <span className="w-28 text-sm font-medium truncate">{champName(r.champion)}</span>
+              <span className="tabular-nums text-sm w-14">{(r.winProb * 100).toFixed(1)}%</span>
+              <span className={`tabular-nums text-xs w-14 ${r.deltaPP >= 0 ? "text-good" : "text-bad"}`}>{sign(r.deltaPP)}</span>
+              <span className="text-xs text-muted truncate">{r.why ? `${sign(r.why.pp)}% ${describe(r.why)}` : ""}{r.note && <span className="text-gold"> · {r.note}</span>}</span>
+              <ChevronDown size={14} aria-hidden className={`ml-auto shrink-0 text-muted transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            </button>
+            {isOpen && id && <div className="mt-1 mb-2"><BuildStrip id={id} role={role as Role} /></div>}
+          </motion.li>); })}
       </ul>
     </section>
   );

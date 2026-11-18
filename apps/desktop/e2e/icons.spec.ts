@@ -7,7 +7,7 @@ test("build panel icons (items, spells, skills, shards) all carry names", async 
   const errors = collectErrors(page);
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Recommended build");
-  await expect(panel.getByRole("group", { name: "Summoner spells Ignite + Flash" })).toBeVisible();
+  await expect(panel.getByRole("group", { name: "Summoner spells Flash + Ignite" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Ignite" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Flash" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Zhonya's Hourglass" }).first()).toBeVisible();
@@ -30,7 +30,7 @@ test("everything still works, with names instead of pictures, when Data Dragon i
   await page.goto("/#/champions/Ahri");
   const panel = page.getByLabel("Recommended build");
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("group", { name: "Summoner spells Ignite + Flash" })).toBeVisible();
+  await expect(panel.getByRole("group", { name: "Summoner spells Flash + Ignite" })).toBeVisible();
   await expect(panel.getByRole("img", { name: "Zhonya's Hourglass" }).first()).toBeVisible();
   await expect(panel.getByLabel("Max order Q then E then W")).toBeVisible();
   expect(await unnamedImages(page)).toBe(0);

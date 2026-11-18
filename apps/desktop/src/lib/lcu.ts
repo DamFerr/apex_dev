@@ -5,6 +5,8 @@ import { champIndex } from "./ddragon";
 import type { Role } from "@apex/schema";
 import { fetchBuild, importItemSet, importRunes, importSpells } from "./importer";
 import { isTauri } from "./tauri";
+import { summarizeImport, type ImportOutcome } from "./importSummary";
+import { toast } from "./toast";
 import { initialDraft, nextPick, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent, type OverlayPick } from "@apex/lcu-core";
 
 /** Address of the local League client simulator (packages/lcu-mock). Only used by the browser dev preview, never in the desktop app. */
@@ -14,34 +16,37 @@ export const champId = (key: number): string | undefined => champIndex.get(key)?
 export const champName = (key: number) => champIndex.get(key)?.name ?? (CHAMPION_KEYS[key] ?? `Champion ${key}`).replace(/([a-z])([A-Z])/g, "$1 $2");
 
 interface DraftStore {
-  draft: DraftState; /** The champion you locked, kept through the loading screen and the game (the draft itself is reset when champ select ends). */ overlayPick: OverlayPick | null; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void; log: { id: number; text: string }[];
+  draft: DraftState; /** The champion you locked, kept through the loading screen and the game (the draft itself is reset when champ select ends). */ overlayPick: OverlayPick | null; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void;
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
-const addLog = (text: string) => useDraft.setState((s) => ({ log: [{ id: Date.now() + Math.random(), text }, ...s.log].slice(0, 8) }));
-/** Imports runes (and optionally summoner spells and an item set) and reports each outcome in the import log. */
+/** Imports runes (and optionally summoner spells and an item set); the outcome is one summary toast, plus an error toast per failed step. */
 export async function runImport(championKey: number, role: Role | null) {
-  const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)), out: ImportOutcome[] = [];
+  const collected = (source: string) => source.includes("collected");
   const build = await fetchBuild(championKey, role).catch(() => null); // null = use defaults, each step says which it used
-  try { const r = await importRunes(championKey, build); addLog(`Imported rune page "${r.name}" (${r.source})`); }
-  catch (e) { addLog(`Rune import failed: ${msg(e)}`); }
+  try { const r = await importRunes(championKey, build); out.push({ step: "runes", done: "rune page", defaults: !collected(r.source) }); }
+  catch (e) { out.push({ step: "runes", error: msg(e) }); }
   if (useDraft.getState().spells) {
-    try { const r = await importSpells(role, build); addLog(`Set summoner spells: ${r.text} (${r.source})`); }
-    catch (e) { addLog(`Spell import failed: ${msg(e)}`); }
+    try { const r = await importSpells(role, build); out.push({ step: "spells", done: `spells ${r.text}`, defaults: !collected(r.source) }); }
+    catch (e) { out.push({ step: "spells", error: msg(e) }); }
   }
   if (useDraft.getState().items) {
-    try { const t = await importItemSet(championKey, build); addLog(t ? `Imported item ${t.length > 1 ? "sets" : "set"} ${t.map((x) => `"${x}"`).join(", ")} (same as the champion page, ${build!.games} collected games)` : "Item set skipped: not enough collected games for this champion yet"); }
-    catch (e) { addLog(`Item set import failed: ${msg(e)}`); }
+    try { const t = await importItemSet(championKey, build); out.push(t ? { step: "items", done: `${t.length} item ${t.length > 1 ? "sets" : "set"}` } : { step: "items", skipped: true }); }
+    catch (e) { out.push({ step: "items", error: msg(e) }); }
   }
+  const { message, errors } = summarizeImport(out);
+  if (message) toast(message);
+  for (const e of errors) toast(e, "error");
 }
 export const useDraft = create<DraftStore>((set, get) => ({
-  draft: initialDraft, overlayPick: null, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }), log: [],
+  draft: initialDraft, overlayPick: null, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }),
   setAutoImport: (autoImport) => set({ autoImport }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });
     set({ draft: next, overlayPick: nextPick(get().overlayPick, next) });
     if (!imp) return;
     if (isTauri) void runImport(imp.championId, imp.role);
-    else addLog(`Import skipped for ${champName(imp.championId)}: writing to the League client needs the desktop app.`);
+    else toast(`Import skipped for ${champName(imp.championId)}: writing to the League client needs the desktop app.`);
   },
 }));
 

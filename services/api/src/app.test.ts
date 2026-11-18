@@ -314,7 +314,7 @@ describe("draft data and champion pool APIs", () => {
   });
   it("builds your pool from recent games and mastery", async () => {
     const pool = (await get("/v1/players/Test%23EUW/pool")).json();
-    expect(pool[0]).toEqual({ champion: "Ahri", games: 20, wins: 20, points: 250000 });   // the fake player is Ahri in all 20 recent games
+    expect(pool[0]).toEqual({ champion: "Ahri", games: 20, wins: 20, points: 250000, byRole: [{ role: "TOP", games: 20, wins: 20 }] });   // the fake player is Ahri in all 20 recent games, split by the role played
   });
 
   describe("live game", () => {

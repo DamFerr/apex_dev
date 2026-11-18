@@ -289,7 +289,7 @@ export async function buildApp(deps: Deps) {
     const f = filterOf(req.query);
     return cached(`draft:${JSON.stringify(f)}`, 10 * MIN, async () => ({ ...store.draftStats(f), patch: f.label }));
   });
-  /** Your own recent champion pool (last 20 games) plus top mastery, for personalised draft suggestions. */
+  /** Your own recent champion pool (last 20 games, split by role) plus your top 30 mastery champions, for personalised draft suggestions. */
   app.get<{ Params: { riotId: string } }>("/v1/players/:riotId/pool", async (req): Promise<PoolEntry[]> => {
     const acct = await identity(req.params.riotId), platform = await homePlatform(acct.puuid), region = regionOf(platform), data = await dd();
     const ids = await cached<string[]>(`ids:${acct.puuid}:0:20`, 2 * MIN, () => riot.matchIds(acct.puuid, region, 0, 20));
@@ -297,8 +297,11 @@ export async function buildApp(deps: Deps) {
     for (const id of ids) {
       const s = toMatchSummary(await matchOf(id, region), acct.puuid); if (!s) continue;
       const e = pool.get(s.champion) ?? { champion: s.champion, games: 0, wins: 0, points: 0 }; e.games++; if (s.win) e.wins++; pool.set(s.champion, e);
+      if (s.role) { // the same games split by role, so the draft can leave out champions you only play elsewhere
+        const byRole = (e.byRole ??= []), r = byRole.find((x) => x.role === s.role) ?? (byRole[byRole.push({ role: s.role, games: 0, wins: 0 }) - 1]); r.games++; if (s.win) r.wins++;
+      }
     }
-    for (const m of toMastery(await cached(`mastery:${platform}:${acct.puuid}`, 10 * MIN, () => riot.mastery(acct.puuid, platform, 8)), data.champs)) {
+    for (const m of toMastery(await cached(`mastery30:${platform}:${acct.puuid}`, 10 * MIN, () => riot.mastery(acct.puuid, platform, 30)), data.champs)) {
       const e = pool.get(m.champion) ?? { champion: m.champion, games: 0, wins: 0, points: 0 }; e.points = m.points; pool.set(m.champion, e);
     }
     return [...pool.values()].sort((x, y) => y.games - x.games || y.points - x.points);
