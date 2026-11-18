@@ -14,6 +14,15 @@ export function LowBadge({ games }: { games: number }) {
   return sampleBadge(games) === "low" ? <span className="ml-2 rounded-full bg-gold/15 text-gold text-[10px] px-2 py-0.5">low data</span> : null;
 }
 
+/**
+ * A win rate as a BIG coloured number (see `wrClass`) for tables. The details sit in the hover tooltip and, for keyboard and screen reader users, in
+ * a hidden sibling: the raw rate, the 95% range and an optional note. Put it inside a `<td>`. `value` is the ADJUSTED win rate as a fraction.
+ */
+export function WinRateCell({ value, raw, lo, hi, note }: { value: number; raw: number; lo: number; hi: number; note?: string }) {
+  const detail = `Raw ${pct(raw)} · 95% range ${pct(lo, 0)}–${pct(hi, 0)}${note ? ` · ${note}` : ""}`;
+  return <><span className={`tabular-nums text-base font-semibold ${wrClass(value)}`} title={detail}>{pct(value)}</span><span className="sr-only">{detail}</span></>;
+}
+
 /** "+1.8" / "−0.4": a signed number with a real minus sign. */
 export const signed = (x: number, d = 1) => `${x < 0 ? "−" : "+"}${Math.abs(x).toFixed(d)}`;
 
@@ -29,13 +38,12 @@ export function StatRows({ rows, title, icon }: { rows: StatLine[]; title: strin
   return (
     <table className="w-full text-sm">
       <caption className="text-left font-display text-lg font-semibold pb-2">{title}</caption>
-      <thead className="text-xs text-muted"><tr><th className="text-left font-normal">Name</th><th className="font-normal text-right">Games</th><th className="font-normal text-right">Win rate (adjusted)</th><th className="font-normal text-right whitespace-nowrap pl-2">95% range</th>{showWpa && <th className="font-normal text-right whitespace-nowrap pl-3" title="Win probability added, percentage points">WPA</th>}</tr></thead>
+      <thead className="text-xs text-muted"><tr><th className="text-left font-normal">Name</th><th className="font-normal text-right">Games</th><th className="font-normal text-right" title="Adjusted for small samples. Hover a value for the raw rate and its 95% range.">Win rate</th>{showWpa && <th className="font-normal text-right whitespace-nowrap pl-3" title="Win probability added, percentage points">WPA</th>}</tr></thead>
       <tbody>{rows.map((r) => { const s = rate(r.wins, r.games); return (
         <tr key={r.name} className="h-9 border-t border-line/5">
           <td className="whitespace-nowrap"><span className="inline-flex items-center gap-2 align-middle">{icon?.(r)}<span>{r.name}</span></span><LowBadge games={r.games} /></td>
           <td className="text-right tabular-nums text-muted">{r.games.toLocaleString()}</td>
-          <td className={`text-right tabular-nums font-medium ${wrClass(s.adj)}`} title={`Raw ${pct(s.raw)}`}>{pct(s.adj)}</td>
-          <td className="text-right tabular-nums text-muted text-xs whitespace-nowrap pl-2">{pct(s.lo, 0)}–{pct(s.hi, 0)}</td>
+          <td className="text-right"><WinRateCell value={s.adj} raw={s.raw} lo={s.lo} hi={s.hi} /></td>
           {showWpa && <td className="text-right whitespace-nowrap pl-3">{r.wpa ? <Wpa w={r.wpa} /> : <span className="text-muted">–</span>}</td>}
         </tr>); })}</tbody>
     </table>

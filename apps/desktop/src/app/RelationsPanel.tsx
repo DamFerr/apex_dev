@@ -5,7 +5,7 @@ import type { RelationLine, Role } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
 import { RoleIcon } from "../components/RoleIcon";
 import { Tabs } from "../components/Tabs";
-import { LowBadge, pct, wrClass } from "../components/StatRows";
+import { LowBadge, pct, WinRateCell } from "../components/StatRows";
 import { Chip, Skeleton, spring } from "../components/ui";
 import { useChampionRelations } from "../lib/api";
 
@@ -50,22 +50,19 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
         <caption className="sr-only">{kind === "matchups" ? "Lane matchups" : "Teammate synergy"} sorted by {sort === "games" ? "games played" : "difference from expected"}</caption>
         <thead className="text-xs text-muted"><tr>
           <th className="text-left font-normal">Champion</th><th className="font-normal text-right">Games</th>
-          <th className="font-normal text-right" title="Win rate adjusted toward the expected rate, so small samples are not overstated. Raw rate on hover over a value.">Win rate (adjusted)</th>
-          <th className="font-normal text-right pl-2">Expected</th><th className="font-normal text-right pl-2" colSpan={2}>vs expected</th>
-          <th className="font-normal text-right whitespace-nowrap pl-2">95% range</th></tr></thead>
+          <th className="font-normal text-right" title="Adjusted toward the expected rate, so small samples are not overstated. Hover a value for the raw rate, the expected rate and the 95% range.">Win rate</th>
+          <th className="font-normal text-right pl-2" colSpan={2}>vs expected</th></tr></thead>
         <motion.tbody key={`${role}-${kind}-${sort}-${all}`} initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.02 } } }}>
           {shown.map(({ l, s }) => { const w = Math.min(100, (Math.abs(s.delta) / BAR_FULL_PP) * 100), good = s.delta >= 0.5, bad = s.delta <= -0.5; return (
             <motion.tr key={`${l.champion}-${l.role}`} variants={{ h: { opacity: 0, y: 6 }, s: { opacity: 1, y: 0 } }} transition={spring} className="h-9 border-t border-line/5">
               <td className="whitespace-nowrap"><span className="inline-flex items-center gap-2 align-middle"><ChampIcon id={l.champion} name={l.name} size={26} /><span>{l.name}</span>
                 {kind === "synergy" && <span className="inline-flex items-center gap-1 text-xs text-muted"><RoleIcon role={l.role} size={14} decorative />{l.role}</span>}</span><LowBadge games={l.games} /></td>
               <td className="text-right tabular-nums text-muted">{l.games.toLocaleString()}</td>
-              <td className={`text-right tabular-nums font-medium ${wrClass(s.observed)}`} title={`Raw ${pct(s.raw)}`}>{pct(s.observed)}</td>
-              <td className="text-right tabular-nums text-muted pl-2">{pct(s.expected)}</td>
+              <td className="text-right"><WinRateCell value={s.observed} raw={s.raw} lo={s.lo} hi={s.hi} note={`expected ${pct(s.expected)}`} /></td>
               <td className={`text-right tabular-nums font-medium pl-2 whitespace-nowrap ${good ? "text-good" : bad ? "text-bad" : "text-muted"}`}>{signed(s.delta)}</td>
               <td className="w-20 pl-2" aria-hidden><div className="relative h-1.5 rounded-full bg-line/10">
                 <span className="absolute inset-y-0 left-1/2 w-px bg-line/30" />
                 <motion.span className={`absolute inset-y-0 rounded-full ${s.delta >= 0 ? "left-1/2 bg-good/70" : "right-1/2 bg-bad/70"}`} initial={{ width: 0 }} animate={{ width: `${w / 2}%` }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} /></div></td>
-              <td className="text-right tabular-nums text-muted text-xs whitespace-nowrap pl-2">{pct(s.lo, 0)}&ndash;{pct(s.hi, 0)}</td>
             </motion.tr>); })}
         </motion.tbody>
       </table>}

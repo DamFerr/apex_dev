@@ -101,8 +101,8 @@ describe("buildOrder (core items and boots in the order they are bought)", () =>
   });
   it("boots first when they are bought first", () => expect(buildOrder(many(12, () => game([3020, 3100, 3157, 3089])), items)!.items.map((i) => i.id)[0]).toBe(3020));
   it("leaves boots out when under the share of games had them", () => {
-    const some = many(12, (i) => (i < 4 ? game([3100, 3157, 3089, 3020]) : game([3100, 3157, 3089])));  // 4 of 12 = 33%
-    expect(4 / 12).toBeLessThan(MIN_BOOTS_SHARE);
+    const some = many(12, (i) => (i < 2 ? game([3100, 3157, 3089, 3020]) : game([3100, 3157, 3089])));  // 2 of 12 = 17%
+    expect(2 / 12).toBeLessThan(MIN_BOOTS_SHARE);
     expect(buildOrder(some, items)!.items.map((i) => i.id)).toEqual([3100, 3157, 3089]);
   });
   it("ignores boots that were sold (not in the final inventory)", () => expect(buildOrder(many(12, () => game([3020, 3100, 3157, 3089], [3100, 3157, 3089])), items)!.items.map((i) => i.id)).toEqual([3100, 3157, 3089]));
@@ -121,9 +121,30 @@ describe("buildOrder (core items and boots in the order they are bought)", () =>
     const b = buildOrder(many(12, (i) => game(i < 10 ? [3100, 3157, 3089, 3020] : [3020, 3100, 3157, 3089])), items)!;
     expect(b.items.map((x) => x.id)).toEqual([3100, 3157, 3089, 3020]);
   });
-  it("games without boots do not count toward the slot, but need 40% of games to have boots", () => {
+  it("games without boots do not count toward the slot, but 20% of the games must have boots", () => {
     const some = many(12, (i) => (i < 5 ? game([3100, 3020, 3157, 3089]) : game([3100, 3157, 3089])));   // 5 of 12 = 42%
     expect(buildOrder(some, items)!.items).toHaveLength(4);
+    const fewer = many(10, (i) => (i < 3 ? game([3100, 3020, 3157, 3089]) : game([3100, 3157, 3089])));   // 3 of 10 = 30%: the usual boots are in the order (they used to need 40%)
+    expect(buildOrder(fewer, items)!.items.map((x) => x.id)).toEqual([3100, 3020, 3157, 3089]);
+  });
+  it("finds the usual boots from the final inventory even when the timeline never shows them bought (Veigar case), in 2nd place", () => {
+    const g = (i: number) => row([3100, 3157, 3089, i < 9 ? 3020 : 3047], 1, { buys: JSON.stringify([3100, 3157, 3089]) });   // boots only in the final inventory
+    const b = buildOrder(many(12, g), items)!;
+    expect(b.items.map((x) => x.id)).toEqual([3100, 3020, 3157, 3089]);                     // the most common boots (9 of 12), second
+  });
+  it("shows only ONE boots item in the order, so the other kinds are left for the options block, in every variant", () => {
+    const ap = (n: number) => many(n, (i) => row([3157, 3089, 3100, i % 4 ? 3020 : 3047], 1, { buys: JSON.stringify([3100, 3157, 3089]) }));
+    const tank = (n: number) => many(n, (i) => row([3068, 3075, 3083, i % 4 ? 3047 : 3020], 0, { buys: JSON.stringify([3068, 3075, 3083]) }));
+    const v = buildVariants("Veigar", null, [...ap(40), ...tank(40)], items);
+    expect(v.map((x) => x.id).sort()).toEqual(["AP", "Tank"]);
+    for (const x of v) {
+      const boots = x.build.buildOrder!.items.filter((i) => items.get(i.id)?.boots);
+      expect(boots).toHaveLength(1);                                                          // the best boots are in the order ...
+      const options = x.build.itemBlocks.find((b) => b.name === "Boots")!.items.map((i) => i.id);
+      expect(options).toContain(boots[0].id === 3020 ? 3047 : 3020);                         // ... the others are in the Boots block (the page drops the one already in the order)
+    }
+    expect(v.find((x) => x.id === "AP")!.build.buildOrder!.items.some((i) => i.id === 3020)).toBe(true);
+    expect(v.find((x) => x.id === "Tank")!.build.buildOrder!.items.some((i) => i.id === 3047)).toBe(true);
   });
   it("is null without a core path (too few games)", () => expect(buildOrder(many(3, () => game([3100, 3157, 3089])), items)).toBeNull());
   it("is part of computeBuild", () => expect(computeBuild("Ahri", null, many(12, () => game([3100, 3020, 3157, 3089])), items).buildOrder?.items).toHaveLength(4));

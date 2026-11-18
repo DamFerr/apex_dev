@@ -199,14 +199,16 @@ export function corePath(rows: BuildRow[], items: Map<number, ItemMeta>, minGame
 /**
  * The three core items AND the boots AND (for supports) the support item, in the order they are bought. Uses the same games as `corePath`
  * (those that kept all three core items), so the sample is the same. Boots and the support item are SLOTS of the order, decided by the one rule of the whole app:
- *  - boots: the slot exists when `MIN_BOOTS_SHARE` of the games ended with boots of ANY kind, it shows the most common boots and sits at the average place where they were bought (usually 2nd);
+ *  - boots: the slot exists when `MIN_BOOTS_SHARE` of the games ended with boots of ANY kind. It is decided from the FINAL INVENTORY (like the support item), not from the purchases:
+ *    a timeline can miss the boots (bought in the first 90 s, or an upgrade chain), and then the champion's usual boots wrongly fell into "Boots options" only. It shows the most
+ *    common boots and sits at the average place where the timeline shows them bought; where it never does, in 2nd place (the usual one);
  *  - support item (Zaz'Zak's, Celestial Opposition, Dream Maker, Solstice Sleigh, Bloodsong): same rule with `MIN_SUPPORT_SHARE`, decided from the FINAL INVENTORY, because
  *    the quest upgrade is not always recorded as a purchase in the timeline. Its place is the average place where the timeline does show it; where it never does, it
  *    comes first (the quest is usually finished before the first big item). It is never one of the three core items, so it can no longer fall into "Situational".
  * The other boots / support items go to their own blocks of `itemBlocks` ("Boots options", "Support item options"): every item is shown exactly once.
  * Null when there is no core path.
  */
-export const MIN_BOOTS_SHARE = 0.4;
+export const MIN_BOOTS_SHARE = 0.2;   // hand-set: under 20% of the games ending with boots, boots are an exception and stay in "Boots options" only
 export const MIN_SUPPORT_SHARE = 0.4;
 export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGames: number = MIN_PATH_GAMES): ItemPathStat | null {
   const path = corePath(rows, items, minGames); if (!path) return null;
@@ -214,14 +216,15 @@ export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGa
   const seqs: number[][] = [], bootsKept = new Map<number, number>(), supportKept = new Map<number, number>();
   for (const r of rows) {
     const buys = json<number[]>(r.buys), final = json<number[]>(r.items); if (!buys || !final) continue;
-    const owned = new Set(final), seq: number[] = []; let boots = 0;
+    const owned = new Set(final), seq: number[] = [];
+    const boots = final.find((id) => isBoots(items.get(id))) ?? 0;                      // from the final inventory, not from the timeline (a final inventory holds one boots item)
     const support = final.find((id) => isSupportUpgrade(items.get(id))) ?? 0;          // from the final inventory, not from the timeline
     for (const id of buys) {
       if (!owned.has(id)) continue;
       const it = items.get(id);
       if (isSupportUpgrade(it)) { if (!seq.includes(SUPPORT)) seq.push(SUPPORT); }
       else if (isFinished(it)) { if (!seq.includes(id)) seq.push(id); }
-      else if (isBoots(it) && !boots) { boots = id; seq.push(BOOTS); }               // a final inventory holds one boots item
+      else if (isBoots(it) && !seq.includes(BOOTS)) seq.push(BOOTS);                  // where the timeline shows the boots bought
     }
     if (!core.every((id) => seq.includes(id))) continue;
     seqs.push(seq); if (boots) bootsKept.set(boots, (bootsKept.get(boots) ?? 0) + 1); if (support) supportKept.set(support, (supportKept.get(support) ?? 0) + 1);
@@ -233,7 +236,7 @@ export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGa
   const slots = [...core, ...(hasBoots ? [BOOTS] : []), ...(hasSupport ? [SUPPORT] : [])], pos = new Map<number, number>();
   for (const s of slots) {
     const at = seqs.filter((q) => q.includes(s)).map((q) => q.filter((x) => slots.includes(x)).indexOf(s));
-    pos.set(s, at.length ? at.reduce((t, x) => t + x, 0) / at.length : -1);          // never seen in a timeline (support item): first
+    pos.set(s, at.length ? at.reduce((t, x) => t + x, 0) / at.length : s === BOOTS ? 0.5 : -1);   // never seen in a timeline: boots 2nd (between the first and second core item) (the usual place), the support item first
   }
   const tie = (t: number) => (t === SUPPORT ? -1 : t === BOOTS ? Infinity : t);        // equal places: support item first, boots last, core by id
   const order = [...slots].sort((a, b) => pos.get(a)! - pos.get(b)! || tie(a) - tie(b)).map((s) => (s === BOOTS ? top(bootsKept) : s === SUPPORT ? top(supportKept) : s));

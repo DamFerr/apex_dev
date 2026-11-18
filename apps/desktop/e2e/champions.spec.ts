@@ -204,3 +204,15 @@ test("long explanations live in tooltips, the page keeps short lines", async ({ 
   await expect(page.getByText(/^Change vs the patch below/)).toHaveAttribute("title", /95% range excludes 0/);
   await expect(page.getByText(/Final inventories only, so it shows a link/)).toHaveCount(0);   // the old long sentence is gone from the page text
 });
+
+test("table win rates are big numbers; the raw rate and the 95% range are one hover away (and in text for screen readers)", async ({ page }) => {
+  await page.goto("/#/champions/Ahri");
+  const items = page.getByRole("table").filter({ hasText: "Items" }).first();
+  const big = items.locator("tbody tr").first().locator("span[title]").filter({ hasText: /^\d+(\.\d)?%$/ });
+  await expect(big).toBeVisible();
+  await expect(big).toHaveAttribute("title", /^Raw \d+(\.\d)?% · 95% range \d+%–\d+%$/);
+  await expect(items.getByRole("columnheader", { name: "95% range" })).toHaveCount(0);      // no separate column any more
+  const lux = page.getByLabel("Matchups and synergy").locator("tbody tr").first();
+  await expect(lux.locator("span[title]").filter({ hasText: /^\d+(\.\d)?%$/ })).toHaveAttribute("title", /· expected \d+(\.\d)?%$/);
+  await expect(lux.locator(".sr-only").first()).toContainText("95% range");
+});
