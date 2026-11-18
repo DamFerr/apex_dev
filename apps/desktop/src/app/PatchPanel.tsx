@@ -9,6 +9,11 @@ import { Chip, Skeleton } from "../components/ui";
 import { useChampionPatches } from "../lib/api";
 import { useUi } from "../lib/store";
 
+/** Long explanations live in tooltips (with sr-only copies); the page keeps short lines. */
+const CHANGE_TIP = `Each row is compared with the patch below it. Win-rate changes need ${MIN_DELTA_GAMES}+ games in both patches and are coloured only when the 95% range excludes 0; a patch also changes who plays the champion, so a change is not always caused by the balance changes. Pick and ban rates are shares of all collected games of that patch (bans count in every role). The patch filter does not apply here, region and rank do.`;
+const ERROR_TIP = "Patch history could not be loaded from the local backend.";
+const EMPTY_TIP = "No collected games for this champion in any kept patch with these filters.";
+
 const rateOf = (n: number, of: number) => (of > 0 ? n / of : 0);
 
 /** Adjusted win rate per patch (oldest to newest) with its 95% Wilson range; hollow dots have fewer games than a change needs. */
@@ -44,8 +49,8 @@ export function PatchPanel({ id, roles }: { id: string; roles: Role[] }) {
       {roles.length > 1 && roles.map((r) => <Chip key={r} active={(data?.role ?? role) === r} onClick={() => setRole(r)}><span className="inline-flex items-center gap-1.5"><RoleIcon role={r} size={16} decorative />{r}</span></Chip>)}
     </div>
     {isLoading && <Skeleton className="h-40" />}
-    {isError && <div className="text-sm text-muted">Patch history could not be loaded from the local backend.</div>}
-    {data && withData === 0 && <div className="text-sm text-muted">No collected games for this champion in any kept patch with these filters.</div>}
+    {isError && <div className="text-sm text-muted" title={ERROR_TIP}>Patch history unavailable<span className="sr-only">: {ERROR_TIP}</span></div>}
+    {data && withData === 0 && <div className="text-sm text-muted" title={EMPTY_TIP}>No games in kept patches<span className="sr-only">: {EMPTY_TIP}</span></div>}
     {data && withData > 0 && <>
       <Trend points={data.patches} />
       <table className="w-full text-sm">
@@ -67,7 +72,7 @@ export function PatchPanel({ id, roles }: { id: string; roles: Role[] }) {
             <td className="text-right pl-2">{d ? <Delta value={d.banDelta} tone="plain" /> : <span className="text-muted">–</span>}</td>
           </tr>); })}</tbody>
       </table>
-      <p className="text-[11px] text-muted" title={`Each row is compared with the patch below it. Win-rate changes need ${MIN_DELTA_GAMES}+ games in both patches and are coloured only when the 95% range excludes 0; a patch also changes who plays the champion, so a change is not always caused by the balance changes. Pick and ban rates are shares of all collected games of that patch (bans count in every role). The patch filter does not apply here, region and rank do.`}>Change vs the patch below · needs {MIN_DELTA_GAMES}+ games in both</p>
+      <p className="text-[11px] text-muted" title={CHANGE_TIP}>Change vs the patch below · {MIN_DELTA_GAMES}+ games each<span className="sr-only">. {CHANGE_TIP}</span></p>
     </>}
   </section>);
 }

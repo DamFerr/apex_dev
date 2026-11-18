@@ -13,7 +13,7 @@ type Kind = "matchups" | "synergy";
 type Sort = "best" | "worst" | "games";
 const COLLAPSED = 12;
 /** "+2.1 pp" / "−1.4 pp" (a real minus sign), so the sign never gets lost. */
-const signed = (d: number) => `${d > 0 ? "+" : d < 0 ? "\u2212" : ""}${Math.abs(d).toFixed(1)} pp`;
+const signed = (d: number) => { const a = Math.abs(d).toFixed(1); return `${Number(a) === 0 ? "" : d < 0 ? "\u2212" : "+"}${a} pp`; };
 /** The bar is full at 10 points either way: more than that is outside what a sample this size can usually support. */
 const BAR_FULL_PP = 10;
 
@@ -44,8 +44,8 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
     </div>
     <div role="tabpanel" aria-label={kind === "matchups" ? "Matchups" : "Synergy"}>
       {isLoading && <Skeleton className="h-48" />}
-      {isError && <div className="text-sm text-muted">Matchups could not be loaded from the local backend.</div>}
-      {data && rows.length === 0 && <div className="text-sm text-muted">Not enough games yet: a pairing needs 5+ games{data.base.games === 0 ? ` (none as ${data.role ?? "this role"})` : ""}.</div>}
+      {isError && <div className="text-sm text-muted" title="Matchups could not be loaded from the local backend.">Matchups unavailable<span className="sr-only">: could not be loaded from the local backend.</span></div>}
+      {data && rows.length === 0 && (() => { const tip = `A pairing needs 5+ games${data.base.games === 0 ? ` (none as ${data.role ?? "this role"})` : ""}.`; return <div className="text-sm text-muted" title={tip}>Not enough games yet<span className="sr-only">: {tip}</span></div>; })()}
       {rows.length > 0 && <table className="w-full text-sm">
         <caption className="sr-only">{kind === "matchups" ? "Lane matchups" : "Teammate synergy"} sorted by {sort === "games" ? "games played" : "difference from expected"}</caption>
         <thead className="text-xs text-muted"><tr>

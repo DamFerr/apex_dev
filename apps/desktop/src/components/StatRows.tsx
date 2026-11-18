@@ -20,11 +20,11 @@ export function LowBadge({ games }: { games: number }) {
  */
 export function WinRateCell({ value, raw, lo, hi, note }: { value: number; raw: number; lo: number; hi: number; note?: string }) {
   const detail = `Raw ${pct(raw)} · 95% range ${pct(lo, 0)}–${pct(hi, 0)}${note ? ` · ${note}` : ""}`;
-  return <><span className={`tabular-nums text-base font-semibold ${wrClass(value)}`} title={detail}>{pct(value)}</span><span className="sr-only">{detail}</span></>;
+  return <><span className={`tabular-nums text-[1rem] leading-6 font-semibold ${wrClass(value)}`} title={detail}>{pct(value)}</span><span className="sr-only">{detail}</span></>;
 }
 
 /** "+1.8" / "−0.4": a signed number with a real minus sign. */
-export const signed = (x: number, d = 1) => `${x < 0 ? "−" : "+"}${Math.abs(x).toFixed(d)}`;
+export const signed = (x: number, d = 1) => { const a = Math.abs(x).toFixed(d); return Number(a) === 0 ? a : `${x < 0 ? "−" : "+"}${a}`; };
 
 /** Win Probability Added in percentage points. Green/red only when the 95% range excludes 0, so a noisy value is never coloured as if it meant something. */
 export function Wpa({ w, unit = false }: { w: ItemWpa; unit?: boolean }) {

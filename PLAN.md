@@ -173,13 +173,13 @@ Rules: one step per turn; max ~4 source files plus tests; if a step grows, split
 - [x] A.1 Champion stat strip. [x] A.2a Build panel: big coloured numbers. [x] A.2b Tables: big coloured win rates.
 - [x] B Match history: shared `MatchRow`, queue filter (backend `?queue=`).
 - [x] F Draft import mirrors the champion page (`lcu-core/pageBuild.ts`).
-- [x] Build fixes: boots rule, support item slot, ADC role-bound boots (`roleBoundItem`), boots options share.
+- [x] Fix: `text-base` painted text near-black (see STATUS). [x] Build fixes: boots rule, support item slot, ADC role-bound boots (`roleBoundItem`), boots options share.
 
 ### A. Finish the champion page
-- [ ] **A.2c Copy read-through (NEXT).** Copy only, no logic: shorten the remaining long sentences on the champion page: `PatchPanel.tsx` (the long caption under the table, the "could not be loaded" and "No collected games..." lines), `BuildPanel.tsx` ("Keystones only · full pages need newer games" and its tooltip), `RelationsPanel.tsx` ("Not enough games yet: a pairing needs 5+ games..."). Move detail into tooltips with `sr-only` text. Keep the e2e text match `/Not enough games yet/` in `e2e/champions.spec.ts` line ~115 working (keep the phrase or update the spec). Done when: typecheck passes, no sentence longer than ~8 words stays visible, tooltips carry the detail.
+- [x] **A.2c Copy read-through.** Copy only, no logic: shorten the remaining long sentences on the champion page: `PatchPanel.tsx` (the long caption under the table, the "could not be loaded" and "No collected games..." lines), `BuildPanel.tsx` ("Keystones only · full pages need newer games" and its tooltip), `RelationsPanel.tsx` ("Not enough games yet: a pairing needs 5+ games..."). Move detail into tooltips with `sr-only` text. Keep the e2e text match `/Not enough games yet/` in `e2e/champions.spec.ts` line ~115 working (keep the phrase or update the spec). Done when: typecheck passes, no sentence longer than ~8 words stays visible, tooltips carry the detail.
 - [ ] **A.3 (owner) Visual check** of the champion page at 1100, 1400 and 1920 px; report what looks off (screenshots help). Any fix becomes its own step.
 
-### H. Hygiene and owner decisions (run in parallel, none blocks A.2c)
+### H. Hygiene and owner decisions (run in parallel, none blocks the next step)
 - [ ] **H.1 (owner)** Run `pnpm --filter desktop test:e2e` (not run for the last several steps) and paste failures. Also look at Profile and Home at 1100 px.
 - [ ] **H.2 (owner)** Check on a real ADC game that the boots icon is a boots item (the `roleBoundItem` id seen was 1220; if it is a quest placeholder, map it to the boots actually bought, from the timeline). Becomes a step if it is wrong.
 - [ ] **H.3 (owner decision, Riot policy)** "Other" queue filter: `COMPLIANCE.md` says Brawl and League Classic data must not be shown. Decide: keep "Other" = everything else, or make it a short allow-list (hide ids outside the named groups plus Swiftplay 480 and Quickplay 490). If allow-list: step H.3a, files `packages/schema/src/queues.ts`, `services/api/src/queues.test.ts`.
@@ -188,8 +188,8 @@ Rules: one step per turn; max ~4 source files plus tests; if a step grows, split
 - [ ] **B.1** Backend: optional `champion` and `role` params on `GET /v1/players/:riotId/matches` (applied after loading, like Arena/Other). Files: `services/api/src/app.ts`, test.
 - [ ] **B.2** UI: champion and role filter chips on Profile (shared with Home). Files: `components/FilterBar.tsx` or `MatchRow.tsx`, `lib/store.ts`, e2e.
 
-### C. One search bar (not before A.2c)
-- [ ] **C.1** Pure matching function (case, space and apostrophe-insensitive: "kaisa", "wukong") with unit tests. Files: new `apps/desktop/src/lib/searchMatch.ts` + test.
+### C. One search bar (A.2c is done, unblocked)
+- [ ] **C.1 (NEXT)** Pure matching function (case, space and apostrophe-insensitive: "kaisa", "wukong") with unit tests. Files: new `apps/desktop/src/lib/searchMatch.ts` + test.
 - [ ] **C.2** Recent searches and favourites store: confirm what `lib/store.ts` already holds; add only what is missing, with tests.
 - [ ] **C.3** Ctrl+K palette: group "Champions" (icon) using C.1. Files: palette component, `lib/nav.ts`.
 - [ ] **C.4** Palette: group "Players" = recents, favourites, players already stored by the backend (small endpoint if needed) + a "Look up name#tag" entry when the text looks like a Riot ID. No Riot calls while typing (Riot has no name-prefix search).

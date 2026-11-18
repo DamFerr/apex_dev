@@ -38,8 +38,8 @@ function Detail({ id, riotId }: { id: string; riotId: string }) {
               <td className="pr-3"><LoadoutIcons loadout={p.loadout} size={22} /></td>
               <td className="text-center tabular-nums">{p.kills}/{p.deaths}/{p.assists}</td>
               <td className="text-center tabular-nums">{p.cs}</td>
-              <td className="pl-3"><div className="h-1.5 rounded-full bg-line/10"><motion.div className="h-full rounded-full bg-accent origin-left"
-                initial={{ scaleX: 0 }} animate={{ scaleX: p.damage / maxDmg }} style={{ width: "100%" }} /></div></td>
+              <td className="pl-3"><div className="flex items-center gap-2 min-w-[9rem]"><span className="w-14 text-right tabular-nums">{p.damage.toLocaleString()}</span><div className="h-1.5 flex-1 rounded-full bg-line/10"><motion.div className="h-full rounded-full bg-accent origin-left"
+                initial={{ scaleX: 0 }} animate={{ scaleX: maxDmg > 0 ? p.damage / maxDmg : 0 }} style={{ width: "100%" }} /></div></div></td>
             </tr>))}</tbody>
         </table>))}
     </div>

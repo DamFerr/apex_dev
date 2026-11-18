@@ -75,7 +75,7 @@ export function LpHistoryTab({ id }: { id: string }) {
       <div className="glass rounded-lg p-4"><Chart pts={cur} />
         {cur.length === 1 && <p className="text-xs text-muted mt-2">Apex started tracking on {day(first.at)}. The graph grows each time your LP changes and you open Apex.</p>}</div>
       {steps.length > 0 && <div className="glass rounded-lg p-4">
-        <h2 className="font-display text-base font-semibold mb-2">Changes</h2>
+        <h2 className="font-display text-[1rem] leading-6 font-semibold mb-2">Changes</h2>
         <ul className="divide-y divide-line/10">{[...steps].reverse().slice(0, 30).map(({ to, from, step }) => (
           <li key={to.snap.at} className="h-10 flex items-center gap-4 text-sm">
             <span className="w-32 text-xs text-muted">{stamp(to.at)}</span>

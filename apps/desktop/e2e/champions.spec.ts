@@ -119,11 +119,11 @@ test("items show WPA (win probability added) with its explanation, on the champi
   await page.goto("/#/champions/Ahri");
   const items = page.getByRole("table").filter({ hasText: "Items" }).first();
   await expect(items.getByRole("columnheader", { name: "WPA" })).toBeVisible();
-  await expect(items.getByText(/^[+−]\d+\.\d$/).first()).toBeVisible();                     // a signed number in percentage points
+  await expect(items.getByText(/^([+−]\d+\.\d|0\.0)$/).first()).toBeVisible();                     // a signed number in percentage points (a value that rounds to zero is a plain 0.0)
   await expect(page.getByText(/^WPA: win probability added/)).toBeVisible();
   const panel = page.getByLabel("Recommended build");
   await expect(panel.getByText(/Under each item: win rate, WPA/)).toBeVisible();
-  await expect(panel.getByText(/^[+−]\d+\.\d$/).first()).toBeVisible();
+  await expect(panel.getByText(/^([+−]\d+\.\d|0\.0)$/).first()).toBeVisible();
 });
 
 test("the skill order shows the 18-level grid with one lit cell per level", async ({ page }) => {
