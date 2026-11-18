@@ -307,7 +307,21 @@ export function buildVariants(champion: string, role: Role | null, rows: BuildRo
   return out.map(([id, g]) => ({ id, label: id, games: g.length, wins: g.reduce((t, r) => t + r.win, 0), build: computeBuild(champion, role, g, items, false) as Omit<ChampionBuild, "variants"> }));
 }
 
-export function computeBuild(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>, withVariants = true): ChampionBuild {
+/**
+ * Boots that the final inventory does not show. Since the 2026 role quests the bot lane keeps its boots in a dedicated 7th slot, which games stored
+ * before Apex read that slot lack (and a game whose slot is never reported still would). The timeline still shows the purchase, so when a game has
+ * a timeline and no boots in its final inventory, the LAST boots bought count as the final boots. Games without a timeline cannot be repaired.
+ * Idempotent, and a game that already has boots is returned as it is.
+ */
+export function repairBoots(r: BuildRow, items: Map<number, ItemMeta>): BuildRow {
+  const final = json<number[]>(r.items), buys = json<number[]>(r.buys);
+  if (!final || !buys || final.some((id) => isBoots(items.get(id)))) return r;
+  const last = [...buys].reverse().find((id) => isBoots(items.get(id)));
+  return last ? { ...r, items: JSON.stringify([...final, last]) } : r;
+}
+
+export function computeBuild(champion: string, role: Role | null, allRows: BuildRow[], items: Map<number, ItemMeta>, withVariants = true): ChampionBuild {
+  const rows = allRows.map((r) => repairBoots(r, items));
   const path = corePath(rows, items), order = buildOrder(rows, items);
   const variants = withVariants ? buildVariants(champion, role, rows, items) : [];
   return { champion, role, games: rows.length, wins: rows.reduce((t, r) => t + r.win, 0), runePages: runePages(rows), keystones: keystoneStats(rows), spells: spellPair(rows), spellPairs: spellPairs(rows),

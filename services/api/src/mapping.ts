@@ -1,3 +1,4 @@
+import { extraItems } from "./participantItems";
 import type { Loadout, LiveGame, PostGameRecap, RecapMetric, MasteryEntry, MatchDetail, MatchSummary, Participant, RankInfo, Role, Summoner, Tier } from "@apex/schema";
 import { canonicalChampionId } from "./champions";
 import { HttpError, type LeagueEntry, type RiotActiveGame, type RiotMastery, type RiotMatch, type RiotParticipant } from "./riot";
@@ -23,7 +24,7 @@ export function toMatchSummary(m: RiotMatch, puuid: string): MatchSummary | null
 }
 /** The items, spells and runes of one player in a finished game. Zero ids (empty slots) are dropped; the trinket is slot 6. Pure. */
 export function toLoadout(p: RiotParticipant): Loadout {
-  const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5].filter((x): x is number => !!x);
+  const items = [...new Set([p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, ...extraItems(p)].filter((x): x is number => !!x))];   // + the role quest slot (ADC boots)
   return { items, trinket: p.item6 || null, spells: [p.summoner1Id, p.summoner2Id].filter((x): x is number => !!x),
     keystone: p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, secondaryStyle: p.perks?.styles?.[1]?.style ?? null };
 }

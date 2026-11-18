@@ -1,3 +1,4 @@
+import { extraItems, noteExtraFields } from "./participantItems";
 import type { DatabaseSync } from "./sqlite";
 import type { Role } from "@apex/schema";
 import { roleOf } from "./mapping";
@@ -155,7 +156,8 @@ export function makeStore(db: DatabaseSync) {
       try {
         insM.run(id, patch, bracket, platform, i.gameEndTimestamp ?? i.gameCreation + i.gameDuration * 1000, i.gameDuration, i.participants.find((p) => p.teamId === 100)?.win ? 1 : 0, timelineBucket(id));
         for (const p of i.participants) {
-          const items = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6].filter((x): x is number => !!x && x > 0);
+          noteExtraFields(p);
+          const items = [...new Set([p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6, ...extraItems(p)].filter((x): x is number => !!x && x > 0))];   // + the role quest slot (ADC boots)
           insP.run(id, p.puuid, p.teamId, canonicalChampionId(p.championName), roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
             p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p),
             p.physicalDamageDealtToChampions ?? null, p.magicDamageDealtToChampions ?? null, p.trueDamageDealtToChampions ?? null, p.totalDamageTaken ?? null, p.timeCCingOthers ?? null);
