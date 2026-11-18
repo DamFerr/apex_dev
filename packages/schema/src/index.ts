@@ -109,6 +109,9 @@ export interface DraftStats {
   champions: { id: string; games: number; wins: number; roles: string[] }[];
   matchups: [string, string, number, number][];   // lane opponents: same role, opposite teams
   synergies: [string, string, number, number][];  // same team
+  /** Role-keyed twins of `champions` and `matchups` (optional: older backends and fixtures omit them, and the engine then falls back to the role-less numbers). Rows are [champion, champion, role, games, winsOfFirst], first id alphabetically first; the role is the one BOTH played. */
+  roleChampions?: { id: string; role: string; games: number; wins: number }[];
+  roleMatchups?: [string, string, string, number, number][];
   /** Damage split, damage taken and CC per champion AND role (optional: older backends and test fixtures omit it). */
   profiles?: CompProfileRow[];
 }

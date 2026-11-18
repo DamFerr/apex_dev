@@ -17,6 +17,7 @@ export const champName = (key: number) => champIndex.get(key)?.name ?? (CHAMPION
 
 interface DraftStore {
   draft: DraftState; /** The champion you locked, kept through the loading screen and the game (the draft itself is reset when champ select ends). */ overlayPick: OverlayPick | null; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void;
+  /** Opt-in (off by default): suggestion cards get Hover / Ban / Lock in buttons that act on your own champ select action, one click = one action. */ clickActions: boolean; setClickActions: (v: boolean) => void;
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
 /** Imports runes (and optionally summoner spells and an item set); the outcome is one summary toast, plus an error toast per failed step. */
@@ -40,7 +41,7 @@ export async function runImport(championKey: number, role: Role | null) {
 }
 export const useDraft = create<DraftStore>((set, get) => ({
   draft: initialDraft, overlayPick: null, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }),
-  setAutoImport: (autoImport) => set({ autoImport }),
+  setAutoImport: (autoImport) => set({ autoImport }), clickActions: false, setClickActions: (clickActions) => set({ clickActions }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });
     set({ draft: next, overlayPick: nextPick(get().overlayPick, next) });

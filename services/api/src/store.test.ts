@@ -157,6 +157,13 @@ describe("draft statistics", () => {
     expect(d.synergies.find((m) => m[0] === "Ahri" && m[1] === "Jinx")).toEqual(["Ahri", "Jinx", 40, 26]);    // blue teammates
     expect(d.synergies.find((m) => m[0] === "Ahri" && m[1] === "Lux")).toBeUndefined();                       // opponents are not synergies
   });
+  it("also returns champion rates and lane matchups per role (H.2)", () => {
+    const d = seededStore().draftStats({});
+    expect(d.roleChampions).toContainEqual({ id: "Ahri", role: "TOP", games: 40, wins: 26 });
+    expect(d.roleMatchups).toContainEqual(["Ahri", "Lux", "TOP", 40, 26]);
+    expect(d.roleMatchups!.every((m) => m[3] >= 3)).toBe(true);
+    expect(seededStore().draftStats({}, 41).roleMatchups).toEqual([]);
+  });
   it("respects filters and drops pairs below the minimum", () => {
     const s = diverseStore();
     expect(s.draftStats({ platform: "na1", patches: ["26.21"] }).games).toBe(20);

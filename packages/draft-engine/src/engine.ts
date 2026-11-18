@@ -4,8 +4,10 @@ import { CROWD_CONTROL_MAX, DAMAGE_BALANCE_MAX, DAMAGE_FREE_SHARE, FRONTLINE_MAX
 
 /** Where numbers come from. createRealData implements it from the games the collector has stored. */
 export interface DraftData {
-  strength(champion: number): number;            // win rate 0..1 for the champion on its own
-  matchup(a: number, b: number): number;         // log-odds edge of a over b (must satisfy matchup(a,b) = -matchup(b,a))
+  /** Win rate 0..1 for the champion on its own; with `role`, in that role (falls back to the overall rate when the role has no games). */
+  strength(champion: number, role?: Role | null): number;
+  /** Log-odds edge of a over b (must satisfy matchup(a,b) = -matchup(b,a)); with `role` (the lane both play), from that role's games only. */
+  matchup(a: number, b: number, role?: Role | null): number;
   synergy(a: number, b: number): number;         // log-odds bonus when a and b are on the same team (symmetric)
   tags(champion: number): string[];
   roles(champion: number): Role[];
@@ -38,17 +40,17 @@ type Term = Omit<Factor, "pp">;
 
 /**
  * Layer A1, champion strength: summed logit win rate of your team minus the enemy's. `data.strength` is already shrunk
- * toward 50% (see `shrunkStrength`), so a rarely seen champion contributes close to nothing.
+ * (see `shrunkStrength`), so a rarely seen champion contributes close to nothing; it is the champion's rate IN the role it is picked in.
  */
 export function strengthTerm(A: Pick[], E: Pick[], data: DraftData): Term[] {
-  const sum = (T: Pick[]) => T.reduce((s, p) => s + logit(data.strength(p.champion)), 0);
+  const sum = (T: Pick[]) => T.reduce((s, p) => s + logit(data.strength(p.champion, p.role)), 0);
   return [{ kind: "strength", champs: [], label: "Champion strength", z: sum(A) - sum(E) }];
 }
 
 /** Layer A2, lane matchups: every ally against the enemy picked in the same role. `data.matchup` is net of the two strengths. */
 export function matchupTerms(A: Pick[], E: Pick[], data: DraftData): Term[] {
   const out: Term[] = [];
-  for (const a of A) for (const e of E) if (a.role && a.role === e.role) out.push({ kind: "matchup", champs: [a.champion, e.champion], label: "Lane matchup", z: data.matchup(a.champion, e.champion) });
+  for (const a of A) for (const e of E) if (a.role && a.role === e.role) out.push({ kind: "matchup", champs: [a.champion, e.champion], label: "Lane matchup", z: data.matchup(a.champion, e.champion, a.role) });
   return out;
 }
 

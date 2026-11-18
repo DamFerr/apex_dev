@@ -96,3 +96,39 @@ describe("createRealData: per-role profiles", () => {
     expect(big.baseline?.()?.takenPerMin).toBeCloseTo((100 * 60) / 1800, 6);
   });
 });
+
+describe("createRealData: role-keyed statistics (H.2)", () => {
+  const roleStats = (s: Partial<DraftStats> = {}) => stats({
+    champions: champs({ Ahri: [200, 100], Lux: [200, 100] }),
+    roleChampions: [{ id: "Ahri", role: "TOP", games: 100, wins: 40 }, { id: "Ahri", role: "JUNGLE", games: 100, wins: 60 }],
+    ...s,
+  });
+  it("a champion's strength differs per role and is shrunk toward its overall rate", () => {
+    const d = createRealData(roleStats(), keys, tags);
+    expect(d.strength(1, "JUNGLE")).toBeGreaterThan(d.strength(1)); expect(d.strength(1, "TOP")).toBeLessThan(d.strength(1));
+    expect(d.strength(1, "JUNGLE")).toBeLessThan(0.6);                        // 60% in 100 games is shrunk, never taken at face value
+  });
+  it("a role with no games gives the overall rate; no role gives the overall rate; old data (no roleChampions) is unchanged", () => {
+    const d = createRealData(roleStats(), keys, tags);
+    expect(d.strength(1, "SUPPORT")).toBeCloseTo(d.strength(1), 12); expect(d.strength(1, null)).toBeCloseTo(d.strength(1), 12);
+    const old = createRealData(stats({ champions: champs({ Ahri: [100, 60] }) }), keys, tags);
+    expect(old.strength(1, "TOP")).toBeCloseTo(85 / 150, 6);
+  });
+  it("a role's matchup uses only that role's games: top-lane games never feed a jungle number", () => {
+    const d = createRealData(roleStats({ matchups: [["Ahri", "Lux", 100, 70]], roleMatchups: [["Ahri", "Lux", "TOP", 100, 70]] }), keys, tags);
+    expect(d.matchup(1, 3, "TOP")).toBeGreaterThan(0.1);
+    expect(d.matchup(1, 3, "JUNGLE")).toBe(0);                                // the pair was only ever seen in top
+    expect(d.matchup(1, 3)).toBeGreaterThan(0.1);                             // no role: role-less pair
+  });
+  it("role matchups stay antisymmetric and fall back to role-less pairs on old data", () => {
+    const d = createRealData(roleStats({ roleMatchups: [["Ahri", "Lux", "TOP", 100, 70]] }), keys, tags);
+    expect(d.matchup(3, 1, "TOP")).toBeCloseTo(-d.matchup(1, 3, "TOP"), 12);
+    const old = createRealData(stats({ matchups: [["Ahri", "Lux", 100, 70]] }), keys, tags);
+    expect(old.matchup(1, 3, "JUNGLE")).toBeGreaterThan(0.1);                  // no roleMatchups from the backend: old behaviour
+  });
+  it("the engine looks the lane up by role: same pair, top vs jungle", () => {
+    const d = createRealData(roleStats({ roleMatchups: [["Ahri", "Lux", "TOP", 100, 70]] }), keys, tags);
+    const run = (role: "TOP" | "JUNGLE") => evaluate([{ champion: 1, role }], [{ champion: 3, role }], d).factors.some((f) => f.kind === "matchup" && f.z !== 0);
+    expect(run("TOP")).toBe(true); expect(run("JUNGLE")).toBe(false);
+  });
+});

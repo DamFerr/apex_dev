@@ -61,9 +61,9 @@ export function recommendBans(role: Role, candidates: number[], data: DraftData,
   const weightOf = (p: { games: number; weight?: number }) => p.weight ?? p.games, total = pool.reduce((s, p) => s + weightOf(p), 0), out: BanSuggestion[] = [];
   for (const c of candidates) {
     if (opts.exclude?.has(c) || !data.roles(c).includes(role)) continue;
-    let z = logit(data.strength(c)), best = 0, against: number | undefined;
+    let z = logit(data.strength(c, role)), best = 0, against: number | undefined;
     for (const p of pool) {
-      const contribution = 2 * (weightOf(p) / total) * data.matchup(c, p.champion);
+      const contribution = 2 * (weightOf(p) / total) * data.matchup(c, p.champion, role);
       z += contribution;
       if (contribution > best) { best = contribution; against = p.champion; }
     }

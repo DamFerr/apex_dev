@@ -222,7 +222,12 @@ export function makeStore(db: DatabaseSync) {
       const pairs = (sameTeam: boolean) => q<[string, string, number, number]>(`SELECT a.champion x, b.champion y, COUNT(*) g, SUM(a.win) w FROM participants a JOIN participants b ON a.match_id = b.match_id AND a.champion < b.champion
         AND ${sameTeam ? "a.team = b.team" : "a.team <> b.team AND a.role IS NOT NULL AND a.role = b.role"} JOIN matches m ON m.id = a.match_id WHERE 1=1${w.sql} GROUP BY a.champion, b.champion HAVING g >= ${min}`, ...w.args)
         .map((r) => { const o = r as unknown as { x: string; y: string; g: number; w: number }; return [o.x, o.y, o.g, o.w] as [string, string, number, number]; });
-      return { games: this.matchCount(f), champions: [...per].map(([id, e]) => ({ id, games: e.games, wins: e.wins, roles: [...e.roles].filter(([, g]) => g >= Math.max(2, e.games * 0.1)).map(([r]) => r) })), matchups: pairs(false), synergies: pairs(true), profiles: this.compProfiles(f) };
+      // Same lane pairs split by the role both played, so a top-lane record never feeds a jungle number.
+      const roleMatchups = q<{ x: string; y: string; r: string; g: number; w: number }>(`SELECT a.champion x, b.champion y, a.role r, COUNT(*) g, SUM(a.win) w FROM participants a JOIN participants b ON a.match_id = b.match_id AND a.champion < b.champion
+        AND a.team <> b.team AND a.role IS NOT NULL AND a.role = b.role JOIN matches m ON m.id = a.match_id WHERE 1=1${w.sql} GROUP BY a.champion, b.champion, a.role HAVING g >= ${min}`, ...w.args)
+        .map((o) => [o.x, o.y, o.r, o.g, o.w] as [string, string, string, number, number]);
+      const roleChampions = champions.filter((r) => r.role).map((r) => ({ id: r.champion, role: r.role as string, games: r.games, wins: r.wins }));
+      return { roleChampions, roleMatchups, games: this.matchCount(f), champions: [...per].map(([id, e]) => ({ id, games: e.games, wins: e.wins, roles: [...e.roles].filter(([, g]) => g >= Math.max(2, e.games * 0.1)).map(([r]) => r) })), matchups: pairs(false), synergies: pairs(true), profiles: this.compProfiles(f) };
     },
     /** Which slice of this player's match history the next crawl reads (0 = the newest games; back to 0 once the history is done). */
     setSeedDepth: (puuid: string, depth: number) => void db.prepare("UPDATE seeds SET depth = ? WHERE puuid = ?").run(depth, puuid),

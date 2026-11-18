@@ -94,21 +94,33 @@ pub async fn lcu_sync(app: AppHandle) -> bool {
 
 /// Limited write access to the League client. Allowed: rune page reads/writes, item set reads/writes for your own summoner id
 /// (plus reading that id), and setting your own summoner
-/// spells in champ select (PATCH my-selection only). Everything else is refused.
+/// spells in champ select (PATCH my-selection), and your own champ select action (PATCH actions/<id> to hover, lock in or ban; POST actions/<id>/complete). Everything else is refused.
 #[tauri::command]
 pub async fn lcu_request(method: String, path: String, body: Option<Value>) -> Result<Value, String> {
     const PERKS: [&str; 2] = ["/lol-perks/v1/pages", "/lol-perks/v1/currentpage"];
     const SELECTION: &str = "/lol-champ-select/v1/session/my-selection";
     const SUMMONER: &str = "/lol-summoner/v1/current-summoner";
+    const ACTIONS: &str = "/lol-champ-select/v1/session/actions/";
     let perks_path = PERKS.iter().any(|p| path == *p || path.starts_with(&format!("{p}/")));
     // Item sets: /lol-item-sets/v1/item-sets/<numeric summoner id>/sets, read and write. Nothing else under /lol-item-sets.
     let item_sets_path = path
         .strip_prefix("/lol-item-sets/v1/item-sets/")
         .and_then(|rest| rest.strip_suffix("/sets"))
         .map_or(false, |id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()));
+    // Your own champ select action (opt-in, one click in the UI): /actions/<numeric id> PATCH with exactly {championId} (hover) or {championId, completed: true}
+    // (lock in / ban), and POST /actions/<numeric id>/complete as the fallback. Nothing else, and no other body.
+    let action_rest = path.strip_prefix(ACTIONS);
+    let action_id_ok = |id: &str| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit());
+    let action_patch = action_rest.map_or(false, |id| action_id_ok(id)) && body.as_ref().and_then(|b| b.as_object()).map_or(false, |o| {
+        o.get("championId").map_or(false, |v| v.is_u64())
+            && o.iter().all(|(k, v)| k == "championId" || (k == "completed" && v.as_bool() == Some(true)))
+    });
+    let action_complete = action_rest.and_then(|r| r.strip_suffix("/complete")).map_or(false, |id| action_id_ok(id)) && body.is_none();
     let allowed = !path.contains("..")
         && if path == SELECTION {
             method == "PATCH"
+        } else if action_patch || action_complete {
+            (method == "PATCH" && action_patch) || (method == "POST" && action_complete)
         } else if path == SUMMONER {
             method == "GET"
         } else if item_sets_path {
