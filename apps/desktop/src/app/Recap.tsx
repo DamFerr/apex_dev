@@ -41,19 +41,10 @@ function MetricCard({ m }: { m: RecapMetric }) {
     </motion.div>);
 }
 
-export function Recap() {
-  const me = useUi((s) => s.myRiotId), { riotId, matchId } = useParams(), id = riotId ? decodeURIComponent(riotId) : me;
-  const q = useRecap(id, matchId ? decodeURIComponent(matchId) : undefined), r = q.data, s = r ? scoreOf(r) : null;
-  if (!id) return (<>
-    <h1 className="font-display text-3xl font-semibold tracking-tight mb-5">Game recap</h1>
-    <RiotIdPrompt />
-  </>);
+/** The recap itself (result, four metrics, grade). Shown on the Recap page and in the game-end popup (`inDialog` drops the page-only link). */
+export function RecapView({ r, id, inDialog = false }: { r: PostGameRecap; id: string; inDialog?: boolean }) {
+  const s = scoreOf(r);
   return (<>
-    <h1 className="font-display text-3xl font-semibold tracking-tight">Game recap</h1>
-    <p className="text-sm text-muted mt-1 mb-5">{id} · {matchId ? "the game you picked" : "latest game"}. Comparisons use collected Ranked Solo games and your own recent games.</p>
-    {q.isLoading && <div className="grid gap-4"><Skeleton className="h-28" /><div className="grid grid-cols-4 gap-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-36" />)}</div></div>}
-    {q.isError && <div role="alert" className="glass rounded-lg p-6 text-sm text-bad max-w-xl">{(q.error as Error).message}</div>}
-    {r && <>
       <div className={`glass rounded-lg p-5 flex items-center gap-5 border-l-4 ${r.win ? "border-l-good" : "border-l-bad"}`}>
         <ChampIcon id={r.champion} name={r.championName} size={64} />
         <div className="flex-1 min-w-0">
@@ -74,7 +65,22 @@ export function Recap() {
         {r.personal ? `Your comparison: ${r.personal.games} other recent games in this role.` : "Your comparison needs at least 3 other recent games in this role."}{" "}
         {!s && "No grade without a comparison. "}Numbers are shown, never guessed.
       </p>
-      <p className="text-xs text-muted mt-2"><Link to={`/profile/${encodeURIComponent(id)}`} className="focus-ring underline rounded hover:text-text">Back to profile</Link></p>
-    </>}
+      {!inDialog && <p className="text-xs text-muted mt-2"><Link to={`/profile/${encodeURIComponent(id)}`} className="focus-ring underline rounded hover:text-text">Back to profile</Link></p>}
+  </>);
+}
+
+export function Recap() {
+  const me = useUi((s) => s.myRiotId), { riotId, matchId } = useParams(), id = riotId ? decodeURIComponent(riotId) : me;
+  const q = useRecap(id, matchId ? decodeURIComponent(matchId) : undefined), r = q.data;
+  if (!id) return (<>
+    <h1 className="font-display text-3xl font-semibold tracking-tight mb-5">Game recap</h1>
+    <RiotIdPrompt />
+  </>);
+  return (<>
+    <h1 className="font-display text-3xl font-semibold tracking-tight">Game recap</h1>
+    <p className="text-sm text-muted mt-1 mb-5">{id} · {matchId ? "the game you picked" : "latest game"}. Comparisons use collected Ranked Solo games and your own recent games.</p>
+    {q.isLoading && <div className="grid gap-4"><Skeleton className="h-28" /><div className="grid grid-cols-4 gap-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-36" />)}</div></div>}
+    {q.isError && <div role="alert" className="glass rounded-lg p-6 text-sm text-bad max-w-xl">{(q.error as Error).message}</div>}
+    {r && <RecapView r={r} id={id} />}
   </>);
 }

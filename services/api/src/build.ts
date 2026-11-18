@@ -1,9 +1,10 @@
+import { MIXED_ARCHETYPES, PURE_ARCHETYPES } from "@apex/schema";
 import type { BuildArchetype, BuildItem, BuildItemBlock, BuildVariant, ChampionBuild, KeystoneStat, ItemPathStat, ItemWpa, PathItem, Role, RunePageStat, SkillOrderStat, SpellPairStat } from "@apex/schema";
 import { itemWpa } from "@apex/stats-core";
 
 /** One collected game of a champion (see Store.buildRows). */
 export interface BuildRow { /** Keystone rune id: stored for every game, also those collected before full rune pages were. */ keystone?: number | null; perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills?: string | null; start?: string | null; buys?: string | null; /** Game length in seconds (needed for WPA). */ duration?: number }
-export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; boots?: boolean; /** Data Dragon item tags (SpellDamage, Damage, Armor ...), used to tell AP, AD and Tank builds apart. */ tags?: string[] }
+export interface ItemMeta { name: string; total: number; hasUpgrade: boolean; boots?: boolean; /** Data Dragon item tags (SpellDamage, Damage, Armor ...), used to tell AP, AD and Tank builds apart. */ tags?: string[]; /** Short stat keys read from the Data Dragon description (see ddragon.ts `itemStats`): ad, ap, armor, mr, hp, as, crit, leth, hsp, onhit, active ... */ stats?: string[] }
 
 const FLASH = 4;
 /** A build-order path needs at least this many games that kept the same core items; below it no path is shown (an arbitrary pick of 1-2 games is worse than nothing). */
@@ -249,21 +250,108 @@ export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGa
   return { items: order.map((id) => ({ id, name: items.get(id)!.name, count: 1 })), games: path.games, wins: path.wins };
 }
 
+/** Name of a build kind as a URL/file-safe id: "Heal & Shield / Tank" -> "heal-and-shield-tank". */
+export const archetypeId = (a: BuildArchetype): string => a.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+type Kind = (typeof PURE_ARCHETYPES)[number];
+type ItemKinds = { kinds: Kind[]; ad: boolean; ap: boolean };
+const K = (kinds: Kind[], ad = false, ap = false): ItemKinds => ({ kinds, ad, ap });
 /**
- * What kind of build a game ended with, from the Data Dragon tags of its finished items (boots and components do not count):
- * an item with SpellDamage counts for AP, with Damage or CriticalStrike for AD, and a defensive item (Armor, SpellBlock, Health) without
- * either damage tag counts for Tank. The kind with the most items wins; ties go to AP, then AD. Fewer than three counted items (a game that
- * ended early) is not classified (null). This is a label for grouping, not a statement about the champion's role in the team.
+ * Hand-kept answers for items whose text does not say what they are for (or says it badly). They win over the text rules of `itemKinds`, are
+ * keyed by item name (letters and digits only, lower case, see `norm`) and are harmless when an item is renamed or removed: the text rules take over.
+ * `ad` / `ap` say whether the item counts as AD / AP scaling for Hybrid; leave them out when it should not (Guinsoo's has AP in its text but belongs to On-Hit builds).
+ * Add an item here when a champion's build shows up under the wrong kind; keep it short, the text rules handle most items.
+ */
+export const ITEM_KIND_OVERRIDES: ReadonlyMap<string, ItemKinds> = new Map(Object.entries({
+  // Tank
+  "Heartsteel": K(["Tank"]), "Sunfire Aegis": K(["Tank"]), "Thornmail": K(["Tank"]), "Randuin's Omen": K(["Tank"]), "Frozen Heart": K(["Tank"]), "Jak'Sho, The Protean": K(["Tank"]),
+  "Warmog's Armor": K(["Tank"]), "Kaenic Rookern": K(["Tank"]), "Spirit Visage": K(["Tank"]), "Force of Nature": K(["Tank"]), "Abyssal Mask": K(["Tank"]), "Gargoyle Stoneplate": K(["Tank"]),
+  // Tank / Utility
+  "Locket of the Iron Solari": K(["Tank", "Utility"]), "Knight's Vow": K(["Tank", "Utility"]), "Zeke's Convergence": K(["Tank", "Utility"]),
+  // Heal & Shield and Utility
+  "Redemption": K(["Heal & Shield"]), "Moonstone Renewer": K(["Heal & Shield"], false, true), "Staff of Flowing Water": K(["Heal & Shield"], false, true), "Ardent Censer": K(["Heal & Shield"], false, true),
+  "Mikael's Blessing": K(["Heal & Shield", "Utility"]), "Shurelya's Battlesong": K(["Utility"]), "Imperial Mandate": K(["Utility"]), "Echoes of Helia": K(["Heal & Shield"], false, true),
+  // AP / Bruiser
+  "Riftmaker": K(["AP", "Bruiser"], false, true), "Liandry's Torment": K(["AP", "Bruiser"], false, true), "Rod of Ages": K(["AP", "Bruiser"], false, true), "Cosmic Drive": K(["AP"], false, true),
+  // Bruiser
+  "Black Cleaver": K(["Bruiser"], true), "Sterak's Gage": K(["Bruiser"], true), "Trinity Force": K(["Bruiser"], true), "Death's Dance": K(["Bruiser"], true), "Sundered Sky": K(["Bruiser"], true),
+  "Eclipse": K(["Bruiser"], true), "Hullbreaker": K(["Bruiser"], true), "Stridebreaker": K(["Bruiser"], true), "Titanic Hydra": K(["Bruiser"], true), "Maw of Malmortius": K(["Bruiser"], true), "Divine Sunderer": K(["Bruiser"], true),
+  // Lethality (Collector is Crit and Lethality)
+  "Collector": K(["Crit", "Lethality"], true), "Hubris": K(["Lethality"], true), "Opportunity": K(["Lethality"], true), "Serpent's Fang": K(["Lethality"], true), "Youmuu's Ghostblade": K(["Lethality"], true),
+  "Duskblade of Draktharr": K(["Lethality"], true), "Voltaic Cyclosword": K(["Lethality"], true), "Axiom Arc": K(["Lethality"], true), "Profane Hydra": K(["Lethality"], true), "Edge of Night": K(["Lethality"], true),
+  // On-Hit (and the Crit / On-Hit crossover)
+  "Kraken Slayer": K(["On-Hit", "AD"], true), "Blade of the Ruined King": K(["On-Hit", "AD"], true), "Guinsoo's Rageblade": K(["On-Hit"]), "Wit's End": K(["On-Hit"]), "Nashor's Tooth": K(["On-Hit"], false, true), "Terminus": K(["On-Hit"]),
+  "Yun Tal Wildarrows": K(["Crit", "On-Hit"], true), "Runaan's Hurricane": K(["Crit", "On-Hit"], true),
+}).map(([name, v]) => [norm(name), v] as const));
+
+/** What one item stands for: the kinds it counts towards (first = main one) and whether it scales with AD and/or AP. The override table first, then the text rules. */
+export function itemKinds(it: ItemMeta): ItemKinds {
+  const fixed = ITEM_KIND_OVERRIDES.get(norm(it.name)); if (fixed) return fixed;
+  const st = new Set(it.stats ?? []), tg = new Set(it.tags ?? []), has = (stat: string, tag?: string) => st.has(stat) || (!!tag && tg.has(tag));
+  const ad = has("ad", "Damage") || has("crit", "CriticalStrike") || has("leth", "ArmorPenetration"), ap = has("ap", "SpellDamage");
+  const crit = has("crit", "CriticalStrike"), leth = st.has("leth") || (st.size === 0 && tg.has("ArmorPenetration")), hsp = st.has("hsp");
+  const onhit = has("onhit", "OnHit"), health = has("hp", "Health"), defence = has("armor", "Armor") || has("mr", "SpellBlock");
+  const active = st.has("active") || tg.has("Active") || tg.has("Aura") || tg.has("Slow");
+  const kinds: Kind[] = [];
+  if (hsp) { kinds.push("Heal & Shield"); if (defence) kinds.push("Tank"); }
+  else if (onhit) { kinds.push("On-Hit"); if (crit) kinds.push("Crit"); else if (ad) kinds.push("AD"); }     // an AP item with on-hit stays plain On-Hit
+  else if (leth) { if (crit) kinds.push("Crit"); kinds.push("Lethality"); }
+  else if (crit) kinds.push("Crit");
+  else if (ap) { kinds.push("AP"); if (health) kinds.push("Bruiser"); }
+  else if (ad) kinds.push(health || defence ? "Bruiser" : "AD");
+  else if (defence || health) { kinds.push("Tank"); if (active) kinds.push("Utility"); }
+  else if (active) kinds.push("Utility");
+  return { kinds, ad, ap };
+}
+
+/**
+ * The named mixes of two kinds. Crit and On-Hit have both orders (Crit / On-Hit, On-Hit / Crit): the kind with more items goes first,
+ * a tie keeps the first one listed. Every other mix has one fixed order.
+ */
+const MIXES: { a: Kind; b: Kind; names: BuildArchetype[] }[] = (() => {
+  const by = new Map<string, { a: Kind; b: Kind; names: BuildArchetype[] }>();
+  for (const m of MIXED_ARCHETYPES) {
+    const [x, y] = m.split(" / ") as [Kind, Kind], key = [x, y].sort().join("|"), e = by.get(key);
+    if (e) e.names.push(m); else by.set(key, { a: x, b: y, names: [m] });
+  }
+  return [...by.values()];
+})();
+
+/**
+ * What kind of build a list of finished items is (boots and components do not count; a duplicate counts once). `buildVariants` passes the usual
+ * inventory of a group of games (up to six items).
+ * 1. Fewer than three counted items is not classified (null).
+ * 2. Every item counts towards one or two kinds (`itemKinds`: the override table first, else Lethality, Heal & Shield, On-Hit ... from the item text).
+ * 3. Hybrid needs really mixed scaling: at least two AD and two AP items, and the smaller side at least two thirds of the larger one
+ *    (3 AP + 3 AD or 3 + 2 is Hybrid, 4 AP + 2 AD is an AP build with some AD).
+ * 4. Otherwise a named mix (AP / Bruiser, Crit / On-Hit ...) when both of its kinds have at least two items; the mix with the most items wins.
+ *    Crit / On-Hit has both orders: the kind with more items goes first.
+ * 5. Otherwise the kind with the most items (ties: AP, AD, Bruiser, Crit, Lethality, On-Hit, Heal & Shield, Tank, Utility) if it covers at least half of the
+ *    items; spread thinner than that is Well Rounded. Items that count towards no kind still count as items.
+ * A label for grouping games, not a statement about the champion's role in the team.
  */
 export function archetype(finalItems: number[], items: Map<number, ItemMeta>): BuildArchetype | null {
-  const n = { AP: 0, AD: 0, Tank: 0 };
+  const n = new Map<Kind, number>(); let total = 0, ad = 0, ap = 0;
   for (const id of new Set(finalItems)) {
-    const it = items.get(id); if (!isFinished(it) || isSupportUpgrade(it)) continue; // the support upgrade says nothing about AP, AD or Tank
-    const t = new Set(it.tags ?? []), ap = t.has("SpellDamage"), ad = t.has("Damage") || t.has("CriticalStrike");
-    if (ap) n.AP++; else if (ad) n.AD++; else if (t.has("Armor") || t.has("SpellBlock") || t.has("Health")) n.Tank++;
+    const it = items.get(id); if (!isFinished(it) || !(it.stats?.length || it.tags?.length)) continue;   // an item without stats or tags tells nothing
+    if (isSupportUpgrade(it)) continue;                                // the support upgrade says nothing about the kind of build
+    const k = itemKinds(it); total++; if (k.ad) ad++; if (k.ap) ap++;
+    for (const kind of k.kinds) n.set(kind, (n.get(kind) ?? 0) + 1);
   }
-  if (n.AP + n.AD + n.Tank < 3) return null;
-  return (["AP", "AD", "Tank"] as const).reduce((best, k) => (n[k] > n[best] ? k : best), "AP");
+  if (total < 3) return null;
+  if (Math.min(ad, ap) >= 2 && Math.min(ad, ap) * 3 >= Math.max(ad, ap) * 2) return "Hybrid";
+  const c = (k: Kind) => n.get(k) ?? 0;
+  const mix = MIXES.filter((m) => c(m.a) >= 2 && c(m.b) >= 2).sort((p, q) => c(q.a) + c(q.b) - c(p.a) - c(p.b))[0];
+  if (mix) return mix.names.length > 1 && c(mix.b) > c(mix.a) ? mix.names[1]! : mix.names[0]!;
+  const order: Kind[] = ["AP", "AD", "Bruiser", "Crit", "Lethality", "On-Hit", "Heal & Shield", "Tank", "Utility"];
+  const top = order.reduce((best, k) => (c(k) > c(best) ? k : best), order[0]!);
+  return c(top) * 2 >= total ? top : "Well Rounded";
+}
+
+/** The finished items a game kept (final inventory; boots, components and the support quest item left out), each once. */
+export function keptItems(r: BuildRow, items: Map<number, ItemMeta>): number[] {
+  const final = json<number[]>(r.items); if (!final) return [];
+  return [...new Set(final)].filter((id) => isFinished(items.get(id)) && !isSupportUpgrade(items.get(id)));
 }
 
 /** A variant needs at least this many games AND this share of the classified games (so a 2% oddity is not a "build"). */
@@ -300,17 +388,45 @@ export function itemWpas(rows: BuildRow[], items: Map<number, ItemMeta>): Map<nu
   return out;
 }
 
-/** The variants of a champion's games (see `archetype`). Fewer than two that qualify = none: a single build is just "the build". Most played first. */
+/** Kinds named in a label: "Crit / On-Hit" -> Crit, On-Hit. Two labels are related when they share one ("On-Hit" and "On-Hit / AD"). */
+const parts = (label: BuildArchetype) => label.split(" / ");
+const related = (x: BuildArchetype, y: BuildArchetype) => parts(x).some((k) => parts(y).includes(k));
+
+/**
+ * The variants of a champion's games, most played first; fewer than two that qualify = none (a single build is just "the build").
+ * 1. Core of a game = its three most popular kept finished items (popular among ALL the champion's games, ties by id). Like the page's Core items block,
+ *    and independent of purchase order, so players who buy the same items in another order, or end with one odd extra item, share a core.
+ * 2. Games with the same core are one group. A group is labelled once, from its usual inventory: the core plus the three items its games keep most often
+ *    (`archetype`). One odd game can no longer flip its own label.
+ * 3. Groups with the same label are joined. Then variants with the same three core items, or two of three and related labels (they share a kind, like
+ *    On-Hit and On-Hit / AD), are joined into the bigger one: the same build never shows twice under two names.
+ * Games with fewer than three kept finished items are not classified. The variant's starting items, runes, skills and items come from its own games only.
+ */
 export function buildVariants(champion: string, role: Role | null, rows: BuildRow[], items: Map<number, ItemMeta>): BuildVariant[] {
-  const groups = new Map<BuildArchetype, BuildRow[]>(); let classified = 0;
-  for (const r of rows) {
-    const ids = json<number[]>(r.items), kind = ids ? archetype(ids, items) : null; if (!kind) continue;
-    classified++; const g = groups.get(kind) ?? []; g.push(r); groups.set(kind, g);
+  const kept = rows.map((r) => keptItems(r, items)), pop = new Map<number, number>();
+  for (const k of kept) for (const id of k) pop.set(id, (pop.get(id) ?? 0) + 1);
+  const byPop = (a: number, b: number) => (pop.get(b) ?? 0) - (pop.get(a) ?? 0) || a - b;
+  const cores = new Map<string, number[]>();                                     // core -> indexes of its games
+  kept.forEach((k, i) => { if (k.length < 3) return; const key = [...k].sort(byPop).slice(0, 3).sort((a, b) => a - b).join(","); (cores.get(key) ?? cores.set(key, []).get(key)!).push(i); });
+  const labelled = new Map<BuildArchetype, { core: number[]; rows: BuildRow[]; n: number }>(); let classified = 0;
+  for (const [key, idx] of cores) {
+    const core = key.split(",").map(Number), count = new Map<number, number>();
+    for (const i of idx) for (const id of kept[i]!) if (!core.includes(id)) count.set(id, (count.get(id) ?? 0) + 1);
+    const usual = [...count].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 3).map(([id]) => id);
+    const label = archetype([...core, ...usual], items); if (!label) continue;
+    const g = labelled.get(label) ?? { core, rows: [], n: 0 }, rs = idx.map((i) => rows[i]!);
+    if (!g.rows.length) g.core = core; else if (rs.length > g.n) { g.core = core; g.n = rs.length; }   // the biggest core stands for the label
+    g.n = Math.max(g.n, rs.length); g.rows.push(...rs); classified += rs.length; labelled.set(label, g);
+  }
+  const out: { label: BuildArchetype; core: number[]; rows: BuildRow[] }[] = [];
+  for (const [label, g] of [...labelled].sort((a, b) => b[1].rows.length - a[1].rows.length || (a[0] < b[0] ? -1 : 1))) {
+    const same = out.find((o) => { const common = o.core.filter((id) => g.core.includes(id)).length; return common === 3 || (common >= 2 && related(o.label, label)); });
+    if (same) same.rows.push(...g.rows); else out.push({ label, core: g.core, rows: [...g.rows] });
   }
   const need = Math.max(MIN_VARIANT_GAMES, Math.ceil(classified * MIN_VARIANT_SHARE));
-  const out = [...groups].filter(([, g]) => g.length >= need).sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1)).slice(0, MAX_VARIANTS);
-  if (out.length < 2) return [];
-  return out.map(([id, g]) => ({ id, label: id, games: g.length, wins: g.reduce((t, r) => t + r.win, 0), build: computeBuild(champion, role, g, items, false) as Omit<ChampionBuild, "variants"> }));
+  const top = out.filter((o) => o.rows.length >= need).sort((a, b) => b.rows.length - a.rows.length || (a.label < b.label ? -1 : 1)).slice(0, MAX_VARIANTS);
+  if (top.length < 2) return [];
+  return top.map((o) => ({ id: archetypeId(o.label), label: o.label, games: o.rows.length, wins: o.rows.reduce((t, r) => t + r.win, 0), build: computeBuild(champion, role, o.rows, items, false) as Omit<ChampionBuild, "variants"> }));
 }
 
 /**

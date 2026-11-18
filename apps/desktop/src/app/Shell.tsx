@@ -11,6 +11,7 @@ import { useStoredPlayers } from "../lib/api";
 import { win } from "../lib/tauri";
 import { Skeleton, spring } from "../components/ui";
 import { preload } from "./lazyPages";
+import { GameSummary } from "./GameSummary";
 import { useDraft } from "../lib/lcu";
 import { useDdChampions, useDdVersion } from "../lib/ddragon";
 import { applyCompact } from "../lib/compact";
@@ -195,6 +196,7 @@ export function Shell() {
       {!compact && <StatusArea />}
       <div className="sr-only" role="status" aria-live="polite">{label}</div>
       <CommandPalette />
+      <GameSummary />
       <Toaster />
     </div>
   );

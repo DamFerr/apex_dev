@@ -5,7 +5,11 @@ import { Button, spring } from "../components/ui";
 import { applyCompact } from "../lib/compact";
 import { isTauri } from "../lib/tauri";
 import { useUi } from "../lib/store";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { isInGame } from "@apex/lcu-core";
+import { Tabs } from "../components/Tabs";
+import { RiotIdPrompt } from "../components/RiotIdPrompt";
+import { LiveGameView } from "./LiveGameView";
 import { createRealData, evaluate, personalZ, recommend, recommendBans, resolve, teamComp } from "@apex/draft-engine";
 import { FilterBar } from "../components/FilterBar";
 import { useDraftStats, usePool } from "../lib/api";
@@ -39,6 +43,10 @@ export function Draft() {
   const poolSource = "your recent games";
   const { draft, autoImport, setAutoImport, log, spells, setSpells, items, setItems } = useDraft();
   const compact = useUi((s) => s.compact);
+  // Champ select first, then the live game of the same match. The tab follows the League client's phase; you can still click the other one.
+  const gameOn = draft.gameflow === "GameStart" || isInGame(draft.gameflow);
+  const [tab, setTab] = useState<"draft" | "live">(gameOn ? "live" : "draft");
+  useEffect(() => { if (draft.gameflow === "ChampSelect") setTab("draft"); else if (gameOn) setTab("live"); }, [draft.gameflow, gameOn]);
   const me = draft.slots.find((x) => x.isLocal), myKey = me ? (me.locked ? me.championId : me.hoverId) : 0;
   const [personalize, setPersonalize] = useState(true), poolQ = usePool(myId);
   // Your pool (recent games plus mastery), keyed by numeric champion key.
@@ -73,8 +81,10 @@ export function Draft() {
   const team = (t: Slot["team"]) => draft.slots.filter((x) => x.team === t);
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Draft</h1>
-    <p className="text-sm text-muted mt-1 mb-5">Champ select assistant. Suggestions use the games Apex has collected.</p>
+    <p className="text-sm text-muted mt-1 mb-5">Champ select assistant, then your live game. Suggestions use the games Apex has collected.</p>
     {!draft.connected && <div className="glass rounded-lg p-5 mb-5 text-sm">League of Legends client not detected. Start the game client and Apex connects automatically.</div>}
+    <div className="mb-5"><Tabs id="draft" value={tab} onChange={setTab} tabs={[{ key: "draft", label: "Champ select" }, { key: "live", label: "Live game" }]} /></div>
+    {tab === "live" ? (myId ? <LiveGameView id={myId} watch={gameOn} refresh /> : <RiotIdPrompt />) : <>
     <FilterBar />
     <div className="flex flex-wrap items-center gap-3 mb-5">
       {isTauri && <Button variant="ghost" disabled={!draft.connected || !myKey} title={'Writes the rune page, summoner spells and item set(s) the champion page shows (its best build), named "Apex: <champion>"'} onClick={() => void runImport(myKey, me?.role ?? null)}>Import now</Button>}
@@ -106,5 +116,6 @@ export function Draft() {
     <h2 className="font-display text-lg font-semibold mt-8 mb-2">Import log</h2>
     <ul className="space-y-1 text-sm"><AnimatePresence initial={false}>{log.map((l) => <motion.li key={l.id} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-md px-3 py-2">{l.text}</motion.li>)}</AnimatePresence>
       {!log.length && <li className="text-muted text-xs">Nothing imported yet. Turn on auto-import, then lock in a champion.</li>}</ul>
+    </>}
   </>);
 }

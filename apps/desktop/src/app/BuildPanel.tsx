@@ -164,7 +164,7 @@ function SingleBuild({ b }: { b: Core }) {
   </div>);
 }
 
-/** The list of build variants (AP, AD, Tank) with a sort switch, like the build list of a champion page on Lolalytics or Blitz. */
+/** The list of build variants (AP, AD, Tank, Bruiser, Crit, mixes like Crit / On-Hit ...) with a sort switch, like the build list of a champion page on Lolalytics or Blitz. */
 function VariantList({ b, sort, setSort, selected, setSelected }: { b: ChampionBuild; sort: VariantSort; setSort: (s: VariantSort) => void; selected: string; setSelected: (id: string) => void }) {
   const sorted = sortVariants(b, sort);
   return (<div className="space-y-3" role="group" aria-label="Build variants">
@@ -176,11 +176,11 @@ function VariantList({ b, sort, setSort, selected, setSelected }: { b: ChampionB
         <div className="text-[11px] text-muted mb-2">{v.games.toLocaleString()} games<LowBadge games={v.games} /></div>
         <BuildIcons build={v.build} />
       </button></li>))}</ul>
-    <p className="text-[11px] text-muted" title="Grouped by finished items (Data Dragon tags): AP, AD or defensive. Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items</p>
+    <p className="text-[11px] text-muted" title="Grouped by the first three finished items a player kept (Data Dragon stats and tags, plus a short list of hand-set items): AD, AP, Bruiser, Crit, Heal & Shield, Hybrid, Lethality, On-Hit, Tank, Utility, Well Rounded or a mix of two. Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items</p>
   </div>);
 }
 
-/** Recommended runes, summoner spells, items and skill order from collected games, as separate builds when players really build differently (AP, AD, Tank). */
+/** Recommended runes, summoner spells, items and skill order from collected games, as separate builds when players really build differently (AP, AD, Tank, Lethality ...). */
 export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
   const [role, setRole] = useState<Role | undefined>(roles[0]), [sort, setSort] = useState<VariantSort>("best"), [vid, setVid] = useState("");
   const { data: b, isError, isLoading } = useChampionBuild(id, role);

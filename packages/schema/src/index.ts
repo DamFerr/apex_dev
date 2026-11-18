@@ -88,10 +88,13 @@ export interface ChampionBuild {
   /** Separate builds by what players finished with (AP, AD, Tank), each a complete build of its own games. Only present with two or more of them that have enough games. */
   variants?: BuildVariant[];
 }
-/** Kind of build: decided from the item tags of the final inventory (see services/api build.ts `archetype`). */
-export type BuildArchetype = "AP" | "AD" | "Tank";
+/** The eleven kinds of build, then the nine allowed mixes of two kinds. Decided from the finished items (see services/api build.ts `archetype`). */
+export const PURE_ARCHETYPES = ["AD", "AP", "Bruiser", "Crit", "Heal & Shield", "Hybrid", "Lethality", "On-Hit", "Tank", "Utility", "Well Rounded"] as const;
+export const MIXED_ARCHETYPES = ["AP / Bruiser", "Bruiser / Lethality", "Bruiser / Tank", "Crit / Lethality", "Crit / On-Hit", "Heal & Shield / Tank", "On-Hit / AD", "On-Hit / Crit", "Tank / Utility"] as const;
+export type BuildArchetype = (typeof PURE_ARCHETYPES)[number] | (typeof MIXED_ARCHETYPES)[number];
 /** One build variant: the games of one archetype with their own runes, spells, items and skill order. */
-export interface BuildVariant { id: BuildArchetype; label: string; games: number; wins: number; build: Omit<ChampionBuild, "variants"> }
+/** `id` is a URL/file-safe slug of the kind ("heal-and-shield-tank"), `label` the name shown to people. */
+export interface BuildVariant { id: string; label: BuildArchetype; games: number; wins: number; build: Omit<ChampionBuild, "variants"> }
 
 export interface MasteryEntry { champion: string; name: string; level: number; points: number }
 

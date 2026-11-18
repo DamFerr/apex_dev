@@ -15,6 +15,7 @@ import { useUi } from "../lib/store";
 import { Tabs } from "../components/Tabs";
 import { MasteryTab } from "./ProfileTabs";
 import { LpHistoryTab } from "./LpHistory";
+import { LiveGameView } from "./LiveGameView";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
 
 function Detail({ id, riotId }: { id: string; riotId: string }) {
@@ -68,7 +69,7 @@ export function Profile() {
   const [filter, setFilter] = useState<"all" | "win" | "loss">("all");
   const queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch);
   const [open, setOpen] = useState<string | null>(null);
-  const [tab, setTab] = useState<"matches" | "lp" | "mastery">("matches");
+  const [tab, setTab] = useState<"matches" | "lp" | "mastery" | "live">("matches");
   const q = useInfiniteQuery({
     queryKey: [useScope(), "matchpages", id, queue], initialPageParam: 0,
     queryFn: ({ pageParam }) => api.getMatchPage(id, pageParam, 10, queue),
@@ -102,8 +103,9 @@ export function Profile() {
           <div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
           <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L · Level {sum.data!.level}{sum.data!.platform ? ` · ${sum.data!.platform.toUpperCase()}` : ""}</div></div></> : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : <Skeleton className="h-20 w-full" />}
       </div>
-      <div className="mt-6"><Tabs id="profile" value={tab} onChange={setTab} tabs={[{ key: "matches", label: "Match history" }, { key: "lp", label: "LP history" }, { key: "mastery", label: "Mastery" }] } /></div>
+      <div className="mt-6"><Tabs id="profile" value={tab} onChange={setTab} tabs={[{ key: "matches", label: "Match history" }, { key: "lp", label: "LP history" }, { key: "mastery", label: "Mastery" }, { key: "live", label: "Live game" }] } /></div>
       {tab === "mastery" && <MasteryTab id={id} />}
+      {tab === "live" && <div className="mt-4"><LiveGameView id={id} refresh /></div>}
       {tab === "lp" && <LpHistoryTab id={id} />}
       {tab === "matches" && <>
       <div className="mt-4"><QueueFilterChips value={queue} onChange={(k) => { setUi({ queueFilter: k }); setOpen(null); }} /></div>

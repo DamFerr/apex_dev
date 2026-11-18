@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { archetype, buildOrder, buildVariants, computeBuild, MAX_VARIANTS, MIN_BOOTS_SHARE, MIN_VARIANT_GAMES, skillGrid, skillOrder, spellPairs, type BuildRow, type ItemMeta } from "./build";
+import { PURE_ARCHETYPES } from "@apex/schema";
+import { itemStats } from "./ddragon";
+import { ITEM_KIND_OVERRIDES, archetype, archetypeId, itemKinds, keptItems, buildOrder, buildVariants, computeBuild, MAX_VARIANTS, MIN_BOOTS_SHARE, MIN_VARIANT_GAMES, skillGrid, skillOrder, spellPairs, type BuildRow, type ItemMeta } from "./build";
 
 const it_ = (name: string, total: number, tags: string[], extra: Partial<ItemMeta> = {}): ItemMeta => ({ name, total, hasUpgrade: false, tags, ...extra });
 const items = new Map<number, ItemMeta>([
@@ -8,34 +10,83 @@ const items = new Map<number, ItemMeta>([
   [3068, it_("Sunfire", 2700, ["Armor", "Health"])], [3075, it_("Thornmail", 2700, ["Armor"])], [3083, it_("Warmog's", 3000, ["Health"])], [3065, it_("Spirit Visage", 2900, ["SpellBlock", "Health"])],
   [3020, it_("Sorcerer's Shoes", 1100, [], { boots: true, hasUpgrade: true })], [3047, it_("Plated Steelcaps", 1100, ["Armor", "Boots"], { boots: true, hasUpgrade: true })],
   [1055, it_("Doran's Blade", 450, ["Damage"], { hasUpgrade: true })],
+  [3501, it_("Plain AD 1", 3000, ["Damage"])], [3502, it_("Plain AD 2", 3000, ["Damage"])],
 ]);
 const row = (inv: number[], win = 1, over: Partial<BuildRow> = {}): BuildRow => ({ perks: null, items: JSON.stringify(inv), spell1: 4, spell2: 14, win, ...over });
 const many = (n: number, make: (i: number) => BuildRow) => Array.from({ length: n }, (_, i) => make(i));
 
 describe("archetype", () => {
-  it("counts SpellDamage as AP, Damage / CriticalStrike as AD, and defensive-only items as Tank", () => {
-    expect(archetype([3157, 3089, 3100], items)).toBe("AP");
-    expect(archetype([3071, 3031, 3036], items)).toBe("AD");
-    expect(archetype([3068, 3075, 3083, 3065], items)).toBe("Tank");
+  // Items for the kinds, described by what Data Dragon's stat block says (`stats`) and its tags. Ids 9001 and up are made up.
+  const k = (name: string, stats: string[], tags: string[] = []) => it_(name, 3000, tags, { stats });
+  const kit = new Map<number, ItemMeta>([...items,
+    [9001, k("Collector", ["ad", "crit", "leth"])], [9002, k("Hubris", ["ad", "leth"])], [9003, k("Opportunity", ["ad", "leth"])], [9004, k("Moonstone", ["ap", "hsp"])], [9005, k("Redemption", ["hp", "hsp"])],
+    [9006, k("Kraken Slayer", ["ad", "as", "onhit"])], [9007, k("Guinsoo's", ["ap", "as", "onhit"])], [9008, k("Yun Tal", ["ad", "crit", "as"])], [9009, k("Phantom Dancer", ["crit", "as"])],
+    [9010, k("Riftmaker", ["ap", "hp"])], [9011, k("Liandry's", ["ap", "hp"])], [9012, k("Heartsteel", ["hp"])], [9013, k("Sundered Sky", ["ad", "hp"])], [9014, k("Death's Dance", ["ad", "armor"])],
+    [9015, k("Locket", ["armor", "mr", "active"])], [9016, k("Zeke's", ["armor", "mr", "active"])], [9017, k("Mikael's", ["hp", "hsp", "active"])], [9018, k("Ardent", ["ap", "hsp"])],
+    [9019, k("Shurelya's", ["ap", "active"], ["Active"])], [9020, k("Eclipse", ["ad"])], [9021, k("Serylda's", ["ad", "arpen"])], [9022, k("Redirect", [], ["Aura"])], [9023, k("Zhonya", ["ap", "armor"])],
+  ]);
+  const kind = (...ids: number[]) => archetype(ids, kit);
+  it("the pure kinds", () => {
+    expect(kind(3157, 3089, 3100)).toBe("AP");                   // Zhonya's / Rabadon / Lich Bane: all AP
+    expect(kind(9020, 9020 + 0, 9021)).toBeNull();               // a duplicate counts once: 2 items
+    expect(kind(9020, 9021, 3071 + 0)).not.toBeNull();
+    expect(kind(9013, 9014, 3071)).toBe("Bruiser");              // AD plus Health or defence
+    expect(kind(9009, 3031, 9008)).toBe("Crit");
+    expect(kind(9002, 9003, 3036)).toBe("Lethality");
+    expect(kind(9004, 9018, 9005)).toBe("Heal & Shield");
+    expect(kind(9007, 9006, 9007 + 0, 9008 + 0)).not.toBe("Tank");
+    expect(kind(3068, 3075, 3083, 3065)).toBe("Tank");
+    expect(kind(9022, 9019, 9017 + 100)).toBeNull();             // an unknown item is not an item
   });
-  it("an item with a damage tag never counts as Tank (Black Cleaver has Health), and the largest group wins", () => {
-    expect(archetype([3071, 3068, 3075, 3083], items)).toBe("Tank");      // 1 AD vs 3 Tank
-    expect(archetype([3071, 3031, 3068, 3075], items)).toBe("AD");        // 2 AD vs 2 Tank: tie goes to AD before Tank
+  it("On-Hit, Utility and Well Rounded", () => {
+    expect(kind(9006, 9007, 9006 + 0, 9007 + 0)).toBeNull();     // two distinct items only
+    const more = new Map(kit).set(9030, k("Wit's End", ["as", "mr", "onhit"])).set(9031, k("Nashor's", ["ap", "as", "onhit"]));
+    expect(archetype([9007, 9030, 9031], more)).toBe("On-Hit");
+    expect(archetype([9022 + 0, 9019, 9015 + 100], more)).toBeNull();
+    const util = new Map(kit).set(9032, k("Banner", [], ["Aura"])).set(9033, k("Chemtech", [], ["Active"])).set(9034, k("Shield", [], ["Aura", "Slow"]));
+    expect(archetype([9032, 9033, 9034], util)).toBe("Utility");
+    expect(kind(3157, 9014, 9009, 9012, 9017)).toBe("Well Rounded");   // five items, no kind covers half of them
   });
-  it("ties go to AP first", () => expect(archetype([3157, 3089, 3071, 3031], items)).toBe("AP"));
-  it("ignores boots, components, duplicates and unknown items, and needs 3 counted items", () => {
-    expect(archetype([3157, 3089, 3020, 1055, 9999], items)).toBeNull();
-    expect(archetype([3157, 3157, 3157, 3089], items)).toBeNull();        // a duplicate counts once: 2 items
-    expect(archetype([], items)).toBeNull();
+  it("Hybrid needs two AD and two AP items", () => {
+    expect(kind(3157, 3089, 3071, 3031)).toBe("Hybrid");
+    expect(kind(3157, 3071, 9020, 9021)).not.toBe("Hybrid");     // only one AP item
   });
-  it("without tags nothing is classified", () => expect(archetype([3157, 3089, 3100], new Map([[3157, { name: "a", total: 3000, hasUpgrade: false }], [3089, { name: "b", total: 3000, hasUpgrade: false }], [3100, { name: "c", total: 3000, hasUpgrade: false }]]))).toBeNull());
+  it("the nine named mixes, when both kinds have two items", () => {
+    expect(kind(9010, 9011, 3089, 3068)).toBe("AP / Bruiser");   // Riftmaker and Liandry's count as AP and Bruiser
+    expect(kind(9013, 9014, 9002, 9003)).toBe("Bruiser / Lethality");
+    expect(kind(9013, 9014, 9012, 3068)).toBe("Bruiser / Tank");
+    expect(kind(9001, 9009, 9002, 9003)).toBe("Crit / Lethality"); // Collector counts as Crit and Lethality
+        expect(kind(9015, 9005, 9017, 3068)).toBe("Heal & Shield / Tank");
+    expect(kind(9015, 9016, 3083, 9022)).toBe("Tank / Utility");
+  });
+  it("mixes with On-Hit and Utility", () => {
+    const m = new Map(kit).set(9040, k("Blade", ["ad", "as", "onhit"])).set(9041, k("Blade Two", ["ad", "as", "onhit"])).set(9042, k("Dancer", ["crit", "as"])).set(9043, k("Edge", ["ad", "crit", "as", "onhit"]));
+    expect(archetype([9040, 9041, 9020, 9008], m)).toBe("On-Hit / AD");
+    expect(archetype([9040, 9041, 9043, 9042], m)).toBe("On-Hit / Crit");   // On-Hit has more items, so it goes first
+    expect(archetype([9043, 9008, 9042, 9040], m)).toBe("Crit / On-Hit");
+    expect(kind(9015, 9016, 9017 + 0, 3083)).toBe("Tank / Utility");
+  });
+  it("Hybrid needs really mixed scaling: two or more of each side, and the smaller side at least two thirds of the larger", () => {
+    expect(kind(3157, 3089, 3071, 3031)).toBe("Hybrid");                       // 2 AP + 2 AD
+    expect(kind(3157, 3089, 3100, 3071, 9020, 9021)).toBe("Hybrid");           // 3 AP + 3 AD
+    expect(kind(3157, 3089, 3071)).not.toBe("Hybrid");                          // 2 AP + 1 AD: an AP build
+    const apHeavy = new Map(kit).set(9050, k("Void", ["ap"])).set(9051, k("Luden", ["ap"]));
+    expect(archetype([3157, 3089, 3100, 9050, 3071, 3031], apHeavy)).toBe("AP");  // 4 AP + 2 AD: almost full AP, not Hybrid
+  });
+  it("ignores boots, components and unknown items, and needs 3 counted items", () => {
+    expect(kind(3157, 3089, 3020, 1055, 9999)).toBeNull();
+    expect(kind(3157, 3157, 3157, 3089)).toBeNull();
+    expect(kind()).toBeNull();
+  });
+  it("without stats or tags nothing is classified", () => expect(archetype([3157, 3089, 3100], new Map([[3157, { name: "a", total: 3000, hasUpgrade: false }], [3089, { name: "b", total: 3000, hasUpgrade: false }], [3100, { name: "c", total: 3000, hasUpgrade: false }]]))).toBeNull());
+  it("archetypeId makes a file-safe id", () => { expect(archetypeId("Heal & Shield / Tank")).toBe("heal-and-shield-tank"); expect(archetypeId("AP")).toBe("ap"); });
 });
 
 describe("buildVariants", () => {
   const ap = (n: number, win = 1) => many(n, () => row([3157, 3089, 3100, 3020], win)), tank = (n: number, win = 0) => many(n, () => row([3068, 3075, 3083, 3047], win));
   it("returns one complete build per kind, most played first, each from its own games only", () => {
     const v = buildVariants("Nunu", null, [...ap(30), ...tank(12)], items);
-    expect(v.map((x) => [x.id, x.games])).toEqual([["AP", 30], ["Tank", 12]]);
+    expect(v.map((x) => [x.id, x.games])).toEqual([["ap", 30], ["tank", 12]]);
     expect(v[1]).toMatchObject({ label: "Tank", wins: 0 });
     expect(v[0].build.games).toBe(30);
     expect(v[1].build.itemBlocks.flatMap((b) => b.items.map((i) => i.id))).toEqual(expect.arrayContaining([3068]));
@@ -49,9 +100,9 @@ describe("buildVariants", () => {
     expect(buildVariants("Nunu", null, [...ap(100), ...tank(15)], items)).toHaveLength(2);
   });
   it("keeps at most MAX_VARIANTS", () => {
-    const ad = many(20, () => row([3071, 3031, 3036, 3047]));
+    const ad = many(20, () => row([3071, 3071 + 1, 3036 + 1, 3047].map((x) => x === 3072 ? 3501 : x === 3037 ? 3502 : x)));
     expect(MAX_VARIANTS).toBe(3);
-    expect(buildVariants("X", null, [...ap(30), ...tank(25), ...ad], items).map((v) => v.id)).toEqual(["AP", "Tank", "AD"]);
+    expect(buildVariants("X", null, [...ap(30), ...tank(25), ...ad], items).map((v) => v.id)).toEqual(["ap", "tank", "ad"]);
   });
   it("games that cannot be classified (short games, no tags) stay out of the variants but not out of the main build", () => {
     const rows = [...ap(20), ...tank(15), ...many(5, () => row([3157, 3020]))];
@@ -136,16 +187,88 @@ describe("buildOrder (core items and boots in the order they are bought)", () =>
     const ap = (n: number) => many(n, (i) => row([3157, 3089, 3100, i % 4 ? 3020 : 3047], 1, { buys: JSON.stringify([3100, 3157, 3089]) }));
     const tank = (n: number) => many(n, (i) => row([3068, 3075, 3083, i % 4 ? 3047 : 3020], 0, { buys: JSON.stringify([3068, 3075, 3083]) }));
     const v = buildVariants("Veigar", null, [...ap(40), ...tank(40)], items);
-    expect(v.map((x) => x.id).sort()).toEqual(["AP", "Tank"]);
+    expect(v.map((x) => x.id).sort()).toEqual(["ap", "tank"]);
     for (const x of v) {
       const boots = x.build.buildOrder!.items.filter((i) => items.get(i.id)?.boots);
       expect(boots).toHaveLength(1);                                                          // the best boots are in the order ...
       const options = x.build.itemBlocks.find((b) => b.name === "Boots")!.items.map((i) => i.id);
       expect(options).toContain(boots[0].id === 3020 ? 3047 : 3020);                         // ... the others are in the Boots block (the page drops the one already in the order)
     }
-    expect(v.find((x) => x.id === "AP")!.build.buildOrder!.items.some((i) => i.id === 3020)).toBe(true);
-    expect(v.find((x) => x.id === "Tank")!.build.buildOrder!.items.some((i) => i.id === 3047)).toBe(true);
+    expect(v.find((x) => x.id === "ap")!.build.buildOrder!.items.some((i) => i.id === 3020)).toBe(true);
+    expect(v.find((x) => x.id === "tank")!.build.buildOrder!.items.some((i) => i.id === 3047)).toBe(true);
   });
   it("is null without a core path (too few games)", () => expect(buildOrder(many(3, () => game([3100, 3157, 3089])), items)).toBeNull());
   it("is part of computeBuild", () => expect(computeBuild("Ahri", null, many(12, () => game([3100, 3020, 3157, 3089])), items).buildOrder?.items).toHaveLength(4));
+});
+
+describe("itemStats (Data Dragon item text)", () => {
+  it("reads the stat block into short keys and ignores lines it does not know", () => {
+    const d = "<mainText><stats><attention>55</attention> Attack Damage<br><attention>20%</attention> Critical Strike Chance<br><attention>18</attention> Lethality<br><attention>10</attention> Ability Haste<br><attention>8%</attention> Armor Penetration</stats><br><br><passive>Rapture</passive></mainText>";
+    expect(itemStats(d).sort()).toEqual(["ad", "arpen", "crit", "leth"]);
+  });
+  it("Heal and Shield Power, on-hit text and actives", () => {
+    expect(itemStats("<stats><attention>40</attention> Ability Power<br><attention>15%</attention> Heal and Shield Power</stats>").sort()).toEqual(["ap", "hsp"]);
+    expect(itemStats("<stats><attention>45</attention> Attack Damage</stats><passive>Deals bonus physical damage On-Hit</passive>")).toEqual(["ad", "onhit"]);
+    expect(itemStats("<stats><attention>30</attention> Armor</stats><active>Active -</active> Shields allies")).toEqual(["armor", "active"]);
+  });
+  it("Armor is not Armor Penetration, and no text gives nothing", () => {
+    expect(itemStats("<stats><attention>20</attention> Armor<br><attention>35%</attention> Armor Penetration</stats>").sort()).toEqual(["armor", "arpen"]);
+    expect(itemStats(undefined)).toEqual([]); expect(itemStats("")).toEqual([]);
+  });
+});
+
+describe("override table (ITEM_KIND_OVERRIDES)", () => {
+  const meta = (name: string, stats: string[]): ItemMeta => it_(name, 3000, [], { stats });
+  it("wins over the text rules, ignores case and punctuation, and falls back to the text for other items", () => {
+    expect(itemKinds(meta("Heartsteel", ["hp", "ad"])).kinds).toEqual(["Tank"]);              // the text alone would say Bruiser
+    expect(itemKinds(meta("HEARTSTEEL", ["hp"])).kinds).toEqual(["Tank"]);
+    expect(itemKinds(meta("Guinsoo's Rageblade", ["ap", "as", "onhit"]))).toEqual({ kinds: ["On-Hit"], ad: false, ap: false });   // no AP scaling for Hybrid
+    expect(itemKinds(meta("Collector", ["ad", "crit", "leth"])).kinds).toEqual(["Crit", "Lethality"]);
+    expect(itemKinds(meta("Some New Item", ["ap"])).kinds).toEqual(["AP"]);
+  });
+  it("every entry names real kinds and has at least one", () => {
+    for (const [name, v] of ITEM_KIND_OVERRIDES) { expect(v.kinds.length, name).toBeGreaterThan(0); for (const k of v.kinds) expect(PURE_ARCHETYPES as readonly string[], name).toContain(k); }
+  });
+  it("Guinsoo's with Kraken Slayer and a crit item is a Crit / On-Hit build, not Hybrid", () => {
+    const m = new Map<number, ItemMeta>([[1, meta("Guinsoo's Rageblade", ["ap", "as", "onhit"])], [2, meta("Kraken Slayer", ["ad", "as", "onhit"])], [3, meta("Infinity Edge", ["ad", "crit"])], [4, meta("Phantom Dancer", ["crit", "as"])]]);
+    expect(["Crit / On-Hit", "On-Hit / Crit"]).toContain(archetype([1, 2, 3, 4], m));
+  });
+});
+
+describe("builds are grouped by core, labelled once, and never shown twice", () => {
+  const AP = [3157, 3089, 3100], TANK = [3068, 3075, 3083];
+  const many2 = (n: number, inv: number[], win = 1) => many(n, () => row(inv, win));
+  it("keptItems: finished items only, once each, without boots, components or the support quest item", () => {
+    expect(keptItems(row([3157, 3157, 3089, 3020, 1055, 9999]), items)).toEqual([3157, 3089]);
+  });
+  it("the same items in another order are one build", () => {
+    const v = buildVariants("X", null, [...many2(15, AP), ...many2(15, [3100, 3157, 3089]), ...many2(12, TANK)], items);
+    expect(v.map((x) => [x.id, x.games])).toEqual([["ap", 30], ["tank", 12]]);
+  });
+  it("one odd extra item does not make a second build: the label comes from the group's usual items", () => {
+    // 30 games with the AP core and a common 4th item, 2 with a different 4th item: one AP variant of 32 games, next to the tank build
+    const v = buildVariants("X", null, [...many2(30, [...AP, 3071]), ...many2(2, [...AP, 3068]), ...many2(12, TANK)], items);
+    expect(v.map((x) => [x.id, x.games])).toEqual([["ap", 32], ["tank", 12]]);
+  });
+  it("two builds with the same three items under two names are joined (the screenshot case: On-Hit and On-Hit / AD)", () => {
+    const m = new Map<number, ItemMeta>([[11, it_("Kraken Slayer", 3000, [], { stats: ["ad", "as", "onhit"] })], [12, it_("Guinsoo's Rageblade", 3000, [], { stats: ["ap", "as", "onhit"] })], [13, it_("Terminus", 3000, [], { stats: ["ad", "as", "onhit"] })],
+      [14, it_("Statikk Shiv", 3000, [], { stats: ["ad", "as", "crit"] })], [15, it_("Plain A", 3000, ["Damage"])], [16, it_("Plain B", 3000, ["Damage"])], [17, it_("Wit's End", 3000, [], { stats: ["as", "mr", "onhit"] })],
+      [3068, items.get(3068)!], [3075, items.get(3075)!], [3083, items.get(3083)!]]);
+    // Same core 11, 12, 13. One half ends with two AD items (On-Hit / AD), the other with two tank items (On-Hit): same core, so ONE variant, not two.
+    const rows = [...many(20, () => row([11, 12, 13, 15, 16])), ...many(20, () => row([13, 11, 12, 17, 3068])), ...many(12, () => row(TANK))];
+    const v = buildVariants("Kaisa", null, rows, m);
+    expect(v.filter((x) => x.label.startsWith("On-Hit"))).toHaveLength(1);
+    expect(v.find((x) => x.label.startsWith("On-Hit"))!.games).toBe(40);
+  });
+  it("related labels sharing two of three core items are joined; unrelated kinds stay separate", () => {
+    const m = new Map<number, ItemMeta>([[21, it_("A", 3000, [], { stats: ["ad", "as", "onhit"] })], [22, it_("B", 3000, [], { stats: ["ad", "as", "onhit"] })], [23, it_("C", 3000, [], { stats: ["ad", "as", "onhit"] })], [24, it_("D", 3000, [], { stats: ["ad", "as", "onhit"] })],
+      [3157, items.get(3157)!], [3089, items.get(3089)!], [3100, items.get(3100)!]]);
+    const rows = [...many(30, () => row([21, 22, 23])), ...many(20, () => row([21, 22, 24])), ...many(15, () => row(AP))];
+    const v = buildVariants("X", null, rows, m);
+    expect(v).toHaveLength(2); expect(v[0]!.games).toBe(50); expect(v[1]!.id).toBe("ap");
+  });
+  it("Nashor's Tooth builds with AP items are AP builds, not On-Hit", () => {
+    const m = new Map<number, ItemMeta>([[31, it_("Nashor's Tooth", 3000, [], { stats: ["ap", "as", "onhit"] })], [32, it_("Void Staff", 3000, [], { stats: ["ap", "mpen"] })], [33, it_("Rabadon's", 3000, [], { stats: ["ap"] })], [34, it_("Rylai's", 3000, [], { stats: ["ap", "hp"] })]]);
+    expect(archetype([31, 32, 33, 34], m)).toBe("AP");
+  });
 });
