@@ -96,7 +96,7 @@ test("shows matchups and synergy with sample sizes and the difference from expec
   await expect(rows.first()).toContainText(/[+\u2212]\d+\.\d pp/);        // difference from expected, with its sign
   // the win-rate cell uses the one shared colour scale: red under 48%, green over 52%, neutral between
   const wrCell = rows.first().locator("td").nth(2), shown = parseFloat((await wrCell.innerText()).replace("%", ""));
-  await expect(wrCell).toHaveClass(shown < 48 ? /text-bad/ : shown > 52 ? /text-good/ : /text-text/);
+  await expect(wrCell.locator("span.tabular-nums").first()).toHaveClass(shown < 48 ? /text-bad/ : shown > 52 ? /text-good/ : /text-text/);   // the colour sits on the number inside the cell
   await panel.getByRole("tab", { name: "Synergy" }).click();
   await expect(panel.getByRole("table", { name: /Teammate synergy/ })).toBeVisible();
   await expect(rows).toHaveCount(4);                                      // jungle, mid, bot and support teammates

@@ -101,13 +101,17 @@ export function itemBlocks(rows: BuildRow[], items: Map<number, ItemMeta>, wpas:
   const one = (id: number, t: Tally): BuildItem => ({ id, name: items.get(id)!.name, games: t.games, wins: t.wins, ...(wpas.has(id) ? { wpa: wpas.get(id) } : {}) });
   const take = (m: Map<string, Tally>, from: number, to: number): BuildItem[] => ranked(m).slice(from, to).map(([id, t]) => one(Number(id), t));
   const { core, situational } = LIMITS;
+  // Boots: the usual ones only. A kind of boots with under MIN_BOOTS_OPTION_SHARE of the games that ended with boots (a mage's Sorcerer's Shoes on an ADC, a one-off pick)
+  // is noise, not an option; the most common boots always stay, so the block is never empty.
+  const bootTotal = [...boots.values()].reduce((n, t) => n + t.games, 0);
+  const bootOptions = (m: Map<string, Tally>) => ranked(m).filter(([, t], i) => i < 2 || t.games / bootTotal >= MIN_BOOTS_OPTION_SHARE).slice(0, LIMITS.boots);
   // With a usual build order (corePath) the Core block IS that order, so the same three items are never listed twice (once ordered, once not).
   // Their stats come from the same all-games tallies as every other item, and they are removed from Situational.
   const ordered = order.length > 0 && order.every((id) => done.has(String(id)));
   const coreItems = ordered ? order.map((id) => one(id, done.get(String(id))!)) : take(done, 0, core);
   const coreIds = new Set(coreItems.map((i) => i.id));
   const rest = new Map([...done].filter(([id]) => !coreIds.has(Number(id))));
-  return [{ name: "Support item", items: take(support, 0, LIMITS.support) }, { name: "Boots", items: take(boots, 0, LIMITS.boots) }, { name: "Core items", items: coreItems, ...(ordered ? { ordered: true } : {}) },
+  return [{ name: "Support item", items: take(support, 0, LIMITS.support) }, { name: "Boots", items: bootOptions(boots).map(([id, t]) => one(Number(id), t)) }, { name: "Core items", items: coreItems, ...(ordered ? { ordered: true } : {}) },
     { name: "Situational", items: take(rest, 0, situational) }].filter((b) => b.items.length > 0);
 }
 
@@ -208,6 +212,8 @@ export function corePath(rows: BuildRow[], items: Map<number, ItemMeta>, minGame
  * The other boots / support items go to their own blocks of `itemBlocks` ("Boots options", "Support item options"): every item is shown exactly once.
  * Null when there is no core path.
  */
+/** A kind of boots is listed as an option only when it is at least this share of the games that ended with boots (the top two are always listed). */
+export const MIN_BOOTS_OPTION_SHARE = 0.05;
 export const MIN_BOOTS_SHARE = 0.2;   // hand-set: under 20% of the games ending with boots, boots are an exception and stay in "Boots options" only
 export const MIN_SUPPORT_SHARE = 0.4;
 export function buildOrder(rows: BuildRow[], items: Map<number, ItemMeta>, minGames: number = MIN_PATH_GAMES): ItemPathStat | null {

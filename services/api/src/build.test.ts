@@ -61,6 +61,14 @@ describe("itemBlocks", () => {
     const boots = itemBlocks(rows, ex).find((b) => b.name === "Boots")!;
     expect(boots.items.map((i) => i.id)).toEqual([3020, 3009]);
   });
+  it("leaves out boots that only a few games ended with (a mage's boots on an ADC), but always keeps the top two", () => {
+    const ex = new Map(items); ex.set(3009, { name: "Swiftness", total: 1000, hasUpgrade: true, boots: true });
+    const mk = (id: number, n: number) => Array.from({ length: n }, () => row({ items: JSON.stringify([id, 3157]) }));
+    const boots = (rows: ReturnType<typeof row>[]) => itemBlocks(rows, ex).find((b) => b.name === "Boots")!.items.map((i) => i.id);
+    expect(boots([...mk(3009, 80), ...mk(3998, 15), ...mk(3020, 2)])).toEqual([3009, 3998]);          // Sorcerer's Shoes: 2 of 97 games, dropped
+    expect(boots([...mk(3009, 80), ...mk(3998, 3), ...mk(3020, 2)])).toEqual([3009, 3998]);            // the second kind stays even when small
+    expect(boots([...mk(3009, 60), ...mk(3998, 30), ...mk(3020, 10)])).toEqual([3009, 3998, 3020]);   // 9% is a real option
+  });
   it("skips components, consumables, trinkets and base boots", () => {
     const blocks = itemBlocks([r([1055, 3340, 1001, 3157])], items);
     expect(blocks.flatMap((b) => b.items.map((i) => i.id))).toEqual([3157]);
