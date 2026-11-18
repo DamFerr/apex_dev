@@ -16,7 +16,7 @@ import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary } fro
 
 export interface Deps { riot: RiotApi; cache: Cache; dd: () => Promise<DD>; store: Store; collector: Collector; defaultPlatform: string; hasKey?: boolean; now?: () => number }
 const MIN = 60_000, DAY = 24 * 60 * MIN;
-/** Raw match ids read per page and at most per request when the queue filter cannot be done by Riot (Arena, Other). */
+/** Raw match ids read per page and at most per request when the queue filter cannot be done by Riot (Arena). */
 const QUEUE_SCAN_PAGE = 20, QUEUE_SCAN_MAX = 40;
 
 export async function buildApp(deps: Deps) {
@@ -105,7 +105,7 @@ export async function buildApp(deps: Deps) {
 
   /**
    * Match history, optionally for one queue group (`?queue=solo|flex|normal|blind|aram|arena|other`, default all).
-   * Groups with one queue id are filtered by Riot (exact paging). Arena and Other have no single id, so ids are read unfiltered and each match is checked
+   * Groups with one queue id are filtered by Riot (exact paging). Arena has no single id, so ids are read unfiltered and each match is checked
    * after it is loaded (matches are cached forever): at most `QUEUE_SCAN_MAX` ids per request, so a rarely played mode returns a short page with a
    * cursor to continue instead of hammering Riot. `nextCursor` always counts RAW ids, so "load more" works the same for every filter.
    */
@@ -116,7 +116,7 @@ export async function buildApp(deps: Deps) {
     const riotQueue = riotQueueOf(filter), summaries = async (ids: string[]) => (await Promise.all(ids.map(async (id) => { const m = await matchOf(id, region); return { m, s: toMatchSummary(m, acct.puuid) }; })));
     if (filter === "all" || riotQueue !== undefined) {
       const ids = await cached<string[]>(`ids:${acct.puuid}:${filter}:${cursor}:${limit}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, cursor, limit, riotQueue));
-      const items = (await summaries(ids)).map((x) => x.s).filter((m) => m !== null);
+      const items = (await summaries(ids)).filter((x) => x.s && (filter !== "all" || matchesQueueFilter("all", x.m.info.queueId))).map((x) => x.s as MatchSummary);   // allow-list: games outside the named queues are never shown
       return { items, nextCursor: ids.length === limit ? cursor + limit : null };
     }
     const items: MatchSummary[] = []; let at = cursor, more = true;

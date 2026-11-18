@@ -177,12 +177,13 @@ Rules: one step per turn; max ~4 source files plus tests; if a step grows, split
 
 ### A. Finish the champion page
 - [x] **A.2c Copy read-through.** Copy only, no logic: shorten the remaining long sentences on the champion page: `PatchPanel.tsx` (the long caption under the table, the "could not be loaded" and "No collected games..." lines), `BuildPanel.tsx` ("Keystones only · full pages need newer games" and its tooltip), `RelationsPanel.tsx` ("Not enough games yet: a pairing needs 5+ games..."). Move detail into tooltips with `sr-only` text. Keep the e2e text match `/Not enough games yet/` in `e2e/champions.spec.ts` line ~115 working (keep the phrase or update the spec). Done when: typecheck passes, no sentence longer than ~8 words stays visible, tooltips carry the detail.
-- [ ] **A.3 (owner) Visual check** of the champion page at 1100, 1400 and 1920 px; report what looks off (screenshots help). Any fix becomes its own step.
+- [x] **A.3 (owner) Visual check** of the champion page at 1100, 1400 and 1920 px: owner confirmed it works as intended (Nov 2026).
 
 ### H. Hygiene and owner decisions (run in parallel, none blocks the next step)
-- [ ] **H.1 (owner)** Run `pnpm --filter desktop test:e2e` (not run for the last several steps) and paste failures. Also look at Profile and Home at 1100 px.
-- [ ] **H.2 (owner)** Check on a real ADC game that the boots icon is a boots item (the `roleBoundItem` id seen was 1220; if it is a quest placeholder, map it to the boots actually bought, from the timeline). Becomes a step if it is wrong.
-- [ ] **H.3 (owner decision, Riot policy)** "Other" queue filter: `COMPLIANCE.md` says Brawl and League Classic data must not be shown. Decide: keep "Other" = everything else, or make it a short allow-list (hide ids outside the named groups plus Swiftplay 480 and Quickplay 490). If allow-list: step H.3a, files `packages/schema/src/queues.ts`, `services/api/src/queues.test.ts`.
+- [x] **H.1 (owner)** Full e2e run, Profile and Home at 1100 px: owner confirmed ok (Nov 2026). C e2e (`champions palette profile backend`) also ok.
+- [x] **H.2 (owner)** Real ADC game checked: matches carry extra item fields (`roleBoundItem` 1200), stored as items, so the boots icon is fine; owner confirmed (Nov 2026).
+- [x] **H.3 (owner decision, Riot policy)** Decided: allow-list. Chips: All, Ranked Solo/Duo, Ranked Flex, Normal Draft, ARAM, Arena. No Blind, no Other, no ARAM Mayhem chip (2400 is private in Match-v5, so unusable). "All" shows only these groups, so Brawl, League Classic, Swiftplay, Quickplay and rotating modes are hidden. Done as H.3a below.
+- [x] **H.3a** `packages/schema/src/queues.ts`: Blind and Other removed, `queueGroupOf` returns null outside the groups, `matchesQueueFilter("all", id)` is the allow-list; backend `app.ts` hides non-named queues in "All"; stale stored `blind`/`other` falls back to All in Home and Profile; `queues.test.ts`, `app.test.ts`, `profile.spec.ts` updated (api 285, desktop 39 pass; e2e not run here). If Riot ever exposes Mayhem under a usable id, add it as a one-line group.
 
 ### B. Match history leftovers (optional, cheap)
 - [ ] **B.1** Backend: optional `champion` and `role` params on `GET /v1/players/:riotId/matches` (applied after loading, like Arena/Other). Files: `services/api/src/app.ts`, test.

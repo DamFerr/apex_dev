@@ -109,7 +109,7 @@ test("queue filter: chips on Profile and Home, asked of the backend, remembered 
   await page.route("**/v1/players/**/matches**", (r) => { asked.push(new URL(r.request().url()).searchParams.get("queue") ?? "all"); return r.fallback(); });
   await page.goto("/#/profile");
   const chips = page.getByRole("group", { name: "Queue filter" });
-  for (const label of ["All", "Ranked Solo/Duo", "Ranked Flex", "Normal Draft", "Blind", "ARAM", "Arena", "Other"]) await expect(chips.getByRole("button", { name: label, exact: true })).toBeVisible();
+  for (const label of ["All", "Ranked Solo/Duo", "Ranked Flex", "Normal Draft", "ARAM", "Arena"]) await expect(chips.getByRole("button", { name: label, exact: true })).toBeVisible();
   await expect(chips.getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("10 games loaded")).toBeVisible();
   expect(asked.every((q) => q === "all")).toBe(true);                                   // no queue parameter until a chip is chosen

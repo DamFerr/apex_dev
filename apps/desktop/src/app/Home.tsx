@@ -6,10 +6,11 @@ import { shrink, wilson, sampleBadge } from "@apex/stats-core";
 import { Skeleton, StatCard, ProgressRing } from "../components/ui";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { MatchRowBody, QueueFilterChips } from "../components/MatchRow";
+import { isQueueFilter } from "@apex/schema";
 import { useMatches, useSummoner } from "../lib/api";
 
 export function Home() {
-  const me = useUi((s) => s.myRiotId), queue = useUi((s) => s.queueFilter) ?? "all", setUi = useUi((s) => s.patch), sum = useSummoner(me), games = useMatches(me, 10, queue);
+  const me = useUi((s) => s.myRiotId), queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch), sum = useSummoner(me), games = useMatches(me, 10, queue);
   const ms = games.data ?? [];
   const wins = ms.filter((m) => m.win).length;
   const [lo, hi] = wilson(wins, ms.length);

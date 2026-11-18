@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { QUEUE_FILTERS, type MatchSummary } from "@apex/schema";
+import { isQueueFilter, QUEUE_FILTERS, type MatchSummary } from "@apex/schema";
 import { Chip, ProgressRing, Skeleton } from "../components/ui";
 import { api, useScope, useSummoner } from "../lib/api";
 import { useChampName } from "../lib/ddragon";
@@ -66,7 +66,7 @@ export function Profile() {
   const recent = useUi((s) => s.recent), nav = useNavigate();
   const sum = useSummoner(id);
   const [filter, setFilter] = useState<"all" | "win" | "loss">("all");
-  const queue = useUi((s) => s.queueFilter) ?? "all", setUi = useUi((s) => s.patch);
+  const queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch);
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<"matches" | "lp" | "mastery">("matches");
   const q = useInfiniteQuery({

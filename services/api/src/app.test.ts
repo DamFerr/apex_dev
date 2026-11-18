@@ -71,7 +71,7 @@ describe("API", () => {
       const asked: (number | undefined)[] = []; riot.matchIds = async (_p, _r, start, count, queue) => { if (count > 1) asked.push(queue); return Array.from({ length: Math.min(count, 12 - start) }, (_, i) => `EUW1_${start + i}`); };
       const p1 = (await hist("flex")).json(); expect(asked).toEqual([440]); expect(p1.items).toHaveLength(10); expect(p1.nextCursor).toBe(10);
       const p2 = (await hist("flex", "&cursor=10")).json(); expect(p2.items).toHaveLength(2); expect(p2.nextCursor).toBeNull();
-      await hist("solo"); await hist("normal"); await hist("blind"); await hist("aram"); expect(asked.slice(2)).toEqual([420, 400, 430, 450]);
+      await hist("solo"); await hist("normal"); await hist("aram"); expect(asked.slice(2)).toEqual([420, 400, 450]);
       await get("/v1/players/Test%23EUW/matches?limit=10"); expect(asked.at(-1)).toBeUndefined();   // no filter: no queue sent to Riot
     });
     it("does not mix filters in the id cache", async () => {
@@ -87,11 +87,12 @@ describe("API", () => {
       expect(r.items.map((m: { id: string }) => m.id)).toEqual(["EUW1_0", "EUW1_5", "EUW1_10", "EUW1_15", "EUW1_20"]);
       expect(r.items.every((m: { queueId: number }) => m.queueId === 1710)).toBe(true); expect(r.nextCursor).toBeNull();
     });
-    it("Other is every queue that is in no named group", async () => {
+    it("All shows only the named queues; Blind, Swiftplay, Quickplay and rotating modes are hidden", async () => {
       const q = [420, 440, 400, 430, 450, 1700, 480, 490, 700, 900]; riot.matchIds = async (_p, _r, start, count) => Array.from({ length: Math.min(count, 10 - start) }, (_, i) => `EUW1_${start + i}`);
       riot.match = async (id) => matchFixture(id, { queueId: q[Number(id.split("_")[1])] });
-      expect((await hist("other")).json().items.map((m: { queueId: number }) => m.queueId)).toEqual([480, 490, 700, 900]);
+      expect((await get("/v1/players/Test%23EUW/matches?limit=10")).json().items.map((m: { queueId: number }) => m.queueId)).toEqual([420, 440, 400, 450, 1700]);
     });
+    it("rejects the removed Blind and Other filters", async () => { expect((await hist("blind")).statusCode).toBe(400); expect((await hist("other")).statusCode).toBe(400); });
     it("stops scanning after a bounded number of ids and hands back a cursor to continue", async () => {
       let ids = 0; riot.matchIds = async (_p, _r, start, count) => { if (count > 1) ids += count; return Array.from({ length: count }, (_, i) => `EUW1_${start + i}`); };   // endless history, nothing matches
       riot.match = async (id) => matchFixture(id, { queueId: 420 });
