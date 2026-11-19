@@ -17,14 +17,14 @@ const Items = ({ items }: { items: PathItem[] }) => <>{items.map((i, n) => <Game
 type Slot = "Q" | "W" | "E" | "R";
 const isSlot = (s: string): s is Slot => s === "Q" || s === "W" || s === "E" || s === "R";
 
-/** Sent by Rust (the mouse hook, overlay.rs) when a drag of the card ends. */
+/** Sent by Rust (overlay.rs) when a drag of the card ends. */
 const DRAG_END = "overlay-drag-end";
 
 /**
- * Dragging the card (D.4). The window itself is click-through for good; on Windows a mouse hook in Rust takes a LEFT press that starts on the
- * card (the game does not see it) and moves the window with the cursor. Hover, right/middle clicks and everything outside the card pass to
- * the game. This hook only reports where the card is, and when a drag ends clamps the window fully onto a monitor (`clampOverlayPosition`),
- * moves it there and sends the spot to the main window to save. Sends nothing to the game.
+ * Dragging the card (D.4). The window is click-through; while the cursor is over the card Rust lifts that, so the card gets the real mouse
+ * (no hook, nothing global). A LEFT press on the card captures the pointer and tells Rust to move the window with the cursor until the
+ * release; then the window is clamped fully onto a monitor (`clampOverlayPosition`), moved there and the spot is sent to the main window to
+ * save. Right/middle presses do nothing here. Sends nothing to the game.
  */
 function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boolean) {
   // Tell Rust where the card is (logical px in the window), so only that rectangle can be grabbed. Re-sent when the card changes size.
@@ -35,7 +35,19 @@ function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boole
     report();
     const ro = new ResizeObserver(report);
     ro.observe(el);
-    return () => { ro.disconnect(); void invoke("overlay_card", { x: 0, y: 0, w: 0, h: 0 }).catch(() => undefined); };
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0) return;                       // only the left button moves the card
+      try { el.setPointerCapture(e.pointerId); } catch { /* capture is a convenience: Rust ends the drag on blur anyway */ }
+      void invoke("overlay_drag_begin").catch(() => undefined);
+    };
+    const up = (e: PointerEvent) => { if (e.button === 0) void invoke("overlay_drag_end").catch(() => undefined); };
+    const lost = () => void invoke("overlay_drag_end").catch(() => undefined);
+    el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", lost); el.addEventListener("lostpointercapture", lost);
+    return () => {
+      el.removeEventListener("pointerdown", down); el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", lost); el.removeEventListener("lostpointercapture", lost);
+      ro.disconnect(); void invoke("overlay_card", { x: 0, y: 0, w: 0, h: 0 }).catch(() => undefined); };
   }, [card, active]);
 
   useEffect(() => {
@@ -97,8 +109,8 @@ function BuildCard({ p }: { p: OverlayPayload }) {
 }
 
 /**
- * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through for good; a left-button drag that
- * starts on the card moves it (D.4, taken by a mouse hook in Rust): right clicks, hover and clicks under the card reach the game and the cursor stays the game's.
+ * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through except while the cursor is over the card
+ * (D.4): a left-button drag that starts on the card moves it. Everything outside the card reaches the game and the cursor stays the game's.
  * Shows only what was known at champ select: skill order, starting items and build order of the champion you locked, from collected games (no runes or summoner spells, D.1). It reads no game state.
  * The main window owns the data and sends it here as a Tauri event.
  */

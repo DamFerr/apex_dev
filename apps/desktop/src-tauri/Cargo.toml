@@ -21,6 +21,6 @@ reqwest = { version = "0.12", default-features = false, features = ["native-tls"
 base64 = "0.22"
 serde_json = "1"
 
-# Windows only: the low-level mouse hook that lets a left press on the overlay card through while everything else stays click-through (overlay.rs).
+# Windows only: cursor position, click-through toggle on card hover, foreground window class (overlay.rs).
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

@@ -1,7 +1,6 @@
 //! In-game overlay window: transparent, always on top, no taskbar entry, never takes keyboard focus. The window is click-through ALWAYS
-//! (mouse events pass to the game, the cursor stays the game's). Moving the card (D.4) is done by a Windows mouse hook: a LEFT press that
-//! starts on the card is taken for the card (the game does not see it) and the window follows the cursor until the button is released.
-//! Right/middle clicks, hover, wheel and every click outside the card are never touched. The main window decides what the overlay shows
+//! (mouse events pass to the game, the cursor stays the game's) EXCEPT while the cursor is over the card (Windows): then the window takes the
+//! mouse itself so the card can be dragged with the left button (D.4). No hook, no key reads. Everything outside the card is never touched. The main window decides what the overlay shows
 //! and when (see src/lib/overlay.ts). No input is ever sent to the game.
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -56,7 +55,7 @@ pub async fn set_overlay(app: AppHandle, visible: bool, corner: String, x: Optio
         .shadow(false)
         .build()
         .map_err(|e| e.to_string())?;
-    // Click-through for good: dragging is done by the mouse hook (`start`), the window itself never takes the mouse.
+    // Click-through by default; the `hook::mover` loop lifts it only while the cursor is over the card.
     w.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
     #[cfg(windows)]
     if let Ok(h) = w.hwnd() { hook::OVERLAY_HWND.store(h.0 as isize, std::sync::atomic::Ordering::Relaxed); }
@@ -86,6 +85,14 @@ pub fn overlay_card(app: AppHandle, x: f64, y: f64, w: f64, h: f64) {
     let _ = (app, x, y, w, h); // the card can only be dragged on Windows
 }
 
+/// The page saw a left press on the card: the window follows the cursor until `overlay_drag_end`. Windows only.
+#[tauri::command]
+pub fn overlay_drag_begin() { #[cfg(windows)] hook::drag_begin(); }
+
+/// The left button was released (or the page lost the mouse): the drag is over, the page then clamps and saves the spot.
+#[tauri::command]
+pub fn overlay_drag_end() { #[cfg(windows)] hook::drag_end(); }
+
 /// Monitors and the overlay window's rectangle, all in physical pixels, in the shape of `MonitorInfo` (packages/lcu-core/src/overlay.ts),
 /// for `clampOverlayPosition` in TypeScript: `{ monitors: [{ id, x, y, width, height, scale, primary }], window: { x, y, width, height } }`.
 #[tauri::command]
@@ -108,10 +115,11 @@ pub fn overlay_move(app: AppHandle, x: i32, y: i32) -> Result<(), String> {
     w.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string())
 }
 
-/// Windows: a low-level mouse hook (WH_MOUSE_LL) plus a mover thread. The hook sees every mouse message before it is routed. It only acts
-/// on a LEFT press that lands on the card: it swallows that press (and its release) so the game never gets it, and the mover thread
-/// moves the overlay window with the cursor. Everything else (moves, right/middle buttons, wheel, clicks elsewhere) is passed on untouched.
-/// It reads button and cursor position only; it never sends input anywhere. The hook stays tiny (it must answer within ~300 ms).
+/// Windows: while the cursor is over the card the window stops being click-through (WS_EX_TRANSPARENT off), so the card gets real mouse input
+/// from the system itself (no hook: global hooks and key-state reads are blind while a game is in front). Everywhere else it stays
+/// click-through. A left press on the card (page: `overlay_drag_begin`) makes the window follow the cursor until the page reports the
+/// release (`overlay_drag_end`). Only the cursor position is read (never keys or buttons) and no input is ever sent anywhere.
+/// The same loop shows the overlay only while League's game window is in front.
 #[cfg(windows)]
 mod hook {
     use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU64, Ordering::Relaxed};
@@ -119,8 +127,6 @@ mod hook {
     use std::time::Duration;
     use tauri::{AppHandle, Emitter};
     use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
-    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
     /// Sent to the overlay page when a drag ends, so it can clamp the window onto a monitor and save the spot.
@@ -131,16 +137,12 @@ mod hook {
     /// The card rectangle in logical px inside the window (x, y, w, h; w == 0 means no card) and the window's scale factor (f64 bits).
     static CARD: [AtomicI32; 4] = [AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)];
     static SCALE: AtomicU64 = AtomicU64::new(0x3FF0_0000_0000_0000); // 1.0
-    /// Drag state, physical px: a drag is running; cursor minus window top-left at the press; latest cursor; a new cursor spot is waiting; the drag just ended.
+    /// Drag state, physical px: a drag is running; cursor minus window top-left at the press; latest cursor; the drag just ended.
     static DRAG: AtomicBool = AtomicBool::new(false);
     static OFF: [AtomicI32; 2] = [AtomicI32::new(0), AtomicI32::new(0)];
     static CUR: [AtomicI32; 2] = [AtomicI32::new(0), AtomicI32::new(0)];
-    static DIRTY: AtomicBool = AtomicBool::new(false);
     static ENDED: AtomicBool = AtomicBool::new(false);
     static APP: OnceLock<AppHandle> = OnceLock::new();
-    /// Who runs the drag: 1 = the mouse hook (it swallowed the press), 2 = the polling fallback (the press also reaches the game).
-    /// The hook gets no events while the foreground app runs elevated (UIPI) or guards input; polling still works there.
-    static SRC: AtomicI32 = AtomicI32::new(0);
     /// The page wants the overlay visible; a manual preview from Settings (shown even when League is not in front).
     pub static WANT: AtomicBool = AtomicBool::new(false);
     pub static PREVIEW: AtomicBool = AtomicBool::new(false);
@@ -173,94 +175,72 @@ mod hook {
     }
 
     /// Is the screen point (physical px) on the card? The window rect is read live, so a moved window needs no update.
-    unsafe fn on_card(px: i32, py: i32) -> Option<(i32, i32)> {
+    unsafe fn on_card(px: i32, py: i32) -> bool {
         let w = CARD[2].load(Relaxed);
-        if w <= 0 { return None; }
-        let (_, left, top) = window_origin()?;
+        if w <= 0 { return false; }
+        let Some((_, left, top)) = window_origin() else { return false };
         let s = f64::from_bits(SCALE.load(Relaxed));
         let (x0, y0) = (left as f64 + CARD[0].load(Relaxed) as f64 * s, top as f64 + CARD[1].load(Relaxed) as f64 * s);
         let (x1, y1) = (x0 + w as f64 * s, y0 + CARD[3].load(Relaxed) as f64 * s);
-        let inside = (px as f64) >= x0 && (px as f64) < x1 && (py as f64) >= y0 && (py as f64) < y1;
-        if inside { Some((px - left, py - top)) } else { None }
+        (px as f64) >= x0 && (px as f64) < x1 && (py as f64) >= y0 && (py as f64) < y1
     }
 
-    unsafe extern "system" fn proc(code: i32, wp: usize, lp: isize) -> isize {
-        if code == HC_ACTION as i32 {
-            let pt = (*(lp as *const MSLLHOOKSTRUCT)).pt;
-            match wp as u32 {
-                WM_LBUTTONDOWN => if let Some((ox, oy)) = on_card(pt.x, pt.y) {
-                    OFF[0].store(ox, Relaxed); OFF[1].store(oy, Relaxed);
-                    CUR[0].store(pt.x, Relaxed); CUR[1].store(pt.y, Relaxed);
-                    SRC.store(1, Relaxed);
-                    DRAG.store(true, Relaxed);
-                    return 1; // the press belongs to the card: the game does not get it
-                },
-                WM_MOUSEMOVE => if DRAG.load(Relaxed) { CUR[0].store(pt.x, Relaxed); CUR[1].store(pt.y, Relaxed); DIRTY.store(true, Relaxed); },
-                WM_LBUTTONUP => if SRC.load(Relaxed) == 1 && DRAG.swap(false, Relaxed) { ENDED.store(true, Relaxed); return 1; }, // its release is swallowed too
-                _ => {}
-            }
+    /// Page: a left press landed on the card, start following the cursor.
+    pub fn drag_begin() {
+        unsafe {
+            let mut p: POINT = std::mem::zeroed();
+            if GetCursorPos(&mut p) == 0 { return; }
+            let Some((_, left, top)) = window_origin() else { return };
+            OFF[0].store(p.x - left, Relaxed); OFF[1].store(p.y - top, Relaxed);
+            CUR[0].store(p.x, Relaxed); CUR[1].store(p.y, Relaxed);
+            DRAG.store(true, Relaxed);
         }
-        CallNextHookEx(std::ptr::null_mut(), code, wp, lp)
     }
 
-    /// Moves the window while a drag runs (about 120 times a second) and tells the page when it is over. Separate from the hook thread so
-    /// a slow window move can never make the hook time out.
+    /// Page: the button was released (or the capture was lost).
+    pub fn drag_end() { if DRAG.swap(false, Relaxed) { ENDED.store(true, Relaxed); } }
+
+    /// Turns WS_EX_TRANSPARENT (click-through) off or on. Only the window's own style changes.
+    unsafe fn set_click_through(hwnd: HWND, through: bool) {
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let new = if through { ex | WS_EX_TRANSPARENT as isize } else { ex & !(WS_EX_TRANSPARENT as isize) };
+        if new != ex { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new); }
+    }
+
+    /// One loop, every 8 ms: cursor over the card = interactive; a drag moves the window; the overlay is shown only while League is in front.
     fn mover() {
-        let mut was_down = false;
         let mut was_shown = false;
         loop {
             std::thread::sleep(Duration::from_millis(8));
+            let hwnd = OVERLAY_HWND.load(Relaxed) as HWND;
+            if hwnd.is_null() { continue; }
             unsafe {
-                // Fallback drag: the left button state and the cursor are read directly, so it works even when the hook gets nothing.
-                let down = GetAsyncKeyState(VK_LBUTTON as i32) as u16 & 0x8000 != 0;
                 let mut p: POINT = std::mem::zeroed();
-                if GetCursorPos(&mut p) != 0 {
-                    if !DRAG.load(Relaxed) {
-                        if down && !was_down { if let Some((ox, oy)) = on_card(p.x, p.y) {
-                            OFF[0].store(ox, Relaxed); OFF[1].store(oy, Relaxed);
-                            SRC.store(2, Relaxed); DRAG.store(true, Relaxed);
-                        } }
-                    } else if SRC.load(Relaxed) == 2 && !down {
-                        DRAG.store(false, Relaxed); ENDED.store(true, Relaxed);
-                    }
-                    if DRAG.load(Relaxed) { CUR[0].store(p.x, Relaxed); CUR[1].store(p.y, Relaxed); DIRTY.store(true, Relaxed); }
-                }
-                was_down = down;
+                let got = GetCursorPos(&mut p) != 0;
+                if got && DRAG.load(Relaxed) { CUR[0].store(p.x, Relaxed); CUR[1].store(p.y, Relaxed); }
+                let dragging = DRAG.load(Relaxed);
+                set_click_through(hwnd, !(dragging || (got && on_card(p.x, p.y))));
                 // Game-only: hide the overlay while League is not in front (alt-tab), show it again when it is. A Settings preview stays.
                 if WANT.load(Relaxed) {
-                    let hwnd = OVERLAY_HWND.load(Relaxed) as HWND;
-                    if !hwnd.is_null() {
-                        let shown = PREVIEW.load(Relaxed) || game_in_front() || DRAG.load(Relaxed);
-                        if shown != was_shown {
-                            ShowWindow(hwnd, if shown { SW_SHOWNOACTIVATE } else { SW_HIDE });
-                            was_shown = shown;
-                        }
+                    let shown = PREVIEW.load(Relaxed) || game_in_front() || dragging;
+                    if shown != was_shown {
+                        ShowWindow(hwnd, if shown { SW_SHOWNOACTIVATE } else { SW_HIDE });
+                        was_shown = shown;
                     }
                 } else { was_shown = false; }
-            }
-            let moved = DIRTY.swap(false, Relaxed);
-            let ended = ENDED.swap(false, Relaxed);
-            if moved || ended {
-                let hwnd = OVERLAY_HWND.load(Relaxed) as HWND;
-                if !hwnd.is_null() {
+                let ended = ENDED.swap(false, Relaxed);
+                if dragging || ended {
                     let (x, y) = (CUR[0].load(Relaxed) - OFF[0].load(Relaxed), CUR[1].load(Relaxed) - OFF[1].load(Relaxed));
-                    unsafe { SetWindowPos(hwnd, std::ptr::null_mut(), x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE); }
+                    SetWindowPos(hwnd, std::ptr::null_mut(), x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                 }
+                if ended { if let Some(app) = APP.get() { let _ = app.emit(DRAG_END, ()); } }
             }
-            if ended { if let Some(app) = APP.get() { let _ = app.emit(DRAG_END, ()); } }
         }
     }
 
-    /// Installs the hook on its own thread (a low-level hook needs a message loop on the thread that installed it) and starts the mover.
     pub fn start(app: AppHandle) {
         let _ = APP.set(app);
         std::thread::spawn(mover);
-        std::thread::spawn(|| unsafe {
-            let h = SetWindowsHookExW(WH_MOUSE_LL, Some(proc), GetModuleHandleW(std::ptr::null()), 0);
-            if h.is_null() { eprintln!("overlay: could not install the mouse hook, the card cannot be dragged"); return; }
-            let mut msg: MSG = std::mem::zeroed();
-            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 { TranslateMessage(&msg); DispatchMessageW(&msg); }
-        });
     }
 }
 
