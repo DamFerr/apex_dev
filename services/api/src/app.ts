@@ -15,6 +15,7 @@ import type { Filter } from "./store";
 import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary } from "@apex/schema";
 
 export interface Deps { riot: RiotApi; cache: Cache; dd: () => Promise<DD>; store: Store; collector: Collector; defaultPlatform: string; hasKey?: boolean; now?: () => number }
+const ROLE_IDS = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"] as const;
 const MIN = 60_000, DAY = 24 * 60 * MIN;
 /** Raw match ids read per page and at most per request when the queue filter cannot be done by Riot (Arena). */
 const QUEUE_SCAN_PAGE = 20, QUEUE_SCAN_MAX = 40;
@@ -108,21 +109,26 @@ export async function buildApp(deps: Deps) {
    * Groups with one queue id are filtered by Riot (exact paging). Arena has no single id, so ids are read unfiltered and each match is checked
    * after it is loaded (matches are cached forever): at most `QUEUE_SCAN_MAX` ids per request, so a rarely played mode returns a short page with a
    * cursor to continue instead of hammering Riot. `nextCursor` always counts RAW ids, so "load more" works the same for every filter.
+   * Optional `?champion=<id>` and `?role=TOP|JUNGLE|MID|ADC|SUPPORT` keep only games of that champion / role. Riot cannot filter by them, so they
+   * use the same bounded scan (a single-queue filter is still sent to Riot, so only the matching queue's ids are read).
    */
-  app.get<{ Params: { riotId: string }; Querystring: { cursor?: string; limit?: string; queue?: string } }>("/v1/players/:riotId/matches", async (req): Promise<MatchPage> => {
+  app.get<{ Params: { riotId: string }; Querystring: { cursor?: string; limit?: string; queue?: string; champion?: string; role?: string } }>("/v1/players/:riotId/matches", async (req): Promise<MatchPage> => {
     const filter = req.query.queue ?? "all"; if (!isQueueFilter(filter)) throw new HttpError(400, "Unknown queue filter");
+    const { champion, role } = req.query;
+    if (role !== undefined && !(ROLE_IDS as readonly string[]).includes(role)) throw new HttpError(400, "Unknown role");
     const acct = await identity(req.params.riotId), region = regionOf(await homePlatform(acct.puuid));
     const cursor = Math.max(0, Number(req.query.cursor ?? 0) || 0), limit = Math.min(20, Math.max(1, Number(req.query.limit ?? 10) || 10));
     const riotQueue = riotQueueOf(filter), summaries = async (ids: string[]) => (await Promise.all(ids.map(async (id) => { const m = await matchOf(id, region); return { m, s: toMatchSummary(m, acct.puuid) }; })));
-    if (filter === "all" || riotQueue !== undefined) {
+    const byGame = !!champion || !!role;   // champion / role are checked on each loaded match, so they need the scan below
+    if (!byGame && (filter === "all" || riotQueue !== undefined)) {
       const ids = await cached<string[]>(`ids:${acct.puuid}:${filter}:${cursor}:${limit}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, cursor, limit, riotQueue));
       const items = (await summaries(ids)).filter((x) => x.s && (filter !== "all" || matchesQueueFilter("all", x.m.info.queueId))).map((x) => x.s as MatchSummary);   // allow-list: games outside the named queues are never shown
       return { items, nextCursor: ids.length === limit ? cursor + limit : null };
     }
     const items: MatchSummary[] = []; let at = cursor, more = true;
     while (more && items.length < limit && at - cursor < QUEUE_SCAN_MAX) {
-      const from = at, ids = await cached<string[]>(`ids:${acct.puuid}:all:${from}:${QUEUE_SCAN_PAGE}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, from, QUEUE_SCAN_PAGE));
-      for (const { m, s } of await summaries(ids)) if (s && matchesQueueFilter(filter, m.info.queueId)) items.push(s);
+      const from = at, ids = await cached<string[]>(`ids:${acct.puuid}:${riotQueue ?? "all"}:${from}:${QUEUE_SCAN_PAGE}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, from, QUEUE_SCAN_PAGE, riotQueue));
+      for (const { m, s } of await summaries(ids)) if (s && matchesQueueFilter(filter, m.info.queueId) && (!champion || s.champion === champion) && (!role || s.role === role)) items.push(s);
       at += ids.length; more = ids.length === QUEUE_SCAN_PAGE;
     }
     return { items, nextCursor: more ? at : null };

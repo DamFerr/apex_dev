@@ -99,6 +99,17 @@ describe("API", () => {
       const r = (await hist("arena")).json(); expect(r.items).toEqual([]); expect(r.nextCursor).toBe(40); expect(ids).toBe(40);
       const next = (await hist("arena", "&cursor=40")).json(); expect(next.nextCursor).toBe(80);                   // "load more" continues where the scan stopped
     });
+    it("champion and role filters keep only matching games, scan on, and send a single-queue filter to Riot", async () => {
+      const mine = (id: string) => { const n = Number(id.split("_")[1]); return n % 2 === 0 ? { champ: "Ahri", pos: "MIDDLE" } : { champ: "Lux", pos: "UTILITY" }; };
+      const asked: (number | undefined)[] = []; riot.matchIds = async (_p, _r, start, count, queue) => { asked.push(queue); return Array.from({ length: Math.min(count, 10 - start) }, (_, i) => `EUW1_${start + i}`); };
+      riot.match = async (id) => { const m = matchFixture(id); Object.assign(m.info.participants[0], { championName: mine(id).champ, teamPosition: mine(id).pos }); return m; };
+      const byChamp = (await get("/v1/players/Test%23EUW/matches?limit=10&champion=Ahri")).json();
+      expect(byChamp.items.map((m: { id: string }) => m.id)).toEqual(["EUW1_0", "EUW1_2", "EUW1_4", "EUW1_6", "EUW1_8"]); expect(byChamp.nextCursor).toBeNull();
+      const byRole = (await get("/v1/players/Test%23EUW/matches?limit=10&role=SUPPORT")).json(); expect(byRole.items).toHaveLength(5); expect(byRole.items.every((m: { role: string }) => m.role === "SUPPORT")).toBe(true);
+      expect((await get("/v1/players/Test%23EUW/matches?limit=10&champion=Ahri&role=SUPPORT")).json().items).toEqual([]);   // both must match
+      asked.length = 0; await hist("solo", "&champion=Ahri"); expect(asked[0]).toBe(420);
+      expect((await get("/v1/players/Test%23EUW/matches?role=BOT")).statusCode).toBe(400);
+    });
     it("a match summary carries its queue id, champion level and loadout for the history rows", async () => {
       riot.matchIds = async () => ["EUW1_0"]; riot.match = async (id) => { const m = matchFixture(id); m.info.participants[0].champLevel = 17; return m; };
       const [m] = (await get("/v1/players/Test%23EUW/matches?limit=10")).json().items;
