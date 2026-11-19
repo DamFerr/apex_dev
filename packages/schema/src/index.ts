@@ -11,6 +11,8 @@ export interface Summoner { riotId: string; level: number; rank: RankInfo | null
 /** Your Ranked Solo rank as Apex saw it at one moment. Apex only knows LP at the moments it checked, never per game. */
 export interface RankSnapshot { at: string; rank: RankInfo }
 export interface RankHistory { snapshots: RankSnapshot[] }
+/** Optional champion / role narrowing of a match list (the backend checks both on each loaded match). */
+export interface MatchFilter { champion?: string; role?: Role }
 export interface MatchSummary {
   id: string; champion: string; role: Role | null; win: boolean;
   kills: number; deaths: number; assists: number; cs: number;
@@ -151,9 +153,10 @@ export type LiveResult = LiveGame | { inGame: false };
 /** Every screen talks to this interface only; the local backend implements it over HTTP. */
 export interface ApexApi {
   getSummoner(riotId: string): Promise<Summoner>;
-  getRecentMatches(riotId: string, limit?: number, queue?: QueueFilter): Promise<MatchSummary[]>;
+  getRecentMatches(riotId: string, limit?: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchSummary[]>;
   /** `queue`: only games of that queue group (default all). */
-  getMatchPage(riotId: string, cursor: number, limit: number, queue?: QueueFilter): Promise<MatchPage>;
+  /** `filter`: only games on that champion (Data Dragon id, as in `MatchSummary.champion`) and/or in that role. */
+  getMatchPage(riotId: string, cursor: number, limit: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchPage>;
   /** riotId marks which participant is "you" in the scoreboard (real backend only). */
   getMatchDetail(matchId: string, riotId?: string): Promise<MatchDetail>;
   getChampionPool(riotId: string): Promise<PoolEntry[]>;

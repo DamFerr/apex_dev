@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { QueueFilter, StatsFilter } from "@apex/schema";
+import type { MatchFilter, QueueFilter, StatsFilter } from "@apex/schema";
 import type { FlashSlot, OverlayPlacement } from "@apex/lcu-core";
 import { pushRecent, removeFromList, toggleFavourite } from "./recentFavs";
 
@@ -39,7 +39,7 @@ export function migrateUi(old: unknown, version: number): UiState {
   return s as unknown as UiState;
 }
 interface UiState {
-  statsFilter: StatsFilter; /** Queue chip above the match lists (Profile and Home), remembered per device. */ queueFilter: QueueFilter; backendUrl: string; myRiotId: string;
+  statsFilter: StatsFilter; /** Queue chip above the match lists (Profile and Home), remembered per device. */ queueFilter: QueueFilter; /** Champion / role chips above the match lists (shared by Profile and Home). Session only: a champion belongs to one player. */ matchFilter: MatchFilter; backendUrl: string; myRiotId: string;
   autoCompact: boolean; /** In-game overlay (off by default): shown only while a game runs. */ overlayEnabled: boolean; overlayOpacity: number; overlayCorner: OverlayCorner; /** Free overlay position per monitor id (set by "Move overlay"), and the monitor it was last placed on; null = use the corner preset. */ overlayPositions: Record<string, OverlayXY>; overlayMonitor: string | null; setOverlayPosition: (monitorId: string, xy: OverlayXY) => void; resetOverlayPosition: () => void; flashSlot: FlashSlot; /** Look up your own rank again after each game (default on; only your own Riot ID, through your local backend). */ autoRefreshRank: boolean; hotkeys: Record<string, string>; compact: boolean; patch: (p: Partial<UiState>) => void;
   theme: Theme; reduceMotion: boolean; paletteOpen: boolean; recent: string[]; addRecent: (id: string) => void; removeRecent: (id: string) => void; /** Favourite players (Riot IDs), local only, shown in the search bar. */ favourites: string[]; toggleFavourite: (id: string) => void;
   setTheme: (t: Theme) => void; setReduceMotion: (v: boolean) => void; setPalette: (v: boolean) => void;
@@ -47,7 +47,7 @@ interface UiState {
 export const useUi = create<UiState>()(
   persist(
     (set) => ({
-      theme: "dark", reduceMotion: false, paletteOpen: false, statsFilter: { platform: "all", patch: "latest", rank: "all" }, queueFilter: "all",
+      theme: "dark", reduceMotion: false, paletteOpen: false, statsFilter: { platform: "all", patch: "latest", rank: "all" }, queueFilter: "all", matchFilter: {},
       backendUrl: "http://127.0.0.1:8787", myRiotId: "", patch: (p) => set(p),
       autoCompact: false, overlayEnabled: false, overlayOpacity: 0.9, overlayCorner: "top-left", overlayPositions: {}, overlayMonitor: null, flashSlot: "F", autoRefreshRank: true, compact: false, hotkeys: { compactToggle: "Ctrl+Shift+M" }, recent: [], favourites: [],
       addRecent: (id) => set((s) => ({ recent: pushRecent(s.recent, id) })),

@@ -1,4 +1,4 @@
-import type { ApexApi, MatchPage } from "@apex/schema";
+import type { ApexApi, MatchFilter, MatchPage } from "@apex/schema";
 
 /**
  * Talks to your local Apex backend (services/api). The Riot API key lives only there, never in the app.
@@ -14,11 +14,11 @@ export function createHttpApi(base: () => string): ApexApi {
   }
   const filterParams = (f?: { platform: string; patch: string; rank: string }): Record<string, string> => (f ? { region: f.platform, patch: f.patch, rank: f.rank } : {});
   const player = (id: string) => `/v1/players/${encodeURIComponent(id)}`;
-  const page = (id: string, cursor: number, limit: number, queue?: string) => get<MatchPage>(`${player(id)}/matches`, { cursor: String(cursor), limit: String(limit), ...(queue && queue !== "all" ? { queue } : {}) });
+  const page = (id: string, cursor: number, limit: number, queue?: string, f?: MatchFilter) => get<MatchPage>(`${player(id)}/matches`, { cursor: String(cursor), limit: String(limit), ...(queue && queue !== "all" ? { queue } : {}), ...(f?.champion ? { champion: f.champion } : {}), ...(f?.role ? { role: f.role } : {}) });
   return {
     getSummoner: (id) => get(player(id)),
     getMatchPage: page,
-    getRecentMatches: async (id, limit = 10, queue) => (await page(id, 0, limit, queue)).items,
+    getRecentMatches: async (id, limit = 10, queue, f) => (await page(id, 0, limit, queue, f)).items,
     getMatchDetail: (matchId, riotId) => get(`/v1/matches/${matchId}`, riotId ? { riotId } : {}),
     getMastery: (id) => get(`${player(id)}/mastery`),
     getRankHistory: (id, opts) => get(`${player(id)}/lp-history`, opts?.fresh ? { fresh: "1" } : {}),

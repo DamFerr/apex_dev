@@ -2,14 +2,14 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { TierIcon } from "../components/TierIcon";
 import { ChampIcon } from "../components/ChampIcon";
 import { LoadoutIcons } from "../components/LoadoutIcons";
-import { MatchRowBody, QueueFilterChips } from "../components/MatchRow";
+import { MatchFilterChips, MatchRowBody, QueueFilterChips } from "../components/MatchRow";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { isQueueFilter, QUEUE_FILTERS, type MatchSummary } from "@apex/schema";
 import { Chip, ProgressRing, Skeleton } from "../components/ui";
-import { api, useScope, useSummoner } from "../lib/api";
+import { api, usePool, useScope, useSummoner } from "../lib/api";
 import { useChampName } from "../lib/ddragon";
 import { useUi } from "../lib/store";
 import { Tabs } from "../components/Tabs";
@@ -68,11 +68,14 @@ export function Profile() {
   const sum = useSummoner(id);
   const [filter, setFilter] = useState<"all" | "win" | "loss">("all");
   const queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch);
+  const mf = useUi((s) => s.matchFilter), champName = useChampName(), pool = usePool(id);
+  useEffect(() => { setUi({ matchFilter: {} }); }, [id, setUi]); // a champion filter belongs to the player being viewed
+  const poolChamps = [...(pool.data ?? [])].map((p) => ({ id: p.champion, name: champName(p.champion) })).sort((a, b) => a.name.localeCompare(b.name));
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<"matches" | "lp" | "mastery" | "live">("matches");
   const q = useInfiniteQuery({
-    queryKey: [useScope(), "matchpages", id, queue], initialPageParam: 0,
-    queryFn: ({ pageParam }) => api.getMatchPage(id, pageParam, 10, queue),
+    queryKey: [useScope(), "matchpages", id, queue, mf.champion ?? "", mf.role ?? ""], initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.getMatchPage(id, pageParam, 10, queue, mf),
     getNextPageParam: (last) => last.nextCursor ?? undefined, enabled: sum.isSuccess,
   });
   const all = q.data?.pages.flatMap((p) => p.items) ?? [];
@@ -109,6 +112,7 @@ export function Profile() {
       {tab === "lp" && <LpHistoryTab id={id} />}
       {tab === "matches" && <>
       <div className="mt-4"><QueueFilterChips value={queue} onChange={(k) => { setUi({ queueFilter: k }); setOpen(null); }} /></div>
+      <div className="mt-3"><MatchFilterChips value={mf} champions={poolChamps} onChange={(f) => { setUi({ matchFilter: f }); setOpen(null); }} /></div>
       <div className="flex items-center gap-2 mt-3 mb-3" role="group" aria-label="Result filter">
         {(["all", "win", "loss"] as const).map((f) => <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>{f === "all" ? "All" : f === "win" ? "Wins" : "Losses"}</Chip>)}
         <span className="text-xs text-muted ml-2">{all.length} games loaded</span>
@@ -119,7 +123,7 @@ export function Profile() {
         {items.map((m) => <MatchRow key={m.id} riotId={id} m={m} open={open === m.id} onToggle={() => setOpen(open === m.id ? null : m.id)} />)}
       </ul>
       <div ref={sentinel} className="h-10 grid place-items-center text-xs text-muted">
-        {isFetchingNextPage ? "Loading more…" : hasNextPage ? "" : all.length ? "End of history" : q.isSuccess ? `No ${QUEUE_FILTERS.find((f) => f.key === queue)?.label ?? ""} games in your match history.` : ""}</div>
+        {isFetchingNextPage ? "Loading more…" : hasNextPage ? "" : all.length ? "End of history" : q.isSuccess ? `No ${QUEUE_FILTERS.find((f) => f.key === queue)?.label ?? ""} games${mf.champion || mf.role ? " for this champion/role" : ""} in your match history.` : ""}</div>
       </>}
     </>}
   </>);

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { timeAgo } from "@apex/stats-core";
-import type { MatchSummary, QueueFilter } from "@apex/schema";
+import type { MatchFilter, MatchSummary, QueueFilter, Role } from "@apex/schema";
 import { QUEUE_FILTERS } from "@apex/schema";
 import { ChampIcon } from "./ChampIcon";
 import { LoadoutIcons } from "./LoadoutIcons";
-import { RoleIcon } from "./RoleIcon";
+import { ROLE_LABEL, RoleIcon } from "./RoleIcon";
 import { Chip } from "./ui";
 import { useChampName } from "../lib/ddragon";
 
@@ -41,5 +41,24 @@ export function MatchRowBody({ m, trailing }: { m: MatchSummary; trailing?: Reac
 export function QueueFilterChips({ value, onChange }: { value: QueueFilter; onChange: (q: QueueFilter) => void }) {
   return (<div role="group" aria-label="Queue filter" className="flex flex-wrap items-center gap-2">
     {QUEUE_FILTERS.map((f) => <Chip key={f.key} active={value === f.key} onClick={() => onChange(f.key)}>{f.label}</Chip>)}
+  </div>);
+}
+
+const ROLES = Object.keys(ROLE_LABEL) as Role[];
+/**
+ * Role chips and a champion picker for a match list. Picking the active role again clears it. `champions` are the champions to offer (Profile: the player's pool);
+ * a chosen champion that is not in the list is still shown, so the select never lies about the active filter.
+ */
+export function MatchFilterChips({ value, onChange, champions }: { value: MatchFilter; onChange: (f: MatchFilter) => void; champions: { id: string; name: string }[] }) {
+  const { champion, role } = value, options = champion && !champions.some((c) => c.id === champion) ? [{ id: champion, name: champion }, ...champions] : champions;
+  const set = (f: MatchFilter) => onChange({ ...(f.champion ? { champion: f.champion } : {}), ...(f.role ? { role: f.role } : {}) });
+  return (<div role="group" aria-label="Role and champion filter" className="flex flex-wrap items-center gap-2">
+    {ROLES.map((r) => <Chip key={r} active={role === r} onClick={() => set({ champion, role: role === r ? undefined : r })}>{ROLE_LABEL[r]}</Chip>)}
+    <select aria-label="Champion" value={champion ?? ""} onChange={(e) => set({ role, champion: e.target.value || undefined })}
+      className="focus-ring h-8 px-2 rounded-md bg-raised border border-line/10 text-xs">
+      <option value="">All champions</option>
+      {options.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+    </select>
+    {(champion || role) && <button className="focus-ring text-xs text-muted hover:text-text underline rounded" onClick={() => onChange({})}>Clear</button>}
   </div>);
 }

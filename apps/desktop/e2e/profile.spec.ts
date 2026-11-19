@@ -126,3 +126,19 @@ test("queue filter: chips on Profile and Home, asked of the backend, remembered 
   await page.getByRole("group", { name: "Queue filter" }).getByRole("button", { name: "All", exact: true }).click();
   await expect(page.getByRole("listitem").filter({ hasText: "CS" }).first()).toBeVisible();
 });
+
+test("role chips narrow the match list on the backend and can be cleared", async ({ page }) => {
+  const asked: string[] = [];
+  await page.route("**/v1/players/**/matches**", (r) => { asked.push(new URL(r.request().url()).searchParams.get("role") ?? "none"); return r.fallback(); });
+  await page.goto("/#/profile");
+  const group = page.getByRole("group", { name: "Role and champion filter" });
+  await expect(page.getByText("10 games loaded")).toBeVisible();
+  expect(asked.every((r) => r === "none")).toBe(true);                       // no role parameter until a chip is chosen
+  await expect(group.getByRole("button", { name: "Clear" })).toHaveCount(0);
+  await group.getByRole("button", { name: "Mid", exact: true }).click();
+  await expect(group.getByRole("button", { name: "Mid", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => asked.includes("MID")).toBe(true);
+  await group.getByRole("button", { name: "Clear" }).click();
+  await expect(group.getByRole("button", { name: "Mid", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByText("10 games loaded")).toBeVisible();
+});
