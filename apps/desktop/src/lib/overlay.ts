@@ -13,6 +13,8 @@ import { isTauri } from "./tauri";
 export interface OverlayPayload {
   champion: string; championName: string; role: Role | null; build: ChampionBuild | null;
   opacity: number; theme: Theme; reduceMotion: boolean;
+  /** When the overlay window last appeared (ms since epoch), null while hidden. The card hides its start items a fixed time after this (a plain timer, no game state). */
+  shownAt: number | null;
 }
 export const OVERLAY_STATE = "overlay-state", OVERLAY_READY = "overlay-ready";
 
@@ -28,6 +30,9 @@ export function useOverlayController() {
   const pick = useDraft((s) => s.overlayPick), phase = useDraft((s) => s.draft.gameflow), preview = useOverlayPreview((s) => s.preview);
   const enabled = useUi((s) => s.overlayEnabled), opacity = useUi((s) => s.overlayOpacity), corner = useUi((s) => s.overlayCorner), theme = useUi((s) => s.theme), reduceMotion = useUi((s) => s.reduceMotion);
   const [build, setBuild] = useState<{ key: number; build: ChampionBuild | null } | null>(null);
+  const visible = overlayWanted({ enabled, preview, phase, pick });
+  const [shownAt, setShownAt] = useState<number | null>(null);
+  useEffect(() => { setShownAt(visible ? Date.now() : null); }, [visible]);   // starts the start-items timer when the overlay appears
 
   // The build is fetched once per locked champion, long before the game starts.
   const key = pick?.championId ?? null, role = pick?.role ?? null;
@@ -40,8 +45,8 @@ export function useOverlayController() {
 
   const payload = useMemo<OverlayPayload | null>(() => {
     const id = key === null ? undefined : champId(key);
-    return key !== null && id ? { champion: id, championName: champName(key), role, build: build?.key === key ? build.build : null, opacity, theme, reduceMotion } : null;
-  }, [key, role, build, opacity, theme, reduceMotion]);
+    return key !== null && id ? { champion: id, championName: champName(key), role, build: build?.key === key ? build.build : null, opacity, theme, reduceMotion, shownAt } : null;
+  }, [key, role, build, opacity, theme, reduceMotion, shownAt]);
 
   // Keep the newest payload for a window that opens later: it announces itself and gets the current one.
   const latest = useRef<OverlayPayload | null>(null);
@@ -56,7 +61,6 @@ export function useOverlayController() {
     return () => { dead = true; off?.(); };
   }, []);
 
-  const visible = overlayWanted({ enabled, preview, phase, pick });
   useEffect(() => {
     if (isTauri) void invoke("set_overlay", { visible, corner }).catch((e) => console.warn("overlay:", e));
   }, [visible, corner]);
