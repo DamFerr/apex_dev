@@ -2,9 +2,8 @@ import { clampOverlayPosition, pageBuild, startItemsLeftMs } from "@apex/lcu-cor
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion } from "framer-motion";
-import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ChampionBuild, PathItem } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
 import { GameIcon } from "../components/GameIcon";
@@ -18,18 +17,17 @@ const Items = ({ items }: { items: PathItem[] }) => <>{items.map((i, n) => <Game
 type Slot = "Q" | "W" | "E" | "R";
 const isSlot = (s: string): s is Slot => s === "Q" || s === "W" || s === "E" || s === "R";
 
-/** Quiet period after the last window move before a drag counts as dropped (a drag is a stream of move events; there is no reliable mouse-up). */
-const SETTLE_MS = 200;
+/** Sent by Rust (the mouse hook, overlay.rs) when a drag of the card ends. */
+const DRAG_END = "overlay-drag-end";
 
 /**
- * Dragging the card (D.4). Pressing the LEFT button on the card starts a native window drag. The Rust side (a mouse hook on Windows) lets
- * only that left press into the window; hover, right/middle clicks and everything outside the card pass to the game, so the card behaves
- * like part of the game. When the moves stop, the window is clamped fully
- * onto a monitor (`clampOverlayPosition`), moved there, and the spot is sent to the main window to save. Sends nothing to the game.
+ * Dragging the card (D.4). The window itself is click-through for good; on Windows a mouse hook in Rust takes a LEFT press that starts on the
+ * card (the game does not see it) and moves the window with the cursor. Hover, right/middle clicks and everything outside the card pass to
+ * the game. This hook only reports where the card is, and when a drag ends clamps the window fully onto a monitor (`clampOverlayPosition`),
+ * moves it there and sends the spot to the main window to save. Sends nothing to the game.
  */
 function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boolean) {
-  const dragging = useRef(false), moved = useRef(false), timer = useRef<ReturnType<typeof setTimeout>>();
-  // Tell Rust where the card is (logical px in the window), so only that rectangle takes the mouse. Re-sent when the card changes size.
+  // Tell Rust where the card is (logical px in the window), so only that rectangle can be grabbed. Re-sent when the card changes size.
   useEffect(() => {
     const el = card.current;
     if (!active || !el) { void invoke("overlay_card", { x: 0, y: 0, w: 0, h: 0 }).catch(() => undefined); return; }
@@ -40,48 +38,30 @@ function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boole
     return () => { ro.disconnect(); void invoke("overlay_card", { x: 0, y: 0, w: 0, h: 0 }).catch(() => undefined); };
   }, [card, active]);
 
-  const end = () => { dragging.current = false; moved.current = false; void invoke("overlay_dragging", { on: false }).catch(() => undefined); };
-  const settle = async () => {
-    end();
-    const l = await invoke<OverlayLayout>("overlay_layout").catch(() => null);
-    if (!l) return;
-    const { window: w, monitors } = l;
-    // The monitor under the window's centre owns the spot (the primary one if the centre is off every screen).
-    const cx = w.x + w.width / 2, cy = w.y + w.height / 2;
-    const m = monitors.find((k) => cx >= k.x && cx < k.x + k.width && cy >= k.y && cy < k.y + k.height) ?? monitors.find((k) => k.primary) ?? monitors[0];
-    if (!m) return;
-    const c = clampOverlayPosition({ monitorId: m.id, x: (w.x - m.x) / m.scale, y: (w.y - m.y) / m.scale }, monitors, OVERLAY_WINDOW);
-    if (!c) return;
-    const own = monitors.find((k) => k.id === c.monitorId) ?? m;
-    await invoke("overlay_move", { x: c.x, y: c.y }).catch(() => undefined);
-    void emit(OVERLAY_MOVED, { monitorId: c.monitorId, x: Math.round((c.x - own.x) / own.scale), y: Math.round((c.y - own.y) / own.scale) } satisfies OverlayMoved);
-  };
-
   useEffect(() => {
+    const settle = async () => {
+      const l = await invoke<OverlayLayout>("overlay_layout").catch(() => null);
+      if (!l) return;
+      const { window: w, monitors } = l;
+      // The monitor under the window's centre owns the spot (the primary one if the centre is off every screen).
+      const cx = w.x + w.width / 2, cy = w.y + w.height / 2;
+      const m = monitors.find((k) => cx >= k.x && cx < k.x + k.width && cy >= k.y && cy < k.y + k.height) ?? monitors.find((k) => k.primary) ?? monitors[0];
+      if (!m) return;
+      const c = clampOverlayPosition({ monitorId: m.id, x: (w.x - m.x) / m.scale, y: (w.y - m.y) / m.scale }, monitors, OVERLAY_WINDOW);
+      if (!c) return;
+      const own = monitors.find((k) => k.id === c.monitorId) ?? m;
+      await invoke("overlay_move", { x: c.x, y: c.y }).catch(() => undefined);
+      void emit(OVERLAY_MOVED, { monitorId: c.monitorId, x: Math.round((c.x - own.x) / own.scale), y: Math.round((c.y - own.y) / own.scale) } satisfies OverlayMoved);
+    };
     let off: (() => void) | undefined, dead = false;
-    void getCurrentWindow().onMoved(() => {
-      if (!dragging.current) return;              // moves made by Apex itself (placing the window) are not drags
-      moved.current = true;
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => void settle(), SETTLE_MS);
-    }).then((f) => { if (dead) f(); else off = f; });
-    // A press without a move never starts the native drag loop, so the release does arrive: just give the mouse back.
-    const up = () => { if (dragging.current && !moved.current) end(); };
-    window.addEventListener("mouseup", up);
-    return () => { dead = true; off?.(); clearTimeout(timer.current); window.removeEventListener("mouseup", up); };
-  }, []);   // eslint-disable-line react-hooks/exhaustive-deps -- settle/end only touch refs and invoke
-
-  return (e: MouseEvent) => {
-    if (e.button !== 0) return;                   // left button only
-    dragging.current = true; moved.current = false;
-    void invoke("overlay_dragging", { on: true }).catch(() => undefined);
-    void getCurrentWindow().startDragging().catch(end);
-  };
+    void listen(DRAG_END, () => void settle()).then((f) => { if (dead) f(); else off = f; });
+    return () => { dead = true; off?.(); };
+  }, []);
 }
 
 function BuildCard({ p }: { p: OverlayPayload }) {
   const card = useRef<HTMLDivElement>(null);
-  const onDown = useCardDrag(card, true);
+  useCardDrag(card, true);
   // Start items are only useful in the first seconds: hide them a fixed time after the overlay appeared. A plain timer, not your inventory (that would be game state).
   const [showStart, setShowStart] = useState(() => startItemsLeftMs(p.shownAt, Date.now()) > 0);
   useEffect(() => {
@@ -97,7 +77,7 @@ function BuildCard({ p }: { p: OverlayPayload }) {
   const bootsIds = new Set(bootsList.map((x) => x.id)), boots = order?.items.some((i) => bootsIds.has(i.id)) ? undefined : bootsList[0];
   const none = !b || (!b.skillOrder && !order && !b.startItems && !boots);
   return (
-    <motion.div ref={card} onMouseDown={onDown} initial={{ opacity: 0, y: p.reduceMotion ? 0 : -6 }} animate={{ opacity: p.opacity, y: 0 }} transition={{ duration: p.reduceMotion ? 0 : 0.25 }}
+    <motion.div ref={card} initial={{ opacity: 0, y: p.reduceMotion ? 0 : -6 }} animate={{ opacity: p.opacity, y: 0 }} transition={{ duration: p.reduceMotion ? 0 : 0.25 }}
       className="m-2 glass rounded-xl p-3 w-[316px] space-y-2.5 text-xs select-none">
       <div className="flex items-center gap-2.5">
         <ChampIcon id={p.champion} name={p.championName} size={36} />
@@ -117,8 +97,8 @@ function BuildCard({ p }: { p: OverlayPayload }) {
 }
 
 /**
- * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through for everything except a left-button drag
- * that starts on the card (D.4): right clicks, hover and clicks under the card reach the game and the cursor stays the game's.
+ * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through for good; a left-button drag that
+ * starts on the card moves it (D.4, taken by a mouse hook in Rust): right clicks, hover and clicks under the card reach the game and the cursor stays the game's.
  * Shows only what was known at champ select: skill order, starting items and build order of the champion you locked, from collected games (no runes or summoner spells, D.1). It reads no game state.
  * The main window owns the data and sends it here as a Tauri event.
  */

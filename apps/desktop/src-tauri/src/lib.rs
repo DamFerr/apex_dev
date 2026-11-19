@@ -8,10 +8,9 @@ pub fn run() {
     tauri::Builder::default()
         // Remembers window size and position between launches.
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .manage(overlay::OverlayState::default())
         .invoke_handler(tauri::generate_handler![
             lcu::lcu_sync, lcu::lcu_request,
-            overlay::set_overlay, overlay::overlay_card, overlay::overlay_dragging, overlay::overlay_layout, overlay::overlay_move
+            overlay::set_overlay, overlay::overlay_card, overlay::overlay_layout, overlay::overlay_move
         ])
         // The overlay has no taskbar entry, so it must not keep Apex running after the main window is closed.
         .on_window_event(|window, event| {
