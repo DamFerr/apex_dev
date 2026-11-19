@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { useUi } from "../lib/store";
-import { Champions, ChampionPage, Draft, Profile, Settings, TierList, LiveGame, Recap } from "./lazyPages";
+import { Champions, ChampionPage, Draft, Profile, Settings, TierList, LiveGame, Recap, PickSetupPage } from "./lazyPages";
 import { Home } from "./Home";
 import { startDevLcu, startTauriLcu } from "../lib/lcu";
 import { isTauri } from "../lib/tauri";
@@ -44,6 +44,7 @@ export default function App() {
               <Route path="live/:riotId?" element={<LiveGame />} />
               <Route path="recap/:riotId?/:matchId?" element={<Recap />} />
               <Route path="draft" element={<Draft />} />
+              <Route path="draft/setup/:id/:role?" element={<PickSetupPage />} />
               <Route path="settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

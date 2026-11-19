@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import type { Role } from "@apex/schema";
+import type { RuneStat } from "../lib/pickSetup";
 import { itemLayout, pageBuild, spellPairsOf } from "@apex/lcu-core";
 import { GameIcon } from "../components/GameIcon";
 import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
@@ -10,11 +11,17 @@ import { MIN_BUILD_GAMES } from "../lib/importer";
 import { displaySpells } from "../lib/spells";
 
 /** Win rate (small-sample adjusted, same helper as the champion page) with its games and the "low data" badge. The 95% range is the tooltip. */
-function Wr({ wins, games }: { wins: number; games: number }) {
+export function Wr({ wins, games }: { wins: number; games: number }) {
   const s = rate(wins, games);
   return <span className="inline-flex items-center gap-1.5 text-sm text-muted tabular-nums" title={`Raw ${pct(s.raw)} · 95% ${pct(s.lo, 0)}–${pct(s.hi, 0)}`}>
     <span className={`font-medium ${wrClass(s.adj)}`}>{pct(s.adj)}</span>{games.toLocaleString()}<LowBadge games={games} /></span>;
 }
+/** One rune page as icons: keystone, the primary tree's three runes, the secondary tree and its two runes. Shared by the strip and the setup page. */
+export const RuneIcons = ({ rune }: { rune: RuneStat }) => <>
+  <GameIcon kind="rune" id={rune.perkIds[0]} size={30} round />
+  {rune.perkIds.slice(1, 4).map((p) => <GameIcon key={p} kind="rune" id={p} size={22} round />)}
+  <span className="w-1.5" aria-hidden /><GameIcon kind="rune" id={rune.subStyleId} size={20} round />
+  {rune.perkIds.slice(4, 6).map((p) => <GameIcon key={p} kind="rune" id={p} size={22} round />)}</>;
 const Row = ({ label, children, right }: { label: string; children: ReactNode; right?: ReactNode }) =>
   <div className="flex items-center gap-2 min-h-8"><span className="w-24 shrink-0 text-xs uppercase tracking-wide text-muted">{label}</span><div className="flex items-center gap-1 flex-wrap min-w-0">{children}</div>{right && <span className="ml-auto pl-2 shrink-0">{right}</span>}</div>;
 
@@ -35,10 +42,7 @@ export function BuildStrip({ id, role }: { id: string; role: Role }) {
   return (
     <div className="space-y-2 rounded-lg bg-raised/30 border border-line/5 px-4 py-3" aria-label="Suggested build">
       {runeOk && <Row label="Runes" right={<Wr wins={rune.wins} games={rune.games} />}>
-        <GameIcon kind="rune" id={rune.perkIds[0]} size={30} round />
-        {rune.perkIds.slice(1, 4).map((p) => <GameIcon key={p} kind="rune" id={p} size={22} round />)}
-        <span className="w-1.5" aria-hidden /><GameIcon kind="rune" id={rune.subStyleId} size={20} round />
-        {rune.perkIds.slice(4, 6).map((p) => <GameIcon key={p} kind="rune" id={p} size={22} round />)}</Row>}
+        <RuneIcons rune={rune} /></Row>}
       {spellOk && <Row label="Spells" right={<Wr wins={spell.wins} games={spell.games} />}>{displaySpells(spell.ids).map((s) => <GameIcon key={s} kind="spell" id={s} size={28} />)}</Row>}
       {start && <Row label="Start" right={<Wr wins={start.wins} games={start.games} />}>{start.items.map((it) => <GameIcon key={it.id} kind="item" id={it.id} name={it.name} size={28} count={it.count} />)}</Row>}
       {order && <Row label="Build" right={<Wr wins={order.wins} games={order.games} />}>
