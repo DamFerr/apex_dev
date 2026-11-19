@@ -23,9 +23,10 @@ test("champ select: ban turn, win probability from collected games, suggestions,
   await expect(page.getByText("Your ban turn")).toBeVisible({ timeout: 15_000 });
   await expect(bans).toContainText("40 collected games");
   await expect(bans.locator("li").first()).toBeVisible();
-  await expect(page.getByRole("region", { name: "Pick recommendations" })).toBeHidden(); // no pick suggestions during the ban turn
-  await expect(page.getByRole("region", { name: "Pick recommendations" })).toBeVisible({ timeout: 20_000 });
-  await expect(bans).toBeHidden();
+  const picks = page.getByRole("region", { name: "Pick recommendations" });
+  await expect(picks).toBeVisible(); // pick suggestions also show during the ban turn (you can hover your pick before and during the bans)
+  await expect(bans).toBeHidden({ timeout: 20_000 }); // the ban suggestions go once the ban turn is over
+  await expect(picks).toBeVisible();
   const bar = page.getByRole("region", { name: "Win probability" });
   await expect(bar).toContainText("Based on 40 collected games", { timeout: 40_000 });
   const before = await bar.innerText();
