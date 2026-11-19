@@ -82,6 +82,7 @@ test("overlay settings: off by default, opacity and position persist, preview ne
   await expect(card.getByText(/Needs the desktop app/)).toBeVisible();      // the browser preview has no overlay window
   await expect(card.getByRole("button", { name: "Show preview" })).toBeDisabled();
   await expect(card.getByRole("group", { name: "Overlay position" }).getByRole("button", { name: "Top left" })).toHaveAttribute("aria-pressed", "true");
+  await expect(card.getByRole("button", { name: "Reset position" })).toBeDisabled();   // nothing dragged yet
   await card.getByRole("group", { name: "Overlay position" }).getByRole("button", { name: "Bottom right" }).click();
   await card.getByRole("switch", { name: "Show overlay during games" }).click();
   await card.getByLabel("Overlay opacity").fill("0.6");

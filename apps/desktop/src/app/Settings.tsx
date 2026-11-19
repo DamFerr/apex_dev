@@ -61,12 +61,14 @@ function CollectorRow() {
 const CORNERS: [OverlayCorner, string][] = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]];
 function OverlayCard() {
   const u = useUi(), { preview, set } = useOverlayPreview();
+  const hasSpot = u.overlayMonitor !== null;   // a dragged position is saved: it wins over the corner preset until reset
   return (
     <Card title="In-game overlay">
-      <Row label="Show during games" hint={isTauri ? "A small card in the corner of the screen with the usual build of the champion you locked in (runes, skill order, items), from collected games. It appears only while a game is running, ignores your mouse and keyboard, and shows nothing that is not already known in champ select. Off by default." : "Needs the desktop app (pnpm tauri dev); the browser preview has no overlay window."}>
+      <Row label="Show during games" hint={isTauri ? "A small card with the usual build of the champion you locked in (skill order, items), from collected games. It appears only while a game is running and shows nothing that is not already known in champ select. Drag it with the left mouse button to move it; every other click goes to the game, and it never takes the keyboard. Off by default." : "Needs the desktop app (pnpm tauri dev); the browser preview has no overlay window."}>
         <Toggle on={u.overlayEnabled} onChange={(v) => u.patch({ overlayEnabled: v })} label="Show overlay during games" /></Row>
       <Row label="Opacity"><div className="flex items-center gap-3"><input type="range" min={0.4} max={1} step={0.05} value={u.overlayOpacity} aria-label="Overlay opacity" onChange={(e) => u.patch({ overlayOpacity: Number(e.target.value) })} className="w-40 accent-[rgb(var(--accent))]" /><span className="w-10 text-right text-xs tabular-nums text-muted">{Math.round(u.overlayOpacity * 100)}%</span></div></Row>
-      <Row label="Position"><div className="flex flex-wrap justify-end gap-2" role="group" aria-label="Overlay position">{CORNERS.map(([k, label]) => <Chip key={k} active={u.overlayCorner === k} onClick={() => u.patch({ overlayCorner: k })}>{label}</Chip>)}</div></Row>
+      <Row label="Position"><div className="flex flex-wrap justify-end gap-2" role="group" aria-label="Overlay position">{CORNERS.map(([k, label]) => <Chip key={k} active={!hasSpot && u.overlayCorner === k} onClick={() => u.patch({ overlayCorner: k, overlayPositions: {}, overlayMonitor: null })}>{label}</Chip>)}</div></Row>
+      <Row label="Dragged position" hint="After you drag the card in a game, Apex remembers the spot. Reset puts it back in the chosen corner."><Button variant="ghost" disabled={!hasSpot} onClick={() => u.resetOverlayPosition()}>Reset position</Button></Row>
       <Row label="Preview" hint="Shows the overlay now, wherever you are, to check its position and opacity. It shows the champion from your last champ select.">
         <Button variant="ghost" disabled={!isTauri} aria-pressed={preview} onClick={() => set(!preview)}>{preview ? "Hide preview" : "Show preview"}</Button></Row>
     </Card>);

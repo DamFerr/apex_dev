@@ -22,8 +22,9 @@ const isSlot = (s: string): s is Slot => s === "Q" || s === "W" || s === "E" || 
 const SETTLE_MS = 200;
 
 /**
- * Dragging the card (D.4). Holding the left button on the card starts a native window drag; the Rust side lets the mouse into the window
- * only while the cursor is over the card, so the rest of the overlay stays click-through. When the moves stop, the window is clamped fully
+ * Dragging the card (D.4). Pressing the LEFT button on the card starts a native window drag. The Rust side (a mouse hook on Windows) lets
+ * only that left press into the window; hover, right/middle clicks and everything outside the card pass to the game, so the card behaves
+ * like part of the game. When the moves stop, the window is clamped fully
  * onto a monitor (`clampOverlayPosition`), moved there, and the spot is sent to the main window to save. Sends nothing to the game.
  */
 function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boolean) {
@@ -97,7 +98,7 @@ function BuildCard({ p }: { p: OverlayPayload }) {
   const none = !b || (!b.skillOrder && !order && !b.startItems && !boots);
   return (
     <motion.div ref={card} onMouseDown={onDown} initial={{ opacity: 0, y: p.reduceMotion ? 0 : -6 }} animate={{ opacity: p.opacity, y: 0 }} transition={{ duration: p.reduceMotion ? 0 : 0.25 }}
-      className="m-2 glass rounded-xl p-3 w-[316px] space-y-2.5 text-xs cursor-grab active:cursor-grabbing select-none">
+      className="m-2 glass rounded-xl p-3 w-[316px] space-y-2.5 text-xs select-none">
       <div className="flex items-center gap-2.5">
         <ChampIcon id={p.champion} name={p.championName} size={36} />
         <div className="min-w-0 mr-auto"><div className="font-display text-sm font-semibold leading-tight truncate">{p.championName}</div><div className="text-[10px] text-muted">{p.role ?? "Any role"} · usual build</div></div>
@@ -116,8 +117,8 @@ function BuildCard({ p }: { p: OverlayPayload }) {
 }
 
 /**
- * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through except over the card, which can be dragged
- * at any time (D.4; Rust switches click-through by cursor position, so the game keeps every click outside the card).
+ * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through for everything except a left-button drag
+ * that starts on the card (D.4): right clicks, hover and clicks under the card reach the game and the cursor stays the game's.
  * Shows only what was known at champ select: skill order, starting items and build order of the champion you locked, from collected games (no runes or summoner spells, D.1). It reads no game state.
  * The main window owns the data and sends it here as a Tauri event.
  */
@@ -125,9 +126,12 @@ export function Overlay() {
   const [p, setP] = useState<OverlayPayload | null>(null);
   useEffect(() => {
     document.documentElement.dataset.overlay = "1";
+    // No webview context menu / "Inspect" in the overlay, whatever button gets here.
+    const noMenu = (e: Event) => e.preventDefault();
+    document.addEventListener("contextmenu", noMenu);
     let off: (() => void) | undefined, dead = false;
     void listen<OverlayPayload | null>(OVERLAY_STATE, (e) => setP(e.payload)).then((f) => { if (dead) f(); else { off = f; void emit(OVERLAY_READY); } }); // ask for the current state once listening
-    return () => { dead = true; off?.(); };
+    return () => { dead = true; off?.(); document.removeEventListener("contextmenu", noMenu); };
   }, []);
   useEffect(() => { if (p) { document.documentElement.dataset.theme = p.theme; document.documentElement.dataset.reduceMotion = String(p.reduceMotion); } }, [p]);
   return <QueryClientProvider client={qc}>{p ? <BuildCard p={p} /> : null}</QueryClientProvider>;
