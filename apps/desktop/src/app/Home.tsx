@@ -5,12 +5,14 @@ import { useUi } from "../lib/store";
 import { shrink, wilson, sampleBadge } from "@apex/stats-core";
 import { Skeleton, StatCard, ProgressRing } from "../components/ui";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
-import { MatchRowBody, QueueFilterChips } from "../components/MatchRow";
+import { MatchFilterChips, MatchRowBody, QueueFilterChips } from "../components/MatchRow";
 import { isQueueFilter } from "@apex/schema";
-import { useMatches, useSummoner } from "../lib/api";
+import { useMatches, usePool, useSummoner } from "../lib/api";
+import { useChampName } from "../lib/ddragon";
 
 export function Home() {
-  const me = useUi((s) => s.myRiotId), queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch), sum = useSummoner(me), games = useMatches(me, 10, queue);
+  const me = useUi((s) => s.myRiotId), queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch), mf = useUi((s) => s.matchFilter), sum = useSummoner(me), games = useMatches(me, 10, queue, mf), pool = usePool(me), champName = useChampName();
+  const poolChamps = (pool.data ?? []).map((p) => ({ id: p.champion, name: champName(p.champion) })).sort((a, b) => a.name.localeCompare(b.name));
   const ms = games.data ?? [];
   const wins = ms.filter((m) => m.win).length;
   const [lo, hi] = wilson(wins, ms.length);
@@ -40,7 +42,8 @@ export function Home() {
     </div>
     <div className="flex items-baseline justify-between mt-8 mb-3"><h2 className="font-display text-lg font-semibold">Recent games</h2>
       <Link to="/recap" className="focus-ring text-sm text-accent hover:underline rounded">Last game recap →</Link></div>
-    <div className="mb-3"><QueueFilterChips value={queue} onChange={(k) => setUi({ queueFilter: k })} /></div>
+    <div className="mb-3 space-y-2"><QueueFilterChips value={queue} onChange={(k) => setUi({ queueFilter: k })} />
+      <MatchFilterChips value={mf} champions={poolChamps} onChange={(f) => setUi({ matchFilter: f })} /></div>
     <motion.ul className="space-y-2" initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }}>
       {games.isError && <li className="text-sm text-bad">{(games.error as Error).message}</li>}
       {games.isLoading && [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)}
@@ -49,7 +52,7 @@ export function Home() {
           className={`glass rounded-lg min-h-[4.25rem] py-2 px-4 flex items-center border-l-2 ${m.win ? "border-l-good" : "border-l-bad"}`}>
           <MatchRowBody m={m} />
         </motion.li>))}
-      {games.isSuccess && ms.length === 0 && <li className="text-sm text-muted">No games in this queue in your recent history.</li>}
+      {games.isSuccess && ms.length === 0 && <li className="text-sm text-muted">No games in this queue{mf.champion || mf.role ? " for this champion/role" : ""} in your recent history.</li>}
     </motion.ul>
   </>);
 }

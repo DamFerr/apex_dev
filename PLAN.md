@@ -189,7 +189,7 @@ Rules: one step per turn; max ~4 source files plus tests; if a step grows, split
 ### B. Match history leftovers (optional, cheap)
 - [x] **B.1** Backend: optional `champion` and `role` params on `GET /v1/players/:riotId/matches` (applied after loading, like Arena/Other). Files: `services/api/src/app.ts`, test.
 - [x] **B.2a** UI: role chips + champion picker on Profile (`MatchFilterChips` in `MatchRow.tsx`, `matchFilter` in `lib/store.ts`, `MatchFilter` + optional param on `getMatchPage`/`getRecentMatches` in `@apex/schema`, `lib/api/http.ts`, e2e). Note: repo differs from plan: `FilterBar.tsx` is region/patch/rank only, so chips live in `MatchRow.tsx`.
-- [ ] **B.2b** UI: same chips on Home. Files: `lib/api/index.ts` (`useMatches` takes a `MatchFilter`, in the query key), `app/Home.tsx`, e2e. Champion options on Home: your pool (`usePool(me)`).
+- [x] **B.2b** UI: same chips on Home. Files: `lib/api/index.ts` (`useMatches` takes a `MatchFilter`, in the query key), `app/Home.tsx`, e2e. Champion options on Home: your pool (`usePool(me)`).
 
 ### C. One search bar (A.2c is done, unblocked)
 - [x] **C.1** Pure matching function (case, space and apostrophe-insensitive: "kaisa", "wukong") with unit tests. Files: new `apps/desktop/src/lib/searchMatch.ts` + test.

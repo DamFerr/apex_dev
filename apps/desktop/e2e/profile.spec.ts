@@ -142,3 +142,14 @@ test("role chips narrow the match list on the backend and can be cleared", async
   await expect(group.getByRole("button", { name: "Mid", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByText("10 games loaded")).toBeVisible();
 });
+
+test("Home has the same role chips and shares the choice with Profile", async ({ page }) => {
+  const asked: string[] = [];
+  await page.route("**/v1/players/**/matches**", (r) => { asked.push(new URL(r.request().url()).searchParams.get("role") ?? "none"); return r.fallback(); });
+  await page.goto("/#/");
+  const group = () => page.getByRole("group", { name: "Role and champion filter" });
+  await group().getByRole("button", { name: "Top", exact: true }).click();
+  await expect.poll(() => asked.includes("TOP")).toBe(true);                 // asked of the backend
+  await page.goto("/#/profile");
+  await expect(group().getByRole("button", { name: "Top", exact: true })).toHaveAttribute("aria-pressed", "true");   // same state on Profile
+});

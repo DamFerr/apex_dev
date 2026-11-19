@@ -69,7 +69,12 @@ export function Profile() {
   const [filter, setFilter] = useState<"all" | "win" | "loss">("all");
   const queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch);
   const mf = useUi((s) => s.matchFilter), champName = useChampName(), pool = usePool(id);
-  useEffect(() => { setUi({ matchFilter: {} }); }, [id, setUi]); // a champion filter belongs to the player being viewed
+  // A champion filter belongs to your own pool: drop it (keep the role) when another player's profile opens or closes. Your own profile and Home share the filter.
+  useEffect(() => {
+    const dropChampion = () => { const { matchFilter, patch } = useUi.getState(); if (matchFilter.champion) patch({ matchFilter: matchFilter.role ? { role: matchFilter.role } : {} }); };
+    if (id !== me) dropChampion();
+    return () => { if (id !== me) dropChampion(); };
+  }, [id, me]);
   const poolChamps = [...(pool.data ?? [])].map((p) => ({ id: p.champion, name: champName(p.champion) })).sort((a, b) => a.name.localeCompare(b.name));
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<"matches" | "lp" | "mastery" | "live">("matches");
