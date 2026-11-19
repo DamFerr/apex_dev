@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { archetype, buildOrder, computeBuild, corePath, isFinished, isSupportUpgrade, itemBlocks, itemWpas, type BuildRow, type ItemMeta } from "./build";
+import { buildOrder, computeBuild, corePath, isFinished, isSupportUpgrade, itemBlocks, itemWpas, type BuildRow, type ItemMeta } from "./build";
 
 // The three quest-line items and the five free upgrades, as Data Dragon holds them: cheap or free, no tags that say "support item".
 const meta = (name: string, total: number, extra: Partial<ItemMeta> = {}): ItemMeta => ({ name, total, hasUpgrade: false, tags: [], ...extra });
@@ -76,11 +76,6 @@ describe("a support's build shows the support upgrade", () => {
     const adc = many(12, () => row([3190, 6617, 3107, 3020], 1, { buys: JSON.stringify([3190, 3020, 6617, 3107]) }));
     expect(computeBuild("Jinx", "ADC", adc, items, false).itemBlocks.some((b) => b.name === "Support item")).toBe(false);
     expect(buildOrder(adc, items)!.items.map((i) => i.id)).toEqual([3190, 3020, 6617, 3107]);
-  });
-  it("does not let the support upgrade decide whether a build is AP, AD or Tank", () => {
-    // Celestial Opposition carries Health, which would count as a Tank item: with two real AP items the game must stay AP
-    expect(archetype([3869, 6617, 3107, 3190], items)).not.toBeNull();
-    expect(archetype([3869, 6617, 6617], items)).toBeNull();                   // only one real item besides the support item: too few to classify
   });
   it("gives the support upgrade a Win Probability Added like any other item", () => {
     const rows2 = many(60, (i) => row(i < 30 ? [3869, 3190, 3020] : [3876, 3190, 3020], i % 3 === 0 ? 0 : 1, { duration: 1800 } as Partial<BuildRow>));

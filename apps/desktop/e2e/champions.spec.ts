@@ -177,13 +177,6 @@ test("build variants (AP / Tank) can be switched and sorted; the build below fol
   await expect(list.getByRole("listitem").first()).toContainText("Tank");               // 70% beats 50%
 });
 
-test("a champion without separate builds has no variant switcher (the one build is shown instead)", async ({ page }) => {
-  await page.goto("/#/champions/Ahri");
-  const list = page.getByLabel("Recommended build").getByRole("group", { name: "Build variants" });
-  await expect(list.getByRole("listitem")).toHaveCount(0);
-  await expect(list.getByRole("button", { name: "Best" })).toHaveCount(0);
-});
-
 test("with Data Dragon's rune trees, every rune of the tree is listed and only the chosen ones are lit", async ({ page }) => {
   const style = (id: number, key: string) => ({ id, key, name: key, icon: `perk-images/Styles/${key}.png`,
     slots: [[8005, 8112, 8010], [8126, 8139, 8304], [8138, 8135, 8347], [8105, 8106, 8352]].map((r) => ({ runes: r.map((x) => ({ id: x, name: `Rune ${x}`, icon: `perk-images/${x}.png` })) })) });
@@ -194,17 +187,6 @@ test("with Data Dragon's rune trees, every rune of the tree is listed and only t
   await expect(primary.locator('[data-selected="true"]')).toHaveCount(4);
   await expect(secondary.locator("[data-selected]")).toHaveCount(9);      // the secondary tree has no keystone row
   await expect(secondary.locator('[data-selected="true"]')).toHaveCount(2);
-});
-
-// The test backend has one dominant build for Ahri (no AP/AD/Tank split), so the left column must still show that one build instead of staying empty.
-test("with too little data for separate variants the left column shows the one build", async ({ page }) => {
-  await page.goto("/#/champions/Ahri");
-  const panel = page.getByLabel("Recommended build");
-  const list = panel.getByRole("group", { name: "Build variants" });
-  await expect(list).toBeVisible();
-  await expect(list.getByLabel(/^Most played build, \d+ games$/)).toBeVisible();
-  await expect(list.getByRole("button")).toHaveCount(0);                            // nothing to switch between, so no sort tabs and no buttons
-  await expect(list.getByText(/^\d+(\.\d)?%$/)).toBeVisible();                       // its win rate, with a number (colour is never the only signal)
 });
 
 test("long explanations live in tooltips, the page keeps short lines", async ({ page }) => {

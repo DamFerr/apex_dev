@@ -160,7 +160,7 @@ function SingleBuild({ b }: { b: Core }) {
       <div className="text-[11px] text-muted mb-2">{b.games.toLocaleString()} games<LowBadge games={b.games} /></div>
       <BuildIcons build={b} />
     </div>
-    <p className="text-[11px] text-muted" title="Separate AP / AD / Tank builds appear when at least two of them have 10+ games and 2.5% of the classified games.">One build so far</p>
+    <p className="text-[11px] text-muted" title="This champion has no game with a finished item yet, so no build can be named.">No named build yet</p>
   </div>);
 }
 
@@ -176,7 +176,7 @@ function VariantList({ b, sort, setSort, selected, setSelected }: { b: ChampionB
         <div className="text-[11px] text-muted mb-2">{v.games.toLocaleString()} games<LowBadge games={v.games} /></div>
         <BuildIcons build={v.build} />
       </button></li>))}</ul>
-    <p className="text-[11px] text-muted" title="Grouped by the first three finished items a player kept (Data Dragon stats and tags, plus a short list of hand-set items): AD, AP, Bruiser, Crit, Heal & Shield, Hybrid, Lethality, On-Hit, Tank, Utility, Well Rounded or a mix of two. Games with fewer than three finished items are not grouped. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items</p>
+    <p className="text-[11px] text-muted" title="Each game is named from its starter, boots and first three finished items (weighted: 1st item counts most), using Data Dragon stats and tags plus a short list of hand-set anchor items. Games without a finished item are not named. “Best” ranks by the lower end of the 95% range, so a small sample cannot win.">Grouped by finished items</p>
   </div>);
 }
 

@@ -79,7 +79,8 @@ Where Apex should beat Blitz / DPM.lol / Lolalytics / U.GG / DraftGap / iTero: o
 | Feature | Phase | Status |
 |---|---|---|
 | Win/pick/ban rate (stat strip with tier, change vs previous patch) | P1 | ✅ |
-| Builds: starting items, boots, build order, core, situational, support item, variants (AP/AD/Tank) | P2 | ✅ |
+| Builds: starting items, boots, build order, core, situational, support item | P2 | ✅ |
+| Build types: every game named from starter, boots and core 3 by a weighted trait score, rolled up per name, situational items per build | P2 | ✅ (rebuilt Nov 2026, see STATUS) |
 | Runes (full trees, page-level win rate, shards) | P2 | ✅ |
 | Skill order, summoner spells | P2 | ✅ (skill order needs 10+ timeline games) |
 | Matchup table, synergy table (expected vs actual, shrunk, Wilson) | P2 | ✅ |
