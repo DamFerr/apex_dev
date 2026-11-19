@@ -6,7 +6,7 @@ import type { Role } from "@apex/schema";
 import { fetchBuild, importItemSet, importRunes, importSpells } from "./importer";
 import type { PickSetup } from "./pickSetup";
 import { isTauri } from "./tauri";
-import { summarizeImport, type ImportOutcome } from "./importSummary";
+import { summarizeImport, wroteAnything, type ImportOutcome } from "./importSummary";
 import { toast } from "./toast";
 import { initialDraft, nextPick, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent, type OverlayPick } from "@apex/lcu-core";
 
@@ -17,7 +17,7 @@ export const champId = (key: number): string | undefined => champIndex.get(key)?
 export const champName = (key: number) => champIndex.get(key)?.name ?? (CHAMPION_KEYS[key] ?? `Champion ${key}`).replace(/([a-z])([A-Z])/g, "$1 $2");
 
 interface DraftStore {
-  draft: DraftState; /** The champion you locked, kept through the loading screen and the game (the draft itself is reset when champ select ends). */ overlayPick: OverlayPick | null; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void;
+  draft: DraftState; /** The champion (key) an import last wrote in this draft, or null: the setup page shows "Imported" for it. Cleared when a new draft starts. */ imported: number | null; /** The champion you locked, kept through the loading screen and the game (the draft itself is reset when champ select ends). */ overlayPick: OverlayPick | null; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void;
   /** Opt-in (off by default): suggestion cards get Hover / Ban / Lock in buttons that act on your own champ select action, one click = one action. */ clickActions: boolean; setClickActions: (v: boolean) => void;
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
@@ -36,16 +36,17 @@ export async function runImport(championKey: number, role: Role | null, sel?: Pi
     try { const t = await importItemSet(championKey, build); out.push(t ? { step: "items", done: `${t.length} item ${t.length > 1 ? "sets" : "set"}` } : { step: "items", skipped: true }); }
     catch (e) { out.push({ step: "items", error: msg(e) }); }
   }
+  if (wroteAnything(out)) useDraft.setState({ imported: championKey });
   const { message, errors } = summarizeImport(out);
   if (message) toast(message);
   for (const e of errors) toast(e, "error");
 }
 export const useDraft = create<DraftStore>((set, get) => ({
-  draft: initialDraft, overlayPick: null, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }),
+  draft: initialDraft, imported: null, overlayPick: null, autoImport: false, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }),
   setAutoImport: (autoImport) => set({ autoImport }), clickActions: false, setClickActions: (clickActions) => set({ clickActions }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });
-    set({ draft: next, overlayPick: nextPick(get().overlayPick, next) });
+    set({ draft: next, overlayPick: nextPick(get().overlayPick, next), ...(next.active && !prev.active ? { imported: null } : {}) });
     if (!imp) return;
     if (isTauri) void runImport(imp.championId, imp.role);
     else toast(`Import skipped for ${champName(imp.championId)}: writing to the League client needs the desktop app.`);

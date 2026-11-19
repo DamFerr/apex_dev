@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Search, Square, Star, User, UserSearch, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { NAV, SETTINGS_ITEM, buildPaletteEntries, shouldOpenDraft, type NavItem, type PaletteEntry } from "../lib/nav";
+import { NAV, SETTINGS_ITEM, buildPaletteEntries, setupPathOnLock, shouldOpenDraft, type NavItem, type PaletteEntry } from "../lib/nav";
 import { ChampIcon } from "../components/ChampIcon";
 import { useUi } from "../lib/store";
 import { publicPatch } from "@apex/schema";
@@ -12,7 +12,7 @@ import { win } from "../lib/tauri";
 import { Skeleton, spring } from "../components/ui";
 import { preload } from "./lazyPages";
 import { GameSummary } from "./GameSummary";
-import { useDraft } from "../lib/lcu";
+import { champId, useDraft } from "../lib/lcu";
 import { useDdChampions, useDdVersion } from "../lib/ddragon";
 import { applyCompact } from "../lib/compact";
 import { Toaster } from "../components/Toaster";
@@ -169,6 +169,12 @@ export function Shell() {
     if (shouldOpenDraft(wasActive.current, active, openDraft, loc.pathname)) nav("/draft");
     wasActive.current = active;
   }, [active, openDraft, loc.pathname, nav]);
+  const openSetup = useUi((s) => s.autoOpenSetup), me = useDraft((s) => s.draft.slots.find((x) => x.isLocal)), locked = active && !!me?.locked, wasLocked = useRef(false);
+  useEffect(() => { // you just locked in: show the setup page for that champion (only from the Draft page, once per lock-in; not in the compact window)
+    const to = setupPathOnLock(wasLocked.current, locked, openSetup && !compact, loc.pathname, me ? champId(me.championId) : undefined, me?.role ?? null);
+    wasLocked.current = locked;
+    if (to) nav(to);
+  }, [locked, me, openSetup, compact, loc.pathname, nav]);
   const label = [...NAV, SETTINGS_ITEM].find((n) => (n.path === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.path)))?.label ?? "Apex";
   useEffect(() => { document.title = `${label} · Apex`; mainRef.current?.scrollTo(0, 0); }, [label, loc.pathname]);
   useEffect(() => { // dev-only approximation of the 100 ms tab-switch budget

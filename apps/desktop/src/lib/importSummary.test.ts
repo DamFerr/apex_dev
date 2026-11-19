@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeImport } from "./importSummary";
+import { summarizeImport, wroteAnything } from "./importSummary";
 
 describe("summarizeImport", () => {
   it("lists what was written in one line", () => {
@@ -20,4 +20,12 @@ describe("summarizeImport", () => {
     expect(r.message).toBe("Imported spells Flash + Ignite"); expect(r.errors).toEqual(["Runes import failed: no client"]);
   });
   it("has no message when there is nothing to say", () => { expect(summarizeImport([]).message).toBeNull(); expect(summarizeImport([{ step: "items", error: "x" }]).message).toBeNull(); });
+});
+
+describe("wroteAnything", () => {
+  it("is true when any step wrote something, even if another failed", () => expect(wroteAnything([{ step: "runes", error: "x" }, { step: "spells", done: "spells Flash + Ignite" }])).toBe(true));
+  it("is false when everything was skipped or failed, or nothing ran", () => {
+    expect(wroteAnything([{ step: "items", skipped: true }, { step: "runes", error: "no client" }])).toBe(false);
+    expect(wroteAnything([])).toBe(false);
+  });
 });

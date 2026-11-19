@@ -8,7 +8,13 @@ import { expect, test, collectErrors } from "./helpers";
 const SIM = "http://127.0.0.1:8765/scenario";
 const play = (request: APIRequestContext, scenario: "normal" | "dodge" | "reset") => request.post(`${SIM}/${scenario}`);
 
-async function open(page: Page, request: APIRequestContext) {
+async function open(page: Page, request: APIRequestContext, opts: { setupPage?: boolean } = {}) {
+  if (!opts.setupPage) {   // lock-in would move the screen to the setup page, and these tests watch the Draft page: start with that setting off.
+    // Set before the app loads (not through Settings): a draft left running by the previous test is already locked when the app connects, and that alone opens the setup page.
+    await page.addInitScript(() => {
+      try { const k = "apex-ui", raw = localStorage.getItem(k); if (raw) { const s = JSON.parse(raw); s.state = { ...s.state, autoOpenSetup: false }; localStorage.setItem(k, JSON.stringify(s)); } } catch { /* storage unavailable: the test then fails visibly */ }
+    });
+  }
   await page.goto("/#/draft");
   await expect(page.getByText("League client: connected")).toBeVisible({ timeout: 15_000 });
   await play(request, "reset");
@@ -103,4 +109,19 @@ test("the Draft page opens by itself when champ select starts, once, and the set
   await page.waitForTimeout(1500);
   await expect(page).toHaveURL(/#\/champions/);
   await play(request, "reset");
+});
+
+test("locking in opens the setup page for your champion, once", async ({ page, request }) => {
+  const errors = collectErrors(page);
+  await open(page, request, { setupPage: true });
+  await play(request, "normal");
+  await expect(page).toHaveURL(/#\/draft\/setup\//, { timeout: 60_000 });     // the simulator locks your pick during the draft
+  await expect(page.getByLabel("Pick setup")).toBeVisible();
+  await expect(page.getByRole("status", { name: "Imported" })).toHaveCount(0);  // the browser cannot write to the League client, so the page must not claim an import
+  await page.getByRole("link", { name: /Draft/ }).first().click();
+  await expect(page).toHaveURL(/#\/draft$/);
+  await page.waitForTimeout(1500);                                              // coming back is respected: no second jump while still locked
+  await expect(page).toHaveURL(/#\/draft$/);
+  await play(request, "reset");
+  expect(errors).toEqual([]);
 });

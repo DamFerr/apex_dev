@@ -6,7 +6,7 @@ test("Home shows the real rank and games from the backend", async ({ page }) => 
   await page.goto("/#/");
   await expect(page.getByText("Emerald II")).toBeVisible();
   await expect(page.getByText("87W 79L")).toBeVisible();
-  await expect(page.getByText("Ahri").first()).toBeVisible();
+  await expect(page.getByText("Ahri").filter({ visible: true }).first()).toBeVisible(); // not the hidden <option> of the champion filter
   await expect(page.getByRole("heading", { name: "Recent games" })).toBeVisible();
 });
 

@@ -68,3 +68,11 @@ export function buildPaletteEntries<T extends Searchable>(query: string, champio
  * It fires only on that change, so leaving the page during the draft is respected. Connecting to a draft already under way counts as a start.
  */
 export const shouldOpenDraft = (wasActive: boolean, active: boolean, enabled: boolean, path: string): boolean => enabled && active && !wasActive && !path.startsWith("/draft");
+
+/**
+ * You just locked in (not locked before, locked now) and the setting is on: the setup page for that champion, or null.
+ * Only when you are on the Draft page itself: if you went to another screen the page never jumps in front of you, and being on the setup page already is a no-op.
+ * Fires only on the change, so coming back to Draft afterwards does not bounce you out again. `id` is the Data Dragon id of your locked champion.
+ */
+export const setupPathOnLock = (wasLocked: boolean, locked: boolean, enabled: boolean, path: string, id: string | undefined, role: string | null): string | null =>
+  enabled && locked && !wasLocked && id && path === "/draft" ? `/draft/setup/${encodeURIComponent(id)}${role ? `/${role}` : ""}` : null;

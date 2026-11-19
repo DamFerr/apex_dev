@@ -27,3 +27,6 @@ export function summarizeImport(outcomes: ImportOutcome[]): { message: string | 
     errors: outcomes.filter((o) => o.error).map((o) => `${cap(LABEL[o.step])} import failed: ${o.error}`),
   };
 }
+
+/** True when at least one step actually wrote something (not skipped, not failed): the setup page then shows "Imported". */
+export const wroteAnything = (outcomes: readonly ImportOutcome[]): boolean => outcomes.some((o) => !!o.done);

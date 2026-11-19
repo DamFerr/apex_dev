@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPaletteEntries, championPath, profilePath, shouldOpenDraft } from "./nav";
+import { buildPaletteEntries, championPath, profilePath, setupPathOnLock, shouldOpenDraft } from "./nav";
 
 const L = [
   { id: "Kaisa", name: "Kai'Sa" }, { id: "MonkeyKing", name: "Wukong" }, { id: "Draven", name: "Draven" }, { id: "Ahri", name: "Ahri" },
@@ -107,4 +107,19 @@ describe("shouldOpenDraft", () => {
     expect(shouldOpenDraft(true, false, true, "/")).toBe(false);
   });
   it("stays put when already on the Draft page", () => expect(shouldOpenDraft(false, true, true, "/draft")).toBe(false));
+});
+
+describe("setupPathOnLock", () => {
+  it("opens the setup page of the locked champion, with the role", () => expect(setupPathOnLock(false, true, true, "/draft", "Ahri", "MID")).toBe("/draft/setup/Ahri/MID"));
+  it("leaves the role out when it is unknown, and encodes the id", () => expect(setupPathOnLock(false, true, true, "/draft", "Kai Sa", null)).toBe("/draft/setup/Kai%20Sa"));
+  it("does nothing if you were already locked (fires once per lock-in)", () => expect(setupPathOnLock(true, true, true, "/draft", "Ahri", "MID")).toBeNull());
+  it("does nothing while you have not locked, or the setting is off", () => {
+    expect(setupPathOnLock(false, false, true, "/draft", "Ahri", "MID")).toBeNull();
+    expect(setupPathOnLock(false, true, false, "/draft", "Ahri", "MID")).toBeNull();
+  });
+  it("never jumps in front of another screen, and does not reopen itself", () => {
+    expect(setupPathOnLock(false, true, true, "/champions", "Ahri", "MID")).toBeNull();
+    expect(setupPathOnLock(false, true, true, "/draft/setup/Ahri/MID", "Ahri", "MID")).toBeNull();
+  });
+  it("needs a known champion id", () => expect(setupPathOnLock(false, true, true, "/draft", undefined, "MID")).toBeNull());
 });

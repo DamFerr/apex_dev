@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Check, Download } from "lucide-react";
 import type { Role } from "@apex/schema";
 import { sortVariants, spellPairsOf, DEFAULT_VARIANT_SORT } from "@apex/lcu-core";
 import { ChampIcon } from "../components/ChampIcon";
@@ -32,11 +32,11 @@ const Option = ({ selected, label, onClick, children }: { selected: boolean; lab
  */
 export function PickSetupPage() {
   const { id = "", role: roleParam } = useParams(), role = roleParam && ROLES.includes(roleParam) ? (roleParam as Role) : undefined;
-  const [sel, setSel] = useState<PickSetup>({}), connected = useDraft((s) => s.draft.connected);
+  const [sel, setSel] = useState<PickSetup>({}), connected = useDraft((s) => s.draft.connected), imported = useDraft((s) => s.imported);
   const { data: b, isLoading, isError } = useChampionBuild(id, role), key = keyOf(id), name = champIndex.get(key ?? -1)?.name ?? id;
   const r = resolveSetup(b ?? null, sel, MIN_BUILD_GAMES), core = r.core, pairs = core ? spellPairsOf(core) : [];
   const variants = b ? sortVariants(b, DEFAULT_VARIANT_SORT) : [];
-  const disabled = !isTauri || !connected || key === undefined;
+  const done = key !== undefined && imported === key, disabled = !isTauri || !connected || key === undefined;
 
   return (<div className="space-y-4">
     <Link to="/draft" className="focus-ring inline-flex items-center gap-1 text-sm text-muted hover:text-text rounded-md"><ArrowLeft size={14} /> Draft</Link>
@@ -44,8 +44,9 @@ export function PickSetupPage() {
       <div className="flex flex-wrap items-center gap-3">
         <ChampIcon id={id} name={name} size={40} />
         <h1 className="font-display text-xl font-semibold mr-auto">{name}{role ? ` · ${role}` : ""}</h1>
+        {done && <span role="status" aria-label="Imported" title="Written to the League client. Change a pick and click Import again to write it." className="inline-flex items-center gap-1 text-sm font-medium text-good"><Check size={14} aria-hidden />Imported</span>}
         {isTauri && <Button disabled={disabled} title={!connected ? "Connect to the League client first" : 'Writes the chosen rune page and summoner spells, plus the item set(s), named "Apex: <champion>"'}
-          onClick={() => key !== undefined && void runImport(key, role ?? null, sel)}><Download size={14} aria-hidden />Import</Button>}
+          onClick={() => key !== undefined && void runImport(key, role ?? null, sel)}><Download size={14} aria-hidden />{done ? "Import again" : "Import"}</Button>}
       </div>
       {isLoading && <Skeleton className="h-40" />}
       {isError && <div className="text-sm text-muted">The build could not be loaded from the local backend.</div>}
