@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Search, Square, Star, User, UserSearch, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { NAV, SETTINGS_ITEM, buildPaletteEntries, type NavItem, type PaletteEntry } from "../lib/nav";
+import { NAV, SETTINGS_ITEM, buildPaletteEntries, shouldOpenDraft, type NavItem, type PaletteEntry } from "../lib/nav";
 import { ChampIcon } from "../components/ChampIcon";
 import { useUi } from "../lib/store";
 import { publicPatch } from "@apex/schema";
@@ -164,6 +164,11 @@ export function Shell() {
   }, [active, auto]);
   useDdChampions(); // preload the full champion list
   const loc = useLocation(), mainRef = useRef<HTMLElement>(null);
+  const openDraft = useUi((s) => s.autoOpenDraft), wasActive = useRef(false);
+  useEffect(() => { // champ select just began: show the Draft page (once, so you can leave it during the draft)
+    if (shouldOpenDraft(wasActive.current, active, openDraft, loc.pathname)) nav("/draft");
+    wasActive.current = active;
+  }, [active, openDraft, loc.pathname, nav]);
   const label = [...NAV, SETTINGS_ITEM].find((n) => (n.path === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.path)))?.label ?? "Apex";
   useEffect(() => { document.title = `${label} · Apex`; mainRef.current?.scrollTo(0, 0); }, [label, loc.pathname]);
   useEffect(() => { // dev-only approximation of the 100 ms tab-switch budget

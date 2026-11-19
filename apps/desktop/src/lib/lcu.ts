@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { champIndex } from "./ddragon";
 import type { Role } from "@apex/schema";
 import { fetchBuild, importItemSet, importRunes, importSpells } from "./importer";
+import type { PickSetup } from "./pickSetup";
 import { isTauri } from "./tauri";
 import { summarizeImport, type ImportOutcome } from "./importSummary";
 import { toast } from "./toast";
@@ -21,14 +22,14 @@ interface DraftStore {
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
 /** Imports runes (and optionally summoner spells and an item set); the outcome is one summary toast, plus an error toast per failed step. */
-export async function runImport(championKey: number, role: Role | null) {
+export async function runImport(championKey: number, role: Role | null, sel?: PickSetup) {
   const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)), out: ImportOutcome[] = [];
   const collected = (source: string) => source.includes("collected");
   const build = await fetchBuild(championKey, role).catch(() => null); // null = use defaults, each step says which it used
-  try { const r = await importRunes(championKey, build); out.push({ step: "runes", done: "rune page", defaults: !collected(r.source) }); }
+  try { const r = await importRunes(championKey, build, sel); out.push({ step: "runes", done: "rune page", defaults: !collected(r.source) }); }
   catch (e) { out.push({ step: "runes", error: msg(e) }); }
   if (useDraft.getState().spells) {
-    try { const r = await importSpells(role, build); out.push({ step: "spells", done: `spells ${r.text}`, defaults: !collected(r.source) }); }
+    try { const r = await importSpells(role, build, sel); out.push({ step: "spells", done: `spells ${r.text}`, defaults: !collected(r.source) }); }
     catch (e) { out.push({ step: "spells", error: msg(e) }); }
   }
   if (useDraft.getState().items) {

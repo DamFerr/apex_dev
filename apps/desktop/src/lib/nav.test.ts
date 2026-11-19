@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPaletteEntries, championPath, profilePath } from "./nav";
+import { buildPaletteEntries, championPath, profilePath, shouldOpenDraft } from "./nav";
 
 const L = [
   { id: "Kaisa", name: "Kai'Sa" }, { id: "MonkeyKing", name: "Wukong" }, { id: "Draven", name: "Draven" }, { id: "Ahri", name: "Ahri" },
@@ -97,4 +97,14 @@ describe("buildPaletteEntries: stored players", () => {
     const many = Array.from({ length: 20 }, (_, i) => `S${i}#EUW`);
     expect(buildPaletteEntries("", L, { stored: many, playerLimit: 4 }).filter((e) => e.group === "Players")).toHaveLength(4);
   });
+});
+
+describe("shouldOpenDraft", () => {
+  it("opens the Draft page when champ select starts", () => expect(shouldOpenDraft(false, true, true, "/champions")).toBe(true));
+  it("does nothing when the setting is off", () => expect(shouldOpenDraft(false, true, false, "/")).toBe(false));
+  it("fires only on the start, not while the draft runs or when it ends", () => {
+    expect(shouldOpenDraft(true, true, true, "/")).toBe(false);
+    expect(shouldOpenDraft(true, false, true, "/")).toBe(false);
+  });
+  it("stays put when already on the Draft page", () => expect(shouldOpenDraft(false, true, true, "/draft")).toBe(false));
 });

@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ChampionBuild, Role, StatsFilter } from "@apex/schema";
-import { buildItemSets, buildRunePage, isApexItemSet, mergeItemSets, pageBuild, placeFlash, planApexRunePages, recommendSpells, runePageFromStat, SPELL_NAMES, spellPairsOf, type ClientRunePage } from "@apex/lcu-core";
+import { buildItemSets, buildRunePage, isApexItemSet, mergeItemSets, pageBuild, placeFlash, planApexRunePages, recommendSpells, runePageFromStat, SPELL_NAMES, type ClientRunePage } from "@apex/lcu-core";
 import { api } from "./api";
 import { champIndex, fetchDdChampions, fetchRunes } from "./ddragon";
+import { resolveSetup, type PickSetup } from "./pickSetup";
 import { useUi } from "./store";
 
 const lcu = <T,>(method: string, path: string, body?: unknown) => invoke<T>("lcu_request", { method, path, body });
@@ -43,11 +44,11 @@ export const hasRunes = (b: ChampionBuild | null) => (b ? (pageBuild(b).core.run
  * Safety rules: only ever creates, overwrites or deletes pages whose name starts with "Apex: ", never touches your own pages, and is only called after an explicit
  * click or opt-in. There is always at most ONE Apex page: it is overwritten with the new champion's runes, and any extra Apex pages (older versions) are deleted.
  */
-export const importRunes = (championKey: number, build: ChampionBuild | null) => serial(async (): Promise<{ name: string; source: string }> => {
+export const importRunes = (championKey: number, build: ChampionBuild | null, sel?: PickSetup) => serial(async (): Promise<{ name: string; source: string }> => {
   if (!champIndex.size) await fetchDdChampions();
   const champ = champIndex.get(championKey);
   if (!champ) throw new Error("Unknown champion");
-  const top = hasRunes(build) ? pageBuild(build!).core.runePages[0] : null;
+  const top = resolveSetup(build, sel, MIN_BUILD_GAMES).rune;   // your pick from the setup page, else the top page when it has enough games
   const page = top ? runePageFromStat(top, champ.name) : buildRunePage(await fetchRunes(), champ.tags, champ.name);
   const { keep, remove } = planApexRunePages(await lcu<ClientRunePage[]>("GET", "/lol-perks/v1/pages"));
   if (keep !== null) await lcu("PUT", `/lol-perks/v1/pages/${keep}`, { ...page, id: keep });
@@ -57,8 +58,8 @@ export const importRunes = (championKey: number, build: ChampionBuild | null) =>
 });
 
 /** Sets your two summoner spells during champ select. Only possible while a champion select session exists. */
-export async function importSpells(role: Role | null, build: ChampionBuild | null): Promise<{ text: string; source: string }> {
-  const s = build ? spellPairsOf(pageBuild(build).core)[0] : undefined, data = s && s.games >= MIN_BUILD_GAMES ? s : null;
+export async function importSpells(role: Role | null, build: ChampionBuild | null, sel?: PickSetup): Promise<{ text: string; source: string }> {
+  const data = resolveSetup(build, sel, MIN_BUILD_GAMES).spell;
   // The backend stays slot-agnostic (Flash second); the swap to your Flash key (Settings) happens here, on the client only.
   const [spell1Id, spell2Id] = placeFlash(data ? data.ids : recommendSpells(role), useUi.getState().flashSlot);
   await lcu("PATCH", "/lol-champ-select/v1/session/my-selection", { spell1Id, spell2Id });

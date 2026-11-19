@@ -62,3 +62,9 @@ export function buildPaletteEntries<T extends Searchable>(query: string, champio
     : [];
   return [...pages, ...champs, ...players];
 }
+
+/**
+ * Champ select just started (not active before, active now) and the setting is on: open the Draft page, unless you are already on it.
+ * It fires only on that change, so leaving the page during the draft is respected. Connecting to a draft already under way counts as a start.
+ */
+export const shouldOpenDraft = (wasActive: boolean, active: boolean, enabled: boolean, path: string): boolean => enabled && active && !wasActive && !path.startsWith("/draft");

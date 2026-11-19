@@ -84,6 +84,7 @@ export function Settings() {
         <Row label="Theme"><div className="flex gap-2">{themes.map((t) => <Chip key={t} active={u.theme === t} onClick={() => u.setTheme(t)}>{t === "colorblind" ? "Colorblind-safe" : t[0].toUpperCase() + t.slice(1)}</Chip>)}</div></Row>
         <Row label="Reduce motion" hint="Turns animations off. Also follows your system setting."><Toggle on={u.reduceMotion} onChange={u.setReduceMotion} label="Reduce motion" /></Row>
         <Row label="Auto compact in champ select" hint="Shrinks the window to a narrow panel when champ select starts, and restores it after."><Toggle on={u.autoCompact} onChange={(v) => u.patch({ autoCompact: v })} label="Auto compact" /></Row>
+        <Row label="Open Draft when champ select starts" hint="Switches Apex to the Draft page the moment a draft begins. Only moves inside Apex."><Toggle on={u.autoOpenDraft} onChange={(v) => u.patch({ autoOpenDraft: v })} label="Open Draft automatically" /></Row>
       </Card>
       <Card title="Champ select">
         <Row label="Flash key" hint="Which key your Flash is on in the game: D (left) or F (right). Only used when Apex sets your spells in champ select. On the champion page Flash is always shown on the left; a player's own games and the live game show their real order. Pairs without Flash are left as they are.">

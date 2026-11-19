@@ -93,3 +93,14 @@ test("the draft screen has no simulator controls", async ({ page, request }) => 
   await open(page, request);
   await expect(page.getByRole("button", { name: /mock|scenario/i })).toHaveCount(0);
 });
+
+test("the Draft page opens by itself when champ select starts, once, and the setting turns it off", async ({ page, request }) => {
+  await open(page, request);
+  await page.goto("/#/champions");                                  // hash change only: the app and its LCU connection stay alive
+  await play(request, "normal");
+  await expect(page).toHaveURL(/#\/draft/, { timeout: 15_000 });
+  await page.goto("/#/champions");                                  // leaving during the draft is respected: no second jump
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveURL(/#\/champions/);
+  await play(request, "reset");
+});

@@ -40,7 +40,7 @@ export function migrateUi(old: unknown, version: number): UiState {
 }
 interface UiState {
   statsFilter: StatsFilter; /** Queue chip above the match lists (Profile and Home), remembered per device. */ queueFilter: QueueFilter; /** Champion / role chips above the match lists (shared by Profile and Home). Session only: a champion belongs to one player. */ matchFilter: MatchFilter; backendUrl: string; myRiotId: string;
-  autoCompact: boolean; /** In-game overlay (off by default): shown only while a game runs. */ overlayEnabled: boolean; overlayOpacity: number; overlayCorner: OverlayCorner; /** Free overlay position per monitor id (set by "Move overlay"), and the monitor it was last placed on; null = use the corner preset. */ overlayPositions: Record<string, OverlayXY>; overlayMonitor: string | null; setOverlayPosition: (monitorId: string, xy: OverlayXY) => void; resetOverlayPosition: () => void; flashSlot: FlashSlot; /** Look up your own rank again after each game (default on; only your own Riot ID, through your local backend). */ autoRefreshRank: boolean; hotkeys: Record<string, string>; compact: boolean; patch: (p: Partial<UiState>) => void;
+  autoCompact: boolean; /** Open the Draft page when champ select starts (on by default; only moves around inside Apex). */ autoOpenDraft: boolean; /** In-game overlay (off by default): shown only while a game runs. */ overlayEnabled: boolean; overlayOpacity: number; overlayCorner: OverlayCorner; /** Free overlay position per monitor id (set by "Move overlay"), and the monitor it was last placed on; null = use the corner preset. */ overlayPositions: Record<string, OverlayXY>; overlayMonitor: string | null; setOverlayPosition: (monitorId: string, xy: OverlayXY) => void; resetOverlayPosition: () => void; flashSlot: FlashSlot; /** Look up your own rank again after each game (default on; only your own Riot ID, through your local backend). */ autoRefreshRank: boolean; hotkeys: Record<string, string>; compact: boolean; patch: (p: Partial<UiState>) => void;
   theme: Theme; reduceMotion: boolean; paletteOpen: boolean; recent: string[]; addRecent: (id: string) => void; removeRecent: (id: string) => void; /** Favourite players (Riot IDs), local only, shown in the search bar. */ favourites: string[]; toggleFavourite: (id: string) => void;
   setTheme: (t: Theme) => void; setReduceMotion: (v: boolean) => void; setPalette: (v: boolean) => void;
 }
@@ -49,7 +49,7 @@ export const useUi = create<UiState>()(
     (set) => ({
       theme: "dark", reduceMotion: false, paletteOpen: false, statsFilter: { platform: "all", patch: "latest", rank: "all" }, queueFilter: "all", matchFilter: {},
       backendUrl: "http://127.0.0.1:8787", myRiotId: "", patch: (p) => set(p),
-      autoCompact: false, overlayEnabled: false, overlayOpacity: 0.9, overlayCorner: "top-left", overlayPositions: {}, overlayMonitor: null, flashSlot: "F", autoRefreshRank: true, compact: false, hotkeys: { compactToggle: "Ctrl+Shift+M" }, recent: [], favourites: [],
+      autoCompact: false, autoOpenDraft: true, overlayEnabled: false, overlayOpacity: 0.9, overlayCorner: "top-left", overlayPositions: {}, overlayMonitor: null, flashSlot: "F", autoRefreshRank: true, compact: false, hotkeys: { compactToggle: "Ctrl+Shift+M" }, recent: [], favourites: [],
       addRecent: (id) => set((s) => ({ recent: pushRecent(s.recent, id) })),
       removeRecent: (id) => set((s) => ({ recent: removeFromList(s.recent, id) })),
       toggleFavourite: (id) => set((s) => ({ favourites: toggleFavourite(s.favourites, id) })),
@@ -62,7 +62,7 @@ export const useUi = create<UiState>()(
     {
       name: "apex-ui", version: 2,
       migrate: migrateUi,
-      partialize: (s) => ({ theme: s.theme, reduceMotion: s.reduceMotion, recent: s.recent, favourites: s.favourites, statsFilter: s.statsFilter, queueFilter: s.queueFilter, backendUrl: s.backendUrl, myRiotId: s.myRiotId, autoCompact: s.autoCompact, overlayEnabled: s.overlayEnabled, overlayOpacity: s.overlayOpacity, overlayCorner: s.overlayCorner, overlayPositions: s.overlayPositions, overlayMonitor: s.overlayMonitor, flashSlot: s.flashSlot, autoRefreshRank: s.autoRefreshRank, hotkeys: s.hotkeys }),
+      partialize: (s) => ({ theme: s.theme, reduceMotion: s.reduceMotion, recent: s.recent, favourites: s.favourites, statsFilter: s.statsFilter, queueFilter: s.queueFilter, backendUrl: s.backendUrl, myRiotId: s.myRiotId, autoCompact: s.autoCompact, autoOpenDraft: s.autoOpenDraft, overlayEnabled: s.overlayEnabled, overlayOpacity: s.overlayOpacity, overlayCorner: s.overlayCorner, overlayPositions: s.overlayPositions, overlayMonitor: s.overlayMonitor, flashSlot: s.flashSlot, autoRefreshRank: s.autoRefreshRank, hotkeys: s.hotkeys }),
     },
   ),
 );
