@@ -12,7 +12,7 @@ jobs:
       - run: pnpm install
       - run: pnpm test            # unit tests: stats-core, draft-engine, lcu-core, api
       - run: pnpm build           # type-check + production build
-      - name: Install Playwright browser (retried: apt mirrors sometimes time out)
+      - name: "Install Playwright browser (retried, apt mirrors sometimes time out)"
         run: |
           for i in 1 2 3; do
             pnpm --filter desktop exec playwright install --with-deps chromium && exit 0

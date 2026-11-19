@@ -3,10 +3,10 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { create } from "zustand";
 import type { ChampionBuild, Role } from "@apex/schema";
-import { overlayWanted } from "@apex/lcu-core";
+import { clampOverlayPosition, overlayWanted, type MonitorInfo } from "@apex/lcu-core";
 import { fetchBuild } from "./importer";
 import { champId, champName, useDraft } from "./lcu";
-import { useUi, type Theme } from "./store";
+import { savedOverlayPlacement, useUi, type Theme } from "./store";
 import { isTauri } from "./tauri";
 
 /** Everything the overlay window shows. The overlay is a separate window with its own JavaScript, so the main window sends it this over Tauri events. */
@@ -17,6 +17,13 @@ export interface OverlayPayload {
   shownAt: number | null;
 }
 export const OVERLAY_STATE = "overlay-state", OVERLAY_READY = "overlay-ready";
+/** Sent by the overlay window after a drag: where the card was dropped (monitor id + logical px from its top-left). The main window saves it. */
+export const OVERLAY_MOVED = "overlay-moved";
+export interface OverlayMoved { monitorId: string; x: number; y: number }
+/** Size of the overlay window in logical pixels (same as WIDTH / HEIGHT in `overlay.rs`): the rectangle that is clamped onto a monitor. */
+export const OVERLAY_WINDOW = { width: 340, height: 340 };
+/** What the Rust command `overlay_layout` returns: monitors and the overlay window, all in physical pixels. */
+export interface OverlayLayout { monitors: MonitorInfo[]; window: { x: number; y: number; width: number; height: number } }
 
 /** A manual preview from Settings (not saved): shows the overlay regardless of the game phase, to check position and opacity. */
 export const useOverlayPreview = create<{ preview: boolean; set: (v: boolean) => void }>((set) => ({ preview: false, set: (preview) => set({ preview }) }));
@@ -61,7 +68,33 @@ export function useOverlayController() {
     return () => { dead = true; off?.(); };
   }, []);
 
+  // A dragged-to spot is saved when the overlay window reports it (the store, and so the saved position, lives in this window).
   useEffect(() => {
-    if (isTauri) void invoke("set_overlay", { visible, corner }).catch((e) => console.warn("overlay:", e));
-  }, [visible, corner]);
+    if (!isTauri) return;
+    let off: (() => void) | undefined, dead = false;
+    void listen<OverlayMoved>(OVERLAY_MOVED, (e) => useUi.getState().setOverlayPosition(e.payload.monitorId, { x: e.payload.x, y: e.payload.y })).then((f) => { if (dead) f(); else off = f; });
+    return () => { dead = true; off?.(); };
+  }, []);
+
+  // Where the window goes: the saved free position if there is one (re-clamped onto the monitors that exist NOW), else the corner preset.
+  // `hasSpot` (not the numbers) is the dependency: a drag already put the window there, and "Reset position" flips it back to the corner.
+  const hasSpot = useUi((s) => s.overlayMonitor !== null);
+  useEffect(() => {
+    if (!isTauri) return;
+    let stale = false;
+    void (async () => {
+      let spot: { x: number; y: number } | null = null;
+      const saved = visible ? savedOverlayPlacement(useUi.getState()) : null;
+      if (saved) {
+        // Monitors can only be listed through the overlay window, which exists once it has been shown once; the first show uses the corner and moves right after.
+        await invoke("set_overlay", { visible, corner }).catch(() => undefined);
+        const l = await invoke<OverlayLayout>("overlay_layout").catch(() => null);
+        const c = l && clampOverlayPosition(saved, l.monitors, OVERLAY_WINDOW);
+        if (c && !c.fellBack) spot = { x: c.x, y: c.y };
+        if (stale) return;
+      }
+      await invoke("set_overlay", { visible, corner, x: spot?.x ?? null, y: spot?.y ?? null }).catch((e) => console.warn("overlay:", e));
+    })();
+    return () => { stale = true; };
+  }, [visible, corner, hasSpot]);
 }
