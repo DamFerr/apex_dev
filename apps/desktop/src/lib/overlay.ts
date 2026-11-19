@@ -87,14 +87,14 @@ export function useOverlayController() {
       const saved = visible ? savedOverlayPlacement(useUi.getState()) : null;
       if (saved) {
         // Monitors can only be listed through the overlay window, which exists once it has been shown once; the first show uses the corner and moves right after.
-        await invoke("set_overlay", { visible, corner }).catch(() => undefined);
+        await invoke("set_overlay", { visible, corner, preview }).catch(() => undefined);
         const l = await invoke<OverlayLayout>("overlay_layout").catch(() => null);
         const c = l && clampOverlayPosition(saved, l.monitors, OVERLAY_WINDOW);
         if (c && !c.fellBack) spot = { x: c.x, y: c.y };
         if (stale) return;
       }
-      await invoke("set_overlay", { visible, corner, x: spot?.x ?? null, y: spot?.y ?? null }).catch((e) => console.warn("overlay:", e));
+      await invoke("set_overlay", { visible, corner, x: spot?.x ?? null, y: spot?.y ?? null, preview }).catch((e) => console.warn("overlay:", e));
     })();
     return () => { stale = true; };
-  }, [visible, corner, hasSpot]);
+  }, [visible, corner, hasSpot, preview]);
 }

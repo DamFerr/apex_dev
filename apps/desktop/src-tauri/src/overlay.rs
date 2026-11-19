@@ -26,14 +26,19 @@ fn place(w: &WebviewWindow, corner: &str) -> Result<(), String> {
 
 // async so window creation does not block the main thread (a known deadlock risk on Windows).
 #[tauri::command]
-pub async fn set_overlay(app: AppHandle, visible: bool, corner: String, x: Option<i32>, y: Option<i32>) -> Result<(), String> {
+pub async fn set_overlay(app: AppHandle, visible: bool, corner: String, x: Option<i32>, y: Option<i32>, preview: Option<bool>) -> Result<(), String> {
+    // The watcher (hook module) hides the overlay while League is not the foreground window, unless this is a manual preview from Settings.
+    #[cfg(windows)]
+    { hook::WANT.store(visible, std::sync::atomic::Ordering::Relaxed); hook::PREVIEW.store(preview.unwrap_or(false), std::sync::atomic::Ordering::Relaxed); }
+    #[cfg(not(windows))]
+    let _ = preview;
     // A saved free position (absolute physical pixels, already clamped by the caller) wins over the corner preset.
     let put = |w: &WebviewWindow| match (x, y) {
         (Some(x), Some(y)) => w.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string()),
         _ => place(w, &corner),
     };
     if let Some(w) = app.get_webview_window("overlay") {
-        if visible { put(&w)?; w.show().map_err(|e| e.to_string())?; } else { w.hide().map_err(|e| e.to_string())?; }
+        if visible { put(&w)?; if show_now() { w.show().map_err(|e| e.to_string())?; } } else { w.hide().map_err(|e| e.to_string())?; }
         return Ok(());
     }
     if !visible { return Ok(()); }
@@ -55,7 +60,18 @@ pub async fn set_overlay(app: AppHandle, visible: bool, corner: String, x: Optio
     w.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
     #[cfg(windows)]
     if let Ok(h) = w.hwnd() { hook::OVERLAY_HWND.store(h.0 as isize, std::sync::atomic::Ordering::Relaxed); }
-    put(&w)
+    put(&w)?;
+    // Created while League is not in front (alt-tabbed): keep it hidden until the game is the foreground window again.
+    if !show_now() { let _ = w.hide(); }
+    Ok(())
+}
+
+/// Should the overlay be on screen right now? Windows: only while League's game window is the foreground window (or in a Settings preview).
+fn show_now() -> bool {
+    #[cfg(windows)]
+    { hook::PREVIEW.load(std::sync::atomic::Ordering::Relaxed) || hook::game_in_front() }
+    #[cfg(not(windows))]
+    { true }
 }
 
 /// The overlay page reports where its card is (logical px inside the window); w or h of 0 means "no card" (nothing can be dragged).
@@ -102,7 +118,8 @@ mod hook {
     use std::sync::OnceLock;
     use std::time::Duration;
     use tauri::{AppHandle, Emitter};
-    use windows_sys::Win32::Foundation::{HWND, RECT};
+    use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -121,6 +138,24 @@ mod hook {
     static DIRTY: AtomicBool = AtomicBool::new(false);
     static ENDED: AtomicBool = AtomicBool::new(false);
     static APP: OnceLock<AppHandle> = OnceLock::new();
+    /// Who runs the drag: 1 = the mouse hook (it swallowed the press), 2 = the polling fallback (the press also reaches the game).
+    /// The hook gets no events while the foreground app runs elevated (UIPI) or guards input; polling still works there.
+    static SRC: AtomicI32 = AtomicI32::new(0);
+    /// The page wants the overlay visible; a manual preview from Settings (shown even when League is not in front).
+    pub static WANT: AtomicBool = AtomicBool::new(false);
+    pub static PREVIEW: AtomicBool = AtomicBool::new(false);
+
+    /// Is League's game window (class `RiotWindowClass`) or the overlay itself the foreground window? Only reads the window class.
+    pub fn game_in_front() -> bool {
+        unsafe {
+            let fg = GetForegroundWindow();
+            if fg.is_null() { return false; }
+            if fg as isize == OVERLAY_HWND.load(Relaxed) { return true; }
+            let mut buf = [0u16; 64];
+            let n = GetClassNameW(fg, buf.as_mut_ptr(), buf.len() as i32);
+            n > 0 && String::from_utf16_lossy(&buf[..n as usize]) == "RiotWindowClass"
+        }
+    }
 
     pub fn set_card(rect: Option<(f64, f64, f64, f64)>, scale: f64) {
         let (x, y, w, h) = rect.unwrap_or((0.0, 0.0, 0.0, 0.0));
@@ -156,11 +191,12 @@ mod hook {
                 WM_LBUTTONDOWN => if let Some((ox, oy)) = on_card(pt.x, pt.y) {
                     OFF[0].store(ox, Relaxed); OFF[1].store(oy, Relaxed);
                     CUR[0].store(pt.x, Relaxed); CUR[1].store(pt.y, Relaxed);
+                    SRC.store(1, Relaxed);
                     DRAG.store(true, Relaxed);
                     return 1; // the press belongs to the card: the game does not get it
                 },
                 WM_MOUSEMOVE => if DRAG.load(Relaxed) { CUR[0].store(pt.x, Relaxed); CUR[1].store(pt.y, Relaxed); DIRTY.store(true, Relaxed); },
-                WM_LBUTTONUP => if DRAG.swap(false, Relaxed) { ENDED.store(true, Relaxed); return 1; }, // its release is swallowed too
+                WM_LBUTTONUP => if SRC.load(Relaxed) == 1 && DRAG.swap(false, Relaxed) { ENDED.store(true, Relaxed); return 1; }, // its release is swallowed too
                 _ => {}
             }
         }
@@ -170,8 +206,38 @@ mod hook {
     /// Moves the window while a drag runs (about 120 times a second) and tells the page when it is over. Separate from the hook thread so
     /// a slow window move can never make the hook time out.
     fn mover() {
+        let mut was_down = false;
+        let mut was_shown = false;
         loop {
             std::thread::sleep(Duration::from_millis(8));
+            unsafe {
+                // Fallback drag: the left button state and the cursor are read directly, so it works even when the hook gets nothing.
+                let down = GetAsyncKeyState(VK_LBUTTON as i32) as u16 & 0x8000 != 0;
+                let mut p: POINT = std::mem::zeroed();
+                if GetCursorPos(&mut p) != 0 {
+                    if !DRAG.load(Relaxed) {
+                        if down && !was_down { if let Some((ox, oy)) = on_card(p.x, p.y) {
+                            OFF[0].store(ox, Relaxed); OFF[1].store(oy, Relaxed);
+                            SRC.store(2, Relaxed); DRAG.store(true, Relaxed);
+                        } }
+                    } else if SRC.load(Relaxed) == 2 && !down {
+                        DRAG.store(false, Relaxed); ENDED.store(true, Relaxed);
+                    }
+                    if DRAG.load(Relaxed) { CUR[0].store(p.x, Relaxed); CUR[1].store(p.y, Relaxed); DIRTY.store(true, Relaxed); }
+                }
+                was_down = down;
+                // Game-only: hide the overlay while League is not in front (alt-tab), show it again when it is. A Settings preview stays.
+                if WANT.load(Relaxed) {
+                    let hwnd = OVERLAY_HWND.load(Relaxed) as HWND;
+                    if !hwnd.is_null() {
+                        let shown = PREVIEW.load(Relaxed) || game_in_front() || DRAG.load(Relaxed);
+                        if shown != was_shown {
+                            ShowWindow(hwnd, if shown { SW_SHOWNOACTIVATE } else { SW_HIDE });
+                            was_shown = shown;
+                        }
+                    }
+                } else { was_shown = false; }
+            }
             let moved = DIRTY.swap(false, Relaxed);
             let ended = ENDED.swap(false, Relaxed);
             if moved || ended {
