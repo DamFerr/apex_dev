@@ -73,7 +73,7 @@ fn show_now() -> bool {
     { true }
 }
 
-/// The overlay page reports where its card is (logical px inside the window); w or h of 0 means "no card" (nothing can be dragged).
+/// The overlay page reports where its drag handle is (logical px inside the window); w or h of 0 means "no handle" (nothing can be dragged).
 #[tauri::command]
 pub fn overlay_card(app: AppHandle, x: f64, y: f64, w: f64, h: f64) {
     #[cfg(windows)]

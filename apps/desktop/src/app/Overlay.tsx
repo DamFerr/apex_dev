@@ -21,17 +21,18 @@ const isSlot = (s: string): s is Slot => s === "Q" || s === "W" || s === "E" || 
 const DRAG_END = "overlay-drag-end";
 
 /**
- * Dragging the card (D.4). The window is click-through; while the cursor is over the card Rust lifts that, so the card gets the real mouse
- * (no hook, nothing global). A LEFT press on the card captures the pointer and tells Rust to move the window with the cursor until the
+ * Dragging the card (D.4). The window is click-through; while the cursor is over the card's header strip (the drag handle) Rust lifts that,
+ * so only the handle gets the real mouse and the rest of the card stays click-through: right/left clicks on the card body reach the game
+ * (no hook, nothing global). A LEFT press on the handle captures the pointer and tells Rust to move the window with the cursor until the
  * release; then the window is clamped fully onto a monitor (`clampOverlayPosition`), moved there and the spot is sent to the main window to
  * save. Right/middle presses do nothing here. Sends nothing to the game.
  */
-function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boolean) {
-  // Tell Rust where the card is (logical px in the window), so only that rectangle can be grabbed. Re-sent when the card changes size.
+function useCardDrag(handle: React.RefObject<HTMLDivElement | null>, active: boolean) {
+  // Tell Rust where the handle is (logical px in the window), so only that rectangle can be grabbed. Re-sent when it changes size.
   useEffect(() => {
-    const el = card.current;
+    const el = handle.current;
     if (!active || !el) { void invoke("overlay_card", { x: 0, y: 0, w: 0, h: 0 }).catch(() => undefined); return; }
-    const report = () => void invoke("overlay_card", { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }).catch(() => undefined);
+    const report = () => { const r = el.getBoundingClientRect(); void invoke("overlay_card", { x: r.left, y: r.top, w: r.width, h: r.height }).catch(() => undefined); };
     report();
     const ro = new ResizeObserver(report);
     ro.observe(el);
@@ -48,7 +49,7 @@ function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boole
       el.removeEventListener("pointerdown", down); el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", lost); el.removeEventListener("lostpointercapture", lost);
       ro.disconnect(); void invoke("overlay_card", { x: 0, y: 0, w: 0, h: 0 }).catch(() => undefined); };
-  }, [card, active]);
+  }, [handle, active]);
 
   useEffect(() => {
     const settle = async () => {
@@ -72,8 +73,8 @@ function useCardDrag(card: React.RefObject<HTMLDivElement | null>, active: boole
 }
 
 function BuildCard({ p }: { p: OverlayPayload }) {
-  const card = useRef<HTMLDivElement>(null);
-  useCardDrag(card, true);
+  const card = useRef<HTMLDivElement>(null), handle = useRef<HTMLDivElement>(null);
+  useCardDrag(handle, true);
   // Start items are only useful in the first seconds: hide them a fixed time after the overlay appeared. A plain timer, not your inventory (that would be game state).
   const [showStart, setShowStart] = useState(() => startItemsLeftMs(p.shownAt, Date.now()) > 0);
   useEffect(() => {
@@ -91,7 +92,7 @@ function BuildCard({ p }: { p: OverlayPayload }) {
   return (
     <motion.div ref={card} initial={{ opacity: 0, y: p.reduceMotion ? 0 : -6 }} animate={{ opacity: p.opacity, y: 0 }} transition={{ duration: p.reduceMotion ? 0 : 0.25 }}
       className="m-2 glass rounded-xl p-3 w-[316px] space-y-2.5 text-xs select-none">
-      <div className="flex items-center gap-2.5">
+      <div ref={handle} className="flex items-center gap-2.5 -m-1 p-1 rounded-lg cursor-grab active:cursor-grabbing">
         <ChampIcon id={p.champion} name={p.championName} size={36} />
         <div className="min-w-0 mr-auto"><div className="font-display text-sm font-semibold leading-tight truncate">{p.championName}</div><div className="text-[10px] text-muted">{p.role ?? "Any role"} · usual build</div></div>
       </div>
@@ -109,8 +110,8 @@ function BuildCard({ p }: { p: OverlayPayload }) {
 }
 
 /**
- * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through except while the cursor is over the card
- * (D.4): a left-button drag that starts on the card moves it. Everything outside the card reaches the game and the cursor stays the game's.
+ * In-game overlay window. Transparent, always on top, never takes keyboard focus, and click-through except while the cursor is over the card's
+ * header strip (D.4): a left-button drag that starts there moves the card. Everything else, card body included, reaches the game.
  * Shows only what was known at champ select: skill order, starting items and build order of the champion you locked, from collected games (no runes or summoner spells, D.1). It reads no game state.
  * The main window owns the data and sends it here as a Tauri event.
  */
