@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { perfGrade, type PerfGrade } from "@apex/stats-core";
 import type { PlayerRadar } from "@apex/schema";
 import { useUi } from "../lib/store";
+import { radarInsights } from "../lib/radarInsight";
 import { AXIS_LABEL, AXIS_UNIT, formatAxisValue, labelAnchor, radarPath, radarPoint, ringPath, scoreFrac } from "../lib/radarChart";
 
 const W = 260, H = 224, CX = W / 2, CY = 108, R = 68, LABEL_R = R + 14;
@@ -20,6 +22,7 @@ export function SkillRadarChart({ radar }: { radar: PlayerRadar }) {
   const reduce = useUi((s) => s.reduceMotion);
   const axes = radar.axes, n = axes.length;
   const shape = radarPath(axes.map((a) => scoreFrac(a.score)), CX, CY, R);
+  const insights = radarInsights(radar);
   const overallLetter = radar.overall === null ? null : perfGrade(radar.overall);
   const summary = `Skill radar, ${radar.games} games: ${axes.map((a) => `${AXIS_LABEL[a.id]} ${Math.round(a.score)} of 100`).join(", ")}. 50 is the rank average.`;
   return (
@@ -57,5 +60,18 @@ export function SkillRadarChart({ radar }: { radar: PlayerRadar }) {
             <span className="sr-only">{`${AXIS_LABEL[a.id]}: ${formatAxisValue(a.id, a.value)} ${AXIS_UNIT[a.id]}, rank average ${formatAxisValue(a.id, a.reference)}, score ${Math.round(a.score)} of 100, grade ${a.letter}.`}</span>
           </li>))}
       </ul>
+      {insights.length > 0 && (
+        <ul className="mt-3 space-y-1" aria-label="Strength and weakness">
+          {insights.map(({ kind, axis, diffPct }) => {
+            const up = kind === "strength", Icon = up ? TrendingUp : TrendingDown, pctText = diffPct === null ? "" : `${diffPct > 0 ? "+" : ""}${diffPct}%`;
+            const tip = `${up ? "Strongest" : "Weakest"} axis: ${AXIS_LABEL[axis.id]}, ${formatAxisValue(axis.id, axis.value)} ${AXIS_UNIT[axis.id]} against ${formatAxisValue(axis.id, axis.reference)} on average${pctText ? ` (${pctText})` : ""}, over ${radar.games} games. A comparison with an average, not a verdict.`;
+            return (<li key={kind} className="flex items-center gap-2 min-h-8 text-sm" tabIndex={0} title={tip}>
+              <Icon size={16} aria-hidden className={up ? "text-good" : "text-bad"} />
+              <span className="flex-1 truncate">{AXIS_LABEL[axis.id]}</span>
+              <span className={`tabular-nums font-medium ${up ? "text-good" : "text-bad"}`}>{pctText}</span>
+              <span className="sr-only">{tip}</span>
+            </li>);
+          })}
+        </ul>)}
     </div>);
 }
