@@ -9,7 +9,12 @@ export type { DraftStats };
 export const guessRoles = (tags: string[]): Role[] =>
   ({ Marksman: ["ADC"], Support: ["SUPPORT"], Tank: ["TOP", "SUPPORT"], Fighter: ["TOP", "JUNGLE"], Assassin: ["MID", "JUNGLE"], Mage: ["MID"] } as Record<string, Role[]>)[tags[0]] ?? ["MID"];
 
-const addProfiles = (a: CompProfile, b: CompProfile): CompProfile => ({ games: a.games + b.games, phys: a.phys + b.phys, magic: a.magic + b.magic, trueDmg: a.trueDmg + b.trueDmg, taken: a.taken + b.taken, cc: a.cc + b.cc, seconds: a.seconds + b.seconds });
+const addOpt = (a?: number, b?: number) => (a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0));   // Peel fields: absent on both stays absent
+const addProfiles = (a: CompProfile, b: CompProfile): CompProfile => {
+  const peel = { peelGames: addOpt(a.peelGames, b.peelGames), heals: addOpt(a.heals, b.heals), shields: addOpt(a.shields, b.shields), peelSeconds: addOpt(a.peelSeconds, b.peelSeconds) };
+  return { games: a.games + b.games, phys: a.phys + b.phys, magic: a.magic + b.magic, trueDmg: a.trueDmg + b.trueDmg, taken: a.taken + b.taken, cc: a.cc + b.cc, seconds: a.seconds + b.seconds,
+    ...(peel.peelGames !== undefined ? { peelGames: peel.peelGames, heals: peel.heals!, shields: peel.shields!, peelSeconds: peel.peelSeconds! } : {}) };
+};
 
 /**
  * Builds engine data from collected games. Pair effects are measured against the win rate the two champions' own

@@ -109,14 +109,15 @@ function DamageBar({ c, label }: { c: TeamComp; label: string }) {
 }
 
 /** A per-minute number for both teams, bars relative to the larger one. Only drawn when both teams are measured. */
-function Versus({ label, ally, enemy, unit, digits = 0 }: { label: string; ally: number; enemy: number; unit: string; digits?: number }) {
+function Versus({ label, ally, enemy, unit, digits = 0, games, hint }: { label: string; ally: number; enemy: number; unit: string; digits?: number; games?: number; hint?: string }) {
   const top = Math.max(ally, enemy, 1e-9), f = (n: number) => n.toFixed(digits);
   return (
-    <div className="text-sm">
-      <div className="flex justify-between mb-1.5"><span className="font-medium">{label}</span><span className="text-muted tabular-nums">you {f(ally)} · enemy {f(enemy)} {unit}</span></div>
+    <div className="text-sm" title={hint}>
+      <div className="flex justify-between mb-1.5"><span className="font-medium">{label}{games !== undefined && <LowBadge games={games} />}</span><span className="text-muted tabular-nums">you {f(ally)} · enemy {f(enemy)} {unit}{games !== undefined && <> · {games.toLocaleString()} games</>}</span></div>
       <div className="grid gap-1" role="img" aria-label={`${label}: your team ${f(ally)}, enemy team ${f(enemy)} ${unit}`}>
         {[[ally, "bg-accent"], [enemy, "bg-bad"]].map(([v, c], i) => <div key={i} className="h-2 rounded-full bg-raised/70 overflow-hidden"><motion.div className={`h-full w-full origin-left ${c}`} initial={false} animate={{ scaleX: (v as number) / top }} transition={spring} /></div>)}
       </div>
+      {hint && <span className="sr-only">{hint}</span>}
     </div>
   );
 }
@@ -162,6 +163,8 @@ export function CompAnalysis({ ally, enemy, allyScaling, enemyScaling }: { ally:
       <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
         <DamageBar c={ally} label="Your team" /><DamageBar c={enemy} label="Enemy team" />
         {both && <><Versus label="Damage taken" ally={ally.takenPerMin!} enemy={enemy.takenPerMin!} unit="/min" /><Versus label="Crowd control time" ally={ally.ccPerMin!} enemy={enemy.ccPerMin!} unit="s/min" digits={1} /></>}
+        {ally.peelPerMin != null && enemy.peelPerMin != null && <Versus label="Heals and shields" ally={ally.peelPerMin} enemy={enemy.peelPerMin} unit="/min" games={Math.min(ally.peelGames, enemy.peelGames)}
+          hint={`Healing and shielding on teammates per minute, summed over the locked picks, measured from collected games that carry it (older games do not). Fewest games behind a pick: ${ally.peelGames.toLocaleString()} for your team, ${enemy.peelGames.toLocaleString()} for the enemy.`} />}
         {allyScaling && enemyScaling && <ScalingRow ally={allyScaling} enemy={enemyScaling} />}
       </div>
       {skewed.length > 0 && <p className="mt-5 text-sm text-gold" role="status">{skewed.join(" ")} One resistance item goes a long way against it.</p>}

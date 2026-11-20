@@ -5,7 +5,13 @@ import type { Pick } from "./engine";
 export const MIN_PROFILE_GAMES = 20;
 
 /** Sums over the collected games of one champion (see `CompProfileRow` in @apex/schema). */
-export interface CompProfile { games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }
+export interface CompProfile {
+  games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number;
+  /** Peel (E.2e): heals + shields on teammates over the `peelGames` games that carry them, and those games' seconds. Absent = no game carries them (never 0). */
+  peelGames?: number; heals?: number; shields?: number; peelSeconds?: number;
+}
+/** Fewer Peel games than this behind a pick and the team's Peel is not measured (same bar as the damage numbers). */
+export const MIN_PEEL_GAMES = MIN_PROFILE_GAMES;
 
 /** What one team brings. Shares add up to 1. `measured` = every pick came from collected games; otherwise the split is a class-tag estimate. */
 export interface TeamComp {
@@ -13,10 +19,24 @@ export interface TeamComp {
   ad: number; ap: number; trueShare: number;
   /** Per minute, summed over the team. null when not measured (never invented from class tags). */
   takenPerMin: number | null; ccPerMin: number | null;
+  /** Heals plus shields on teammates per minute, summed over the team (Peel). Needs EVERY pick to have `MIN_PEEL_GAMES` Peel games, else null. Measured separately from the damage split: Peel data only exists for games collected after E.2e. */
+  peelPerMin: number | null;
+  /** Fewest Peel games behind any pick when `peelPerMin` is measured (the thinnest link), else 0. */
+  peelGames: number;
 }
 
 /** The class-tag rule the engine always used: Mage and Support lean on ability power, everything else on attack damage. */
 const leansAp = (tags: string[]) => tags[0] === "Mage" || tags[0] === "Support";
+
+/** Peel of a team: per-minute heals + shields summed over the picks, and the fewest games behind a pick. All-or-nothing, like the damage path. Pure. */
+export function teamPeel(looked: readonly (CompProfile | null | undefined)[]): { peelPerMin: number | null; peelGames: number } {
+  let perMin = 0, games = Infinity;
+  for (const c of looked) {
+    if (!c || (c.peelGames ?? 0) < MIN_PEEL_GAMES || !((c.peelSeconds ?? 0) > 0)) return { peelPerMin: null, peelGames: 0 };
+    perMin += (((c.heals ?? 0) + (c.shields ?? 0)) * 60) / c.peelSeconds!; games = Math.min(games, c.peelGames!);
+  }
+  return looked.length ? { peelPerMin: perMin, peelGames: games } : { peelPerMin: null, peelGames: 0 };
+}
 
 /**
  * Damage split, tankiness and CC of a team from its locked picks.
@@ -25,16 +45,17 @@ const leansAp = (tags: string[]) => tags[0] === "Mage" || tags[0] === "Support";
  * meaningless, so otherwise the whole split is the tag estimate (the same rule as before this module existed).
  */
 export function teamComp(picks: Pick[], profile: (champion: number, role: Role | null) => CompProfile | null | undefined, tags: (champion: number) => string[]): TeamComp {
-  const profiles = picks.map((p) => profile(p.champion, p.role)).map((p) => (p && p.games >= MIN_PROFILE_GAMES && p.seconds > 0 ? p : null));
+  const looked = picks.map((p) => profile(p.champion, p.role)), peel = teamPeel(looked);   // one lookup per pick
+  const profiles = looked.map((p) => (p && p.games >= MIN_PROFILE_GAMES && p.seconds > 0 ? p : null));
   const measuredPicks = profiles.filter(Boolean).length, n = picks.length;
   if (n > 0 && measuredPicks === n) {
     let phys = 0, magic = 0, tru = 0, taken = 0, cc = 0;
     for (const p of profiles as CompProfile[]) { const m = 60 / p.seconds; phys += p.phys * m; magic += p.magic * m; tru += p.trueDmg * m; taken += p.taken * m; cc += p.cc * m; }
     const total = phys + magic + tru;
-    if (total > 0) return { picks: n, measuredPicks, measured: true, ad: phys / total, ap: magic / total, trueShare: tru / total, takenPerMin: taken, ccPerMin: cc };
+    if (total > 0) return { picks: n, measuredPicks, measured: true, ad: phys / total, ap: magic / total, trueShare: tru / total, takenPerMin: taken, ccPerMin: cc, ...peel };
   }
   const ap = picks.filter((p) => leansAp(tags(p.champion))).length;
-  return { picks: n, measuredPicks, measured: false, ad: n ? (n - ap) / n : 0, ap: n ? ap / n : 0, trueShare: 0, takenPerMin: null, ccPerMin: null };
+  return { picks: n, measuredPicks, measured: false, ad: n ? (n - ap) / n : 0, ap: n ? ap / n : 0, trueShare: 0, takenPerMin: null, ccPerMin: null, ...peel };
 }
 
 /** What `DraftData.scaling` answers for one champion in a role: late minus early win rate as a fraction, and the games behind it. */
