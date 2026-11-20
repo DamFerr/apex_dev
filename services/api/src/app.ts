@@ -5,6 +5,7 @@ import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
 import type { Store } from "./store";
+import { toOverview } from "./overview";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
@@ -12,13 +13,13 @@ import { computeBuild, isFinished, itemWpas } from "./build";
 import { canonicalChampionId } from "./champions";
 import { ACCOUNT_PREFIX, searchStoredPlayers, type StoredPlayer } from "./players";
 import type { Filter } from "./store";
-import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary } from "@apex/schema";
+import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary, type PlayerOverview } from "@apex/schema";
 
 export interface Deps { riot: RiotApi; cache: Cache; dd: () => Promise<DD>; store: Store; collector: Collector; defaultPlatform: string; hasKey?: boolean; now?: () => number }
 const ROLE_IDS = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"] as const;
 const MIN = 60_000, DAY = 24 * 60 * MIN;
 /** Raw match ids read per page and at most per request when the queue filter cannot be done by Riot (Arena). */
-const QUEUE_SCAN_PAGE = 20, QUEUE_SCAN_MAX = 40;
+const QUEUE_SCAN_PAGE = 20, QUEUE_SCAN_MAX = 40, OVERVIEW_MAX_GAMES = 50, OVERVIEW_SCAN_MAX = 100;
 
 export async function buildApp(deps: Deps) {
   const { riot, cache, store, collector } = deps,
@@ -132,6 +133,23 @@ export async function buildApp(deps: Deps) {
       at += ids.length; more = ids.length === QUEUE_SCAN_PAGE;
     }
     return { items, nextCursor: more ? at : null };
+  });
+
+  /**
+   * Profile overview over the player's latest games of one queue group (`?queue=`, default all; `?limit=` up to 50): teammates seen in 2+ games. Uses the same id pages and cached matches as the match history, so the window matches the sidebar; at most `OVERVIEW_SCAN_MAX` ids are read.
+   */
+  app.get<{ Params: { riotId: string }; Querystring: { queue?: string; limit?: string } }>("/v1/players/:riotId/overview", async (req): Promise<PlayerOverview> => {
+    const filter = req.query.queue ?? "all"; if (!isQueueFilter(filter)) throw new HttpError(400, "Unknown queue filter");
+    const limit = Math.min(OVERVIEW_MAX_GAMES, Math.max(1, Number(req.query.limit ?? OVERVIEW_MAX_GAMES) || OVERVIEW_MAX_GAMES));
+    const acct = await identity(req.params.riotId), region = regionOf(await homePlatform(acct.puuid)), riotQueue = riotQueueOf(filter), games: RiotMatch[] = [];
+    let at = 0, more = true;
+    while (more && games.length < limit && at < OVERVIEW_SCAN_MAX) {
+      const from = at, ids = await cached<string[]>(`ids:${acct.puuid}:${riotQueue ?? "all"}:${from}:${QUEUE_SCAN_PAGE}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, from, QUEUE_SCAN_PAGE, riotQueue));
+      const take = ids.slice(0, limit - games.length);   // only the matches still needed are loaded
+      for (const m of await Promise.all(take.map((id) => matchOf(id, region)))) if (matchesQueueFilter(filter, m.info.queueId)) games.push(m);
+      at += take.length; more = ids.length === QUEUE_SCAN_PAGE;
+    }
+    return toOverview(games, acct.puuid);
   });
 
   app.get<{ Params: { id: string }; Querystring: { riotId?: string } }>("/v1/matches/:id", async (req) => {

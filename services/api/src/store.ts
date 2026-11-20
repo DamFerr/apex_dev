@@ -1,6 +1,6 @@
 import { extraItems } from "./participantItems";
 import type { DatabaseSync } from "./sqlite";
-import { publicPatch, type Role } from "@apex/schema";
+import { publicPatch, type CompProfileRow, type Role } from "@apex/schema";
 import { roleOf } from "./mapping";
 import { canonicalChampionId, RIOT_CHAMPION_ALIASES } from "./champions";
 import type { RiotMatch } from "./riot";
@@ -58,6 +58,8 @@ export function makeStore(db: DatabaseSync) {
   for (const c of ["perks", "skills", "start", "buys"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} TEXT`);
   // Damage by type, damage taken and CC time (team composition analysis). Older games have NULL here and are skipped by compProfiles.
   for (const c of ["dmg_p", "dmg_m", "dmg_t", "taken", "cc"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} INTEGER`);
+  // Heals and shields on teammates (Peel, E.2e). NULL = Riot did not send it (older games): never 0.
+  for (const c of ["heal", "shield"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} INTEGER`);
   // Timeline backfill bookkeeping: `tl_bucket` (0..999, decides membership in the timeline share), `tl_state` (NULL = not fetched yet, 1 = stored, 2 = Riot has no timeline for it, never retried).
   const mcols = (db.prepare("PRAGMA table_info(matches)").all() as { name: string }[]).map((c) => c.name);
   if (!mcols.includes("tl_bucket")) {
@@ -76,7 +78,7 @@ export function makeStore(db: DatabaseSync) {
   for (const [riot, dd] of Object.entries(RIOT_CHAMPION_ALIASES)) db.prepare("UPDATE participants SET champion = ? WHERE champion = ?").run(dd, riot);
   const q = <T,>(sql: string, ...args: (string | number)[]) => db.prepare(sql).all(...args) as T[];
   const filt = (f: Filter) => { const c: string[] = [], a: string[] = []; if (f.patches) { if (f.patches.length) { c.push(`m.patch IN (${f.patches.map(() => "?").join(",")})`); a.push(...f.patches); } else c.push("1 = 0"); } if (f.platform) { c.push("m.platform = ?"); a.push(f.platform); } if (f.brackets?.length) { c.push(`m.bracket IN (${f.brackets.map(() => "?").join(",")})`); a.push(...f.brackets); } return { sql: c.map((x) => ` AND ${x}`).join(""), args: a }; };
-  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win, tl_bucket) VALUES (?,?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks, dmg_p, dmg_m, dmg_t, taken, cc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
+  const insM = db.prepare("INSERT OR IGNORE INTO matches (id, patch, bracket, platform, ended_at, duration, blue_win, tl_bucket) VALUES (?,?,?,?,?,?,?,?)"), insP = db.prepare("INSERT INTO participants (match_id, puuid, team, champion, role, win, keystone, items, spell1, spell2, kills, deaths, assists, cs, damage, gold, perks, dmg_p, dmg_m, dmg_t, taken, cc, heal, shield) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"), insB = db.prepare("INSERT INTO bans VALUES (?,?)");
 
   // The distinct patches in the database, read once and kept up to date by saveMatch and pruneOldPatches (this process is the only writer).
   let known: Set<string> | undefined;
@@ -165,7 +167,7 @@ export function makeStore(db: DatabaseSync) {
           const items = [...new Set([p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6, ...extraItems(p)].filter((x): x is number => !!x && x > 0))];   // + the role quest slot (ADC boots)
           insP.run(id, p.puuid, p.teamId, canonicalChampionId(p.championName), roleOf(p.teamPosition || p.individualPosition), p.win ? 1 : 0, p.perks?.styles?.[0]?.selections?.[0]?.perk ?? null, JSON.stringify(items),
             p.summoner1Id ?? null, p.summoner2Id ?? null, p.kills, p.deaths, p.assists, p.totalMinionsKilled + p.neutralMinionsKilled, p.totalDamageDealtToChampions, p.goldEarned, perksJson(p),
-            p.physicalDamageDealtToChampions ?? null, p.magicDamageDealtToChampions ?? null, p.trueDamageDealtToChampions ?? null, p.totalDamageTaken ?? null, p.timeCCingOthers ?? null);
+            p.physicalDamageDealtToChampions ?? null, p.magicDamageDealtToChampions ?? null, p.trueDamageDealtToChampions ?? null, p.totalDamageTaken ?? null, p.timeCCingOthers ?? null, p.totalHealsOnTeammates ?? null, p.totalDamageShieldedOnTeammates ?? null);
         }
         for (const t of i.teams ?? []) for (const b of t.bans) if (b.championId > 0) insB.run(id, b.championId);
         db.exec("COMMIT");
@@ -210,11 +212,13 @@ export function makeStore(db: DatabaseSync) {
      * Per champion sums for the team composition analysis: damage to champions by type, damage taken, CC time and the seconds played,
      * over games that have the new columns (older stored games are skipped, so `games` is the measured sample, not all games).
      */
-    compProfiles(f: Filter) {
-      const w = filt(f);
-      return q<{ id: string; role: string | null; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }>(
-        `SELECT p.champion id, p.role role, COUNT(*) games, SUM(p.dmg_p) phys, SUM(p.dmg_m) magic, SUM(p.dmg_t) trueDmg, SUM(COALESCE(p.taken, 0)) taken, SUM(COALESCE(p.cc, 0)) cc, SUM(m.duration) seconds
-         FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.dmg_p IS NOT NULL AND p.dmg_m IS NOT NULL AND p.dmg_t IS NOT NULL${w.sql} GROUP BY p.champion, p.role`, ...w.args);
+    compProfiles(f: Filter): CompProfileRow[] {
+      const w = filt(f), peel = "p.heal IS NOT NULL AND p.shield IS NOT NULL";   // Peel is measured only over games that carry both columns
+      return q<{ id: string; role: string | null; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number; peelGames: number; heals: number; shields: number; peelSeconds: number }>(
+        `SELECT p.champion id, p.role role, COUNT(*) games, SUM(p.dmg_p) phys, SUM(p.dmg_m) magic, SUM(p.dmg_t) trueDmg, SUM(COALESCE(p.taken, 0)) taken, SUM(COALESCE(p.cc, 0)) cc, SUM(m.duration) seconds,
+           SUM(CASE WHEN ${peel} THEN 1 ELSE 0 END) peelGames, SUM(CASE WHEN ${peel} THEN p.heal ELSE 0 END) heals, SUM(CASE WHEN ${peel} THEN p.shield ELSE 0 END) shields, SUM(CASE WHEN ${peel} THEN m.duration ELSE 0 END) peelSeconds
+         FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.dmg_p IS NOT NULL AND p.dmg_m IS NOT NULL AND p.dmg_t IS NOT NULL${w.sql} GROUP BY p.champion, p.role`, ...w.args)
+        .map(({ peelGames, heals, shields, peelSeconds, ...r }) => (peelGames > 0 ? { ...r, peelGames, heals, shields, peelSeconds } : r));   // no game with Peel data: the fields stay absent
     },
     /**
      * Games and wins per champion, role and game-length bucket, for the scaling measure (E.2c): 0 = early (under 25 min), 1 = mid, 2 = late (over 33 min).

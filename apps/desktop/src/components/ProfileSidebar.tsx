@@ -1,23 +1,25 @@
 import { useMemo, type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { QUEUE_FILTERS, type QueueFilter } from "@apex/schema";
 import { ChampIcon } from "./ChampIcon";
 import { ROLE_LABEL, RoleIcon } from "./RoleIcon";
-import { LowBadge, WinRateCell, rate } from "./StatRows";
+import { WinRateCell, rate } from "./StatRows";
 import { Skeleton, spring } from "./ui";
-import { useMatches } from "../lib/api";
+import { useMatches, useOverview } from "../lib/api";
+import { profilePath } from "../lib/nav";
 import { useChampName } from "../lib/ddragon";
 import { championPerformance, csPerMin, kdaOf, rolePerformance } from "../lib/profileStats";
 
-/** Games the overview looks at: the player's latest finished games, the same window the draft's champion pool uses (the backend caps a page at 20). */
-export const OVERVIEW_GAMES = 20;
+/** Games the overview looks at: the player's latest finished games (read in pages of 20 by the API client). */
+export const OVERVIEW_GAMES = 50;
 
 function Panel({ title, games, children }: { title: string; games: number; children: ReactNode }) {
   return (
     <section className="glass rounded-lg p-4" aria-label={title}>
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
-        <span className="text-xs text-muted tabular-nums" title={`Counted over the player's latest ${games} games. A short window, so every number is a small sample.`}>{games} games<LowBadge games={games} /></span>
+        <span className="text-xs text-muted tabular-nums" title={`Counted over the player's latest ${games} games. Win rates are adjusted for sample size.`}>{games} games</span>
       </div>
       {children}
     </section>);
@@ -33,11 +35,11 @@ function WinLoss({ wins, games }: { wins: number; games: number }) {
 }
 
 /**
- * Overview of a player's latest games for the profile: champion performance and role performance (E: Played with and Pings follow in P.2).
+ * Overview of a player's latest games for the profile: champion performance and role performance plus teammates seen twice (P.2, from `useOverview`).
  * Computed from the match list the backend already serves, for the queue chosen on the match history. `stacked` = two columns, for the Overview tab on narrow windows.
  */
 export function ProfileSidebar({ id, queue, stacked = false }: { id: string; queue: QueueFilter; stacked?: boolean }) {
-  const q = useMatches(id, OVERVIEW_GAMES, queue), champName = useChampName();
+  const q = useMatches(id, OVERVIEW_GAMES, queue), o = useOverview(id, OVERVIEW_GAMES, queue), champName = useChampName();
   const { champs, roles, n } = useMemo(() => {
     const ms = q.data ?? [];
     return { champs: championPerformance(ms).slice(0, 6), roles: rolePerformance(ms), n: ms.length };
@@ -80,6 +82,23 @@ export function ProfileSidebar({ id, queue, stacked = false }: { id: string; que
               </li>))}
           </ul>
         </Panel>
+        {o.isLoading && <Skeleton className="h-48" />}
+        {o.isError && <div role="alert" className="glass rounded-lg p-4 text-sm text-bad">{(o.error as Error).message}</div>}
+        {o.isSuccess && o.data.playedWith.length > 0 && (
+          <Panel title="Played with" games={o.data.games}>
+            <ul className="space-y-1">
+              {o.data.playedWith.map((m) => (
+                <li key={m.riotId ?? m.name} className="flex items-center gap-3 min-h-12">
+                  <div className="min-w-0 flex-1 leading-tight">
+                    {m.riotId
+                      ? <Link to={profilePath(m.riotId)} className="focus-ring rounded text-sm font-medium truncate block hover:underline" title={`Open ${m.riotId}`}>{m.name}</Link>
+                      : <div className="text-sm font-medium truncate">{m.name}</div>}
+                    <div className="text-xs text-muted tabular-nums">{m.games} games together</div>
+                  </div>
+                  <WinLoss wins={m.wins} games={m.games} />
+                </li>))}
+            </ul>
+          </Panel>)}
         <p className={`text-xs text-muted ${stacked ? "col-span-2" : ""}`}>Latest {n} {queueLabel} games, the queue chosen under Match history. Win rates are adjusted for small samples; hover one for the raw rate and its range.</p>
       </>}
     </aside>);

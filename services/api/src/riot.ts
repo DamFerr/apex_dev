@@ -8,7 +8,7 @@ export const regionOf = (platform: string) => REGION[platform] ?? (() => { throw
 
 export interface RiotParticipant { puuid: string; champLevel?: number; riotIdGameName?: string; riotIdTagline?: string; summonerName?: string; championName: string; teamId: number; teamPosition: string; win: boolean;
   kills: number; deaths: number; assists: number; totalMinionsKilled: number; neutralMinionsKilled: number; totalDamageDealtToChampions: number; goldEarned: number; visionScore: number;
-  physicalDamageDealtToChampions?: number; magicDamageDealtToChampions?: number; trueDamageDealtToChampions?: number; totalDamageTaken?: number; timeCCingOthers?: number;
+  physicalDamageDealtToChampions?: number; magicDamageDealtToChampions?: number; trueDamageDealtToChampions?: number; totalDamageTaken?: number; timeCCingOthers?: number; /** Heals and shields on teammates (Peel data, E.2e); names checked against published Riot typings, not a live match. Absent on older games. */ totalHealsOnTeammates?: number; totalDamageShieldedOnTeammates?: number;
   championId?: number; individualPosition?: string; item0?: number; item1?: number; item2?: number; item3?: number; item4?: number; item5?: number; item6?: number;
   summoner1Id?: number; summoner2Id?: number; perks?: { styles: { style?: number; selections: { perk: number }[] }[]; statPerks?: { offense: number; flex: number; defense: number } } }
 export interface RiotMatch { metadata: { matchId: string }; info: { gameDuration: number; gameCreation: number; gameEndTimestamp?: number; queueId: number; gameVersion?: string; participants: RiotParticipant[];

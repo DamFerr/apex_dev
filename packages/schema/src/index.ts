@@ -105,9 +105,16 @@ export interface MasteryEntry { champion: string; name: string; level: number; p
 /** One champion of your pool. `games`/`wins`: your last 20 games on it; `points`: mastery. `byRole`: those games split by role (games whose role is unknown are only in `games`); absent on older backends. */
 export interface PoolEntry { champion: string; games: number; wins: number; points: number; byRole?: { role: Role; games: number; wins: number }[] }
 
+/** A teammate seen in 2+ of the player's games. `riotId` (`Name#TAG`) is absent when Riot did not send the tag; `name` is always set. */
+export interface PlayedWithEntry { name: string; riotId?: string; games: number; wins: number }
+/** `GET /v1/players/:riotId/overview`: the same latest games as the profile sidebar (`games`) and the teammates seen in 2+ of them. */
+export interface PlayerOverview { games: number; playedWith: PlayedWithEntry[] }
+
 /** Collected statistics for the draft engine: pairs are [champion, champion, games, winsOfFirst], first id alphabetically first. */
 /** Sums over the collected games of one champion that carry damage-type data: what the team composition analysis averages. */
-export interface CompProfileRow { id: string; /** Role these games were played in; absent (older backends, fixtures) or null = all roles / unknown. */ role?: string | null; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number }
+export interface CompProfileRow { id: string; /** Role these games were played in; absent (older backends, fixtures) or null = all roles / unknown. */ role?: string | null; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number;
+  /** Peel (E.2e): heals and shields on teammates, summed only over the `peelGames` games that carry them (older games have none and are not counted as 0), with those games' `peelSeconds`. All four are absent when no game carries them. */
+  peelGames?: number; heals?: number; shields?: number; peelSeconds?: number }
 export interface DraftStats {
   games: number; patch?: string;
   champions: { id: string; games: number; wins: number; roles: string[] }[];
@@ -159,6 +166,8 @@ export type LiveResult = LiveGame | { inGame: false };
 export interface ApexApi {
   getSummoner(riotId: string): Promise<Summoner>;
   getRecentMatches(riotId: string, limit?: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchSummary[]>;
+  /** Teammates seen twice over the latest games of one queue group (default 50, the backend's maximum). */
+  getOverview(riotId: string, limit?: number, queue?: QueueFilter): Promise<PlayerOverview>;
   /** `queue`: only games of that queue group (default all). */
   /** `filter`: only games on that champion (Data Dragon id, as in `MatchSummary.champion`) and/or in that role. */
   getMatchPage(riotId: string, cursor: number, limit: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchPage>;

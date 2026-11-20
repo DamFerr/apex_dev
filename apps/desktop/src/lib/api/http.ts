@@ -1,4 +1,7 @@
-import type { ApexApi, MatchFilter, MatchPage } from "@apex/schema";
+import type { ApexApi, MatchFilter, MatchPage, MatchSummary } from "@apex/schema";
+
+/** The backend serves at most 20 games per page; longer windows are read page by page (bounded, so a rarely played queue cannot loop for long). */
+const PAGE_CAP = 20, MAX_PAGES = 6;
 
 /**
  * Talks to your local Apex backend (services/api). The Riot API key lives only there, never in the app.
@@ -18,7 +21,17 @@ export function createHttpApi(base: () => string): ApexApi {
   return {
     getSummoner: (id) => get(player(id)),
     getMatchPage: page,
-    getRecentMatches: async (id, limit = 10, queue, f) => (await page(id, 0, limit, queue, f)).items,
+    getRecentMatches: async (id, limit = 10, queue, f) => {
+      const items: MatchSummary[] = []; let cursor = 0;
+      for (let i = 0; i < MAX_PAGES && items.length < limit; i++) {
+        const p = await page(id, cursor, Math.min(PAGE_CAP, limit - items.length), queue, f);
+        items.push(...p.items);
+        if (p.nextCursor === null) break;
+        cursor = p.nextCursor;
+      }
+      return items.slice(0, limit);
+    },
+    getOverview: (id, limit = 50, queue) => get(`${player(id)}/overview`, { limit: String(limit), ...(queue && queue !== "all" ? { queue } : {}) }),
     getMatchDetail: (matchId, riotId) => get(`/v1/matches/${matchId}`, riotId ? { riotId } : {}),
     getMastery: (id) => get(`${player(id)}/mastery`),
     getRankHistory: (id, opts) => get(`${player(id)}/lp-history`, opts?.fresh ? { fresh: "1" } : {}),

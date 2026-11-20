@@ -16,6 +16,8 @@ const useFilter = () => useUi((s) => s.statsFilter);
 export const useSummoner = (id: string) => useQuery({ queryKey: [useScope(), "summoner", id], queryFn: () => api.getSummoner(id), enabled: !!id });
 export const useMatches = (id: string, limit = 10, queue: QueueFilter = "all", filter: MatchFilter = {}) =>
   useQuery({ queryKey: [useScope(), "matches", id, limit, queue, filter.champion ?? "", filter.role ?? ""], queryFn: () => api.getRecentMatches(id, limit, queue, filter), enabled: !!id });
+export const useOverview = (id: string, limit = 50, queue: QueueFilter = "all") =>
+  useQuery({ queryKey: [useScope(), "overview", id, limit, queue], queryFn: () => api.getOverview(id, limit, queue), enabled: !!id });
 export const useChampions = (role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "champions", role ?? "all", f], queryFn: () => api.getChampions(role, f) }); };
 export const useChampion = (id: string) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "champion", id, f], queryFn: () => api.getChampion(id, f) }); };
 export const useChampionBuild = (id: string, role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "build", id, role ?? "any", f], queryFn: () => api.getChampionBuild(id, role, f) }); };
