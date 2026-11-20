@@ -29,6 +29,7 @@ export const useChampionBuild = (id: string, role?: Role) => { const f = useFilt
 export const useChampionRelations = (id: string, role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "relations", id, role ?? "any", f], queryFn: () => api.getChampionRelations(id, role, f) }); };
 /** Patch comparisons ignore the patch filter, so it is left out of the key: changing it must not refetch. */
 const useRegionRank = () => useUi((s) => s.statsFilter.platform + "|" + s.statsFilter.rank);
+export const useChampionLengths = (id: string, role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "lengths", id, role ?? "any", f], queryFn: () => api.getChampionLengths(id, role, f) }); };
 export const useChampionPatches = (id: string, role?: Role) => { const f = useUi((s) => s.statsFilter), k = useRegionRank(); return useQuery({ queryKey: [useScope(), "patches", id, role ?? "any", k], queryFn: () => api.getChampionPatches(id, role, f) }); };
 export const usePatchTrends = (role: Role) => { const f = useUi((s) => s.statsFilter), k = useRegionRank(); return useQuery({ queryKey: [useScope(), "patchtrends", role, k], queryFn: () => api.getPatchTrends(role, f) }); };
 const NO_FILTER = { platform: "all", patch: "all", rank: "all" };

@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { LiveRoleHistory, ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, ApexCutoffs, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
+import type { LiveRoleHistory, ChampionLengths, ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, ApexCutoffs, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
@@ -270,6 +270,18 @@ export async function buildApp(deps: Deps) {
     const rel = store.relations(champion, role, f), lane = store.laneDiffs(champion, role, f);
     return { champion, role, base: own, matchups: rel.matchups.map((r) => { const l = line(r), d = lane.get(r.champion); return d ? { ...l, lane: d } : l; }), synergies: rel.synergies.map(line) };
   });
+
+  /**
+   * One champion's games and wins per game-length bucket (under 20, 20-25, 25-30, 30-35, 35+ minutes) in one role (default: its busiest). Counts only:
+   * the client shrinks and labels them with `lengthCurve` (stats-core). The patch, region and rank filters apply.
+   */
+  app.get<{ Params: { id: string }; Querystring: { role?: string; patch?: string; region?: string; rank?: string } }>("/v1/champions/:id/lengths", async (req): Promise<ChampionLengths> => cachedScan(`lengths:${req.params.id}:${JSON.stringify(req.query)}`, async () => {
+    const f = filterOf(req.query), champion = req.params.id;
+    const mine = store.championRows(f).filter((r) => r.champion === champion && r.role).sort((a, b) => b.games - a.games);
+    const role = roleOfQuery(req.query.role) ?? (mine[0]?.role as Role | undefined);
+    if (!role) return { champion, role: null, buckets: [] };
+    return { champion, role, buckets: store.championLengths(champion, role, f) };
+  }));
 
   /** Patch comparisons always span every kept patch (newest first): the patch filter is ignored, region and rank still apply. */
   const patchScope = (q: { region?: string; rank?: string }) => filterOf({ region: q.region, rank: q.rank, patch: "all" });

@@ -43,6 +43,7 @@ export function createHttpApi(base: () => string): ApexApi {
     getChampionBuild: (id, role, f) => get(`/v1/champions/${encodeURIComponent(id)}/build`, { ...(role ? { role } : {}), ...filterParams(f) }),
     getChampionRelations: (id, role, f) => get(`/v1/champions/${encodeURIComponent(id)}/relations`, { ...(role ? { role } : {}), ...filterParams(f) }),
     // Patch comparisons span every kept patch, so the patch filter is not sent; region and rank are.
+    getChampionLengths: (id, role, f) => get(`/v1/champions/${encodeURIComponent(id)}/lengths`, { ...(role ? { role } : {}), ...filterParams(f) }),
     getChampionPatches: (id, role, f) => get(`/v1/champions/${encodeURIComponent(id)}/patches`, { ...(role ? { role } : {}), ...(f ? { region: f.platform, rank: f.rank } : {}) }),
     getPatchTrends: (role, f) => get("/v1/patch-trends", { role, ...(f ? { region: f.platform, rank: f.rank } : {}) }),
     getFilterOptions: (f) => get("/v1/filters", filterParams(f)),

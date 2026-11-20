@@ -38,6 +38,8 @@ export function perksJson(p: RiotMatch["info"]["participants"][number]): string 
 /** Normalised match data (plan section 5.5), one SQLite file. Aggregates are computed with SQL on demand. */
 /** Game-length buckets for the scaling measure: under 25 minutes is early, over 33 minutes is late (seconds). */
 export const LENGTH_EARLY_SEC = 1500, LENGTH_LATE_SEC = 1980;
+/** Bucket edges (seconds) of the win-rate-by-length curve: under 20, 20-25, 25-30, 30-35 and 35+ minutes. */
+export const LENGTH_CURVE_SEC = [1200, 1500, 1800, 2100];
 export function makeStore(db: DatabaseSync) {
   db.exec(`CREATE TABLE IF NOT EXISTS matches (id TEXT PRIMARY KEY, patch TEXT NOT NULL, bracket TEXT, platform TEXT, ended_at INTEGER NOT NULL, duration INTEGER NOT NULL, blue_win INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS participants (match_id TEXT NOT NULL, puuid TEXT, team INTEGER NOT NULL, champion TEXT NOT NULL, role TEXT, win INTEGER NOT NULL, keystone INTEGER,
@@ -232,6 +234,14 @@ export function makeStore(db: DatabaseSync) {
         `SELECT p.champion id, p.role r, CASE WHEN m.duration < ${LENGTH_EARLY_SEC} THEN 0 WHEN m.duration > ${LENGTH_LATE_SEC} THEN 2 ELSE 1 END b, COUNT(*) g, SUM(p.win) w
          FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.role IS NOT NULL${w.sql} GROUP BY p.champion, p.role, b`, ...w.args)
         .map((o) => [o.id, o.r, o.b, o.g, o.w] as [string, string, number, number, number]);
+    },
+    /** One champion's games and wins per length bucket (`LENGTH_CURVE_SEC`) in one role: every bucket is returned, shortest first, empty ones as 0 games. */
+    championLengths(champion: string, role: string, f: Filter) {
+      const w = filt(f), edges = LENGTH_CURVE_SEC, bucket = edges.map((e, i) => `WHEN m.duration < ${e} THEN ${i}`).join(" ");
+      const rows = q<{ b: number; g: number; w: number }>(
+        `SELECT CASE ${bucket} ELSE ${edges.length} END b, COUNT(*) g, SUM(p.win) w FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.champion = ? AND p.role = ?${w.sql} GROUP BY b`, champion, role, ...w.args);
+      return Array.from({ length: edges.length + 1 }, (_, i) => { const r = rows.find((x) => x.b === i);
+        return { minSec: i === 0 ? 0 : edges[i - 1], maxSec: i < edges.length ? edges[i] : null, games: r?.g ?? 0, wins: r?.w ?? 0 }; });
     },
     /** Everything the draft engine needs, as compact arrays. Pairs with fewer than `min` games are left out. */
     draftStats(f: Filter, min = 3) {

@@ -9,7 +9,7 @@ import { RoleIcon } from "../components/RoleIcon";
 import { BuildPanel } from "./BuildPanel";
 import { StatStrip } from "./StatStrip";
 import { RelationsPanel } from "./RelationsPanel";
-import { PatchPanel } from "./PatchPanel";
+import { HistoryPanel } from "./HistoryPanel";
 import { useChampion } from "../lib/api";
 import { splashUrl } from "../lib/ddragon";
 
@@ -38,7 +38,7 @@ export function ChampionPage() {
         {c.builds.some((r) => r.wpa) && <p className="text-[11px] text-muted mt-3" title="How much owning the item goes with winning, in percentage points, compared with games without it of the same length and the same number of finished items. Final inventories only, so it shows a link, not proof.">WPA: win probability added, pp · a link, not proof</p>}</div>
       <div className="glass rounded-lg p-5"><StatRows title="Keystone runes" rows={c.runes} icon={(r) => typeof r.id === "number" ? <GameIcon kind="rune" id={r.id} size={26} /> : null} /></div>
     </div>
-    <PatchPanel id={c.id} roles={c.roles} />
+    <HistoryPanel id={c.id} roles={c.roles} />
     <RelationsPanel id={c.id} roles={c.roles} />
   </div>);
 }

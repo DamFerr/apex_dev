@@ -57,6 +57,10 @@ export interface ChampionRelations {
 export interface PatchPoint { patch: string; games: number; wins: number; bans: number; matches: number }
 /** A champion across the kept patches, NEWEST FIRST. `role` is the role the games and pick rate are for (null = no collected games); bans are not tied to a role. */
 export interface ChampionPatches { champion: string; role: Role | null; patches: PatchPoint[] }
+/** One game-length bucket of a champion in one role: [minSec, maxSec) in seconds (`maxSec` null = open-ended), with its games and wins. */
+export interface LengthBucket { minSec: number; maxSec: number | null; games: number; wins: number }
+/** A champion's games by length (shortest first, empty buckets included) in one role. `role` is null when it has no collected games. Counts only: the client uses `lengthCurve` (stats-core). */
+export interface ChampionLengths { champion: string; role: Role | null; buckets: LengthBucket[] }
 /** One champion's newest patch next to the one before it, for the tier list's "changes" view. */
 export interface PatchTrendRow { id: string; name: string; cur: PatchPoint; prev: PatchPoint }
 /** The newest patch compared with the previous one for every champion that plays the role. `patch`/`previous` are null when fewer than two patches have data (then `rows` is empty). */
@@ -222,6 +226,8 @@ export interface ApexApi {
   getChampionRelations(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionRelations>;
   /** Games, wins and bans per kept patch (newest first) for a champion in one role (default: its busiest). The patch filter is ignored; region and rank apply. */
   getChampionPatches(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionPatches>;
+  /** Games and wins per game-length bucket for a champion in one role (default: its busiest). All filters apply; the client uses `lengthCurve` (stats-core). */
+  getChampionLengths(id: string, role?: Role, filter?: StatsFilter): Promise<ChampionLengths>;
   /** Newest patch vs the previous one for every champion in a role. The patch filter is ignored; region and rank apply. */
   getPatchTrends(role: Role, filter?: StatsFilter): Promise<PatchTrends>;
   getFilterOptions(filter?: StatsFilter): Promise<FilterOptions>;

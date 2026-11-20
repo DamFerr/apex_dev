@@ -132,3 +132,4 @@ export * from "./ladder";
 export * from "./radar";
 export * from "./wpa";
 export * from "./patchDelta";
+export * from "./lengthCurve";

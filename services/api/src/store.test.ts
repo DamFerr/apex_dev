@@ -34,6 +34,15 @@ describe("store", () => {
     expect(ahri).toEqual([[0, 1, 1], [1, 1, 1], [2, 2, 1]]);
     expect(s.draftStats({}).lengthBuckets).toEqual(s.lengthBuckets({}));
   });
+  it("counts one champion's games and wins per length bucket in one role (under 20, 20-25, 25-30, 30-35, 35+ minutes)", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    [[1100, true], [1199, false], [1200, true], [1499, true], [1799, false], [1800, true], [2099, true], [2100, false], [3000, true]].forEach(([d, win], i) =>
+      s.saveMatch(matchFixture(`L${i}`, { gameDuration: d as number }, win as boolean), "EMERALD", "euw1"));   // Ahri (blue) wins when `win`
+    const role = s.championRows({}).find((r) => r.champion === "Ahri")!.role!;
+    expect(s.championLengths("Ahri", role, {}).map((b) => [b.minSec, b.maxSec, b.games, b.wins])).toEqual([[0, 1200, 2, 1], [1200, 1500, 2, 2], [1500, 1800, 1, 0], [1800, 2100, 2, 2], [2100, null, 2, 1]]);
+    expect(s.championLengths("Ahri", "JUNGLE", {}).every((b) => b.games === 0)).toBe(true);   // another role: empty buckets, still all five
+    expect(s.championLengths("Ahri", role, { patches: [] }).every((b) => b.games === 0)).toBe(true);
+  });
   it("keeps one profile row per champion and role", () => {
     const s = makeStore(new DatabaseSync(":memory:"));
     const typed = (id: string, pos: string) => matchFixture(id, { participants: Array.from({ length: 10 }, (_, i) => participant(i, { win: i < 5, ...(i === 0 ? { teamPosition: pos } : {}),
