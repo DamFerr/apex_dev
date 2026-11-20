@@ -8,6 +8,7 @@ import { Tabs } from "../components/Tabs";
 import { LowBadge, pct, WinRateCell } from "../components/StatRows";
 import { Chip, Skeleton, spring } from "../components/ui";
 import { useChampionRelations } from "../lib/api";
+import { fmtLead, isLowLane, LANE_METRICS, LANE_MINUTES, laneAt, laneSummary, leadBand, type LaneMetric } from "../lib/laneDiff";
 
 type Kind = "matchups" | "synergy";
 type Sort = "best" | "worst" | "games";
@@ -22,7 +23,7 @@ const BAR_FULL_PP = 10;
  * two champions' overall win rates predict (so a tiny sample sits near "expected"), and the difference in percentage points.
  */
 export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
-  const [role, setRole] = useState<Role | undefined>(roles[0]), [kind, setKind] = useState<Kind>("matchups"), [sort, setSort] = useState<Sort>("best"), [all, setAll] = useState(false);
+  const [role, setRole] = useState<Role | undefined>(roles[0]), [kind, setKind] = useState<Kind>("matchups"), [sort, setSort] = useState<Sort>("best"), [all, setAll] = useState(false), [metric, setMetric] = useState<LaneMetric>("gold");
   const { data, isLoading, isError } = useChampionRelations(id, role);
   const rows = useMemo(() => {
     if (!data) return [];
@@ -31,6 +32,8 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
     return out.sort((a, b) => (sort === "games" ? b.l.games - a.l.games : sort === "worst" ? a.s.delta - b.s.delta : b.s.delta - a.s.delta) || a.l.champion.localeCompare(b.l.champion));
   }, [data, kind, sort]);
   const shown = all ? rows : rows.slice(0, COLLAPSED);
+  // Lane columns only exist for matchups, and only once at least one opponent has games with a stored timeline.
+  const hasLane = kind === "matchups" && !!data?.matchups.some((l) => l.lane?.length);
 
   return (<section className="glass rounded-lg p-5 space-y-4" aria-label="Matchups and synergy">
     <div className="flex flex-wrap items-center gap-3">
@@ -42,6 +45,10 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
       <span className="mr-auto truncate">{kind === "matchups" ? `Lane opponents in ${data?.role ?? "this role"}` : "Teammates in the other four roles"}</span>
       {(["best", "worst", "games"] as Sort[]).map((s) => <Chip key={s} active={sort === s} onClick={() => setSort(s)}>{s === "best" ? "Best first" : s === "worst" ? "Worst first" : "Most played"}</Chip>)}
     </div>
+    {hasLane && <div className="flex items-center gap-2 text-xs text-muted">
+      <span className="mr-auto" title="Average lead over the lane opponent at 10, 15 and 20 minutes, from the few collected games that kept a timeline. A correlation with winning, not a cause.">Lane lead<span className="sr-only">: average lead over the lane opponent at 10, 15 and 20 minutes, from the few collected games that kept a timeline. A correlation with winning, not a cause.</span></span>
+      {LANE_METRICS.map((m) => <Chip key={m.key} active={metric === m.key} onClick={() => setMetric(m.key)}>{m.label}</Chip>)}
+    </div>}
     <div role="tabpanel" aria-label={kind === "matchups" ? "Matchups" : "Synergy"}>
       {isLoading && <Skeleton className="h-48" />}
       {isError && <div className="text-sm text-muted" title="Matchups could not be loaded from the local backend.">Matchups unavailable<span className="sr-only">: could not be loaded from the local backend.</span></div>}
@@ -51,7 +58,8 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
         <thead className="text-xs text-muted"><tr>
           <th className="text-left font-normal">Champion</th><th className="font-normal text-right">Games</th>
           <th className="font-normal text-right" title="Adjusted toward the expected rate, so small samples are not overstated. Hover a value for the raw rate, the expected rate and the 95% range.">Win rate</th>
-          <th className="font-normal text-right pl-2" colSpan={2}>vs expected</th></tr></thead>
+          <th className="font-normal text-right pl-2" colSpan={2}>vs expected</th>
+          {hasLane && LANE_MINUTES.map((m) => <th key={m} className="font-normal text-right pl-3 whitespace-nowrap" title={`${LANE_METRICS.find((x) => x.key === metric)?.label} lead at ${m} minutes`}>{m} min</th>)}</tr></thead>
         <motion.tbody key={`${role}-${kind}-${sort}-${all}`} initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.02 } } }}>
           {shown.map(({ l, s }) => { const w = Math.min(100, (Math.abs(s.delta) / BAR_FULL_PP) * 100), good = s.delta >= 0.5, bad = s.delta <= -0.5; return (
             <motion.tr key={`${l.champion}-${l.role}`} variants={{ h: { opacity: 0, y: 6 }, s: { opacity: 1, y: 0 } }} transition={spring} className="h-9 border-t border-line/5">
@@ -63,10 +71,15 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
               <td className="w-20 pl-2" aria-hidden><div className="relative h-1.5 rounded-full bg-line/10">
                 <span className="absolute inset-y-0 left-1/2 w-px bg-line/30" />
                 <motion.span className={`absolute inset-y-0 rounded-full ${s.delta >= 0 ? "left-1/2 bg-good/70" : "right-1/2 bg-bad/70"}`} initial={{ width: 0 }} animate={{ width: `${w / 2}%` }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} /></div></td>
+              {hasLane && LANE_MINUTES.map((m) => { const d = laneAt(l.lane, m), tip = d ? laneSummary(l.name, d) : `${l.name} at ${m} min: no collected game with a timeline reached this minute.`;
+                return <td key={m} className="text-right pl-3 whitespace-nowrap" title={tip}>{d
+                  ? <span className={`tabular-nums font-medium ${isLowLane(d) ? "opacity-70" : ""} ${({ good: "text-good", bad: "text-bad", neutral: "text-muted" })[leadBand(metric, d[metric])]}`}>{fmtLead(metric, d[metric])}<span className="ml-1 text-[10px] font-normal text-muted">n={d.games}</span></span>
+                  : <span className="text-muted" aria-hidden>{"\u2013"}</span>}<span className="sr-only">{tip}</span></td>; })}
             </motion.tr>); })}
         </motion.tbody>
       </table>}
       {rows.length > 0 && <p className="pt-3 text-xs text-muted" title="Compares the win rate with what the two champions' overall win rates predict, in percentage points. Win rates are adjusted toward that expected value, so a small sample stays close to it.">vs expected: pp difference from what overall win rates predict</p>}
+      {hasLane && <p className="pt-2 text-xs text-muted" title="n = games behind the average. Under 50 games counts as LOW DATA, which is the usual case here, so treat these leads as hints, not facts.">Lane lead: n = games · under 50 is LOW DATA (dimmed)<span className="sr-only">. n is the number of games behind each average; under 50 games is low data, which is the usual case here.</span></p>}
       {rows.length > COLLAPSED && <div className="pt-3"><Chip onClick={() => setAll((a) => !a)}>{all ? "Show fewer" : `Show all ${rows.length}`}</Chip></div>}
     </div>
   </section>);

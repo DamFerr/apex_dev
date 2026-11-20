@@ -1,10 +1,10 @@
 import { extraItems } from "./participantItems";
 import type { DatabaseSync } from "./sqlite";
-import { publicPatch, type CompProfileRow, type Role } from "@apex/schema";
+import { publicPatch, type CompProfileRow, type LaneDiff, type Role } from "@apex/schema";
 import { roleOf } from "./mapping";
 import { canonicalChampionId, RIOT_CHAMPION_ALIASES } from "./champions";
 import type { RiotMatch } from "./riot";
-import { timelineBucket, type PlayerTimeline } from "./timeline";
+import { LANE_MINUTES, timelineBucket, type PlayerTimeline } from "./timeline";
 
 /** `patches` undefined = no patch restriction (only used below the API; the API always passes a list); an empty list matches nothing. */
 export interface Filter { patches?: string[]; brackets?: string[]; platform?: string }
@@ -60,6 +60,8 @@ export function makeStore(db: DatabaseSync) {
   for (const c of ["dmg_p", "dmg_m", "dmg_t", "taken", "cc"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} INTEGER`);
   // Heals and shields on teammates (Peel, E.2e). NULL = Riot did not send it (older games): never 0.
   for (const c of ["heal", "shield"]) if (!pcols.includes(c)) db.exec(`ALTER TABLE participants ADD COLUMN ${c} INTEGER`);
+  // Gold, CS and XP at 10/15/20 min as a JSON array of 9 numbers (lane diffs, E.5). NULL = the stored timeline predates this column or had no frame data: skipped, never 0.
+  if (!pcols.includes("lane")) db.exec("ALTER TABLE participants ADD COLUMN lane TEXT");
   // Timeline backfill bookkeeping: `tl_bucket` (0..999, decides membership in the timeline share), `tl_state` (NULL = not fetched yet, 1 = stored, 2 = Riot has no timeline for it, never retried).
   const mcols = (db.prepare("PRAGMA table_info(matches)").all() as { name: string }[]).map((c) => c.name);
   if (!mcols.includes("tl_bucket")) {
@@ -131,9 +133,9 @@ export function makeStore(db: DatabaseSync) {
     },
     /** Adds timeline data to the already stored players of a match (matched by puuid). Returns how many players were updated. */
     saveTimeline(matchId: string, players: Map<string, PlayerTimeline>): number {
-      const up = db.prepare("UPDATE participants SET skills = ?, start = ?, buys = ? WHERE match_id = ? AND puuid = ?"); let n = 0;
+      const up = db.prepare("UPDATE participants SET skills = ?, start = ?, buys = ?, lane = COALESCE(?, lane) WHERE match_id = ? AND puuid = ?"); let n = 0;
       db.exec("BEGIN");
-      try { for (const [puuid, t] of players) n += Number(up.run(JSON.stringify(t.skills), JSON.stringify(t.start), JSON.stringify(t.buys), matchId, puuid).changes); db.prepare("UPDATE matches SET tl_state = 1 WHERE id = ?").run(matchId); db.exec("COMMIT"); }
+      try { for (const [puuid, t] of players) n += Number(up.run(JSON.stringify(t.skills), JSON.stringify(t.start), JSON.stringify(t.buys), t.lane ? JSON.stringify(t.lane) : null, matchId, puuid).changes); db.prepare("UPDATE matches SET tl_state = 1 WHERE id = ?").run(matchId); db.exec("COMMIT"); }
       catch (e) { db.exec("ROLLBACK"); throw e; }
       return n;
     },
@@ -286,6 +288,22 @@ export function makeStore(db: DatabaseSync) {
       const run = (on: string) => q<Rel>(`SELECT b.champion champion, b.role role, COUNT(*) games, SUM(a.win) wins FROM participants a JOIN participants b ON a.match_id = b.match_id AND ${on}
         JOIN matches m ON m.id = a.match_id WHERE a.champion = ? AND a.role = ?${w.sql} GROUP BY b.champion, b.role HAVING games >= ${Math.max(1, Math.floor(min))} ORDER BY games DESC, b.champion LIMIT ${Math.max(1, Math.floor(limit))}`, champion, role, ...w.args);
       return { matchups: run("a.team <> b.team AND b.role = a.role"), synergies: run("a.team = b.team AND a.rowid <> b.rowid AND b.role IS NOT NULL AND b.role <> a.role") };
+    },
+    /**
+     * Average lane lead of `champion` (in `role`) over each opposing champion in the same role: gold, CS and XP at 10, 15 and 20 minutes
+     * (this champion minus the opponent), from games whose stored timeline has frame data for BOTH players. Games that ended before a
+     * minute do not count for it, so `games` differs per minute. Older games without lane data are skipped. Opponents with no such game are absent.
+     */
+    laneDiffs(champion: string, role: string, f: Filter): Map<string, LaneDiff[]> {
+      const w = filt(f), cols = LANE_MINUTES.map((_, i) => { const d = (k: number) => `json_extract(a.lane,'$[${3 * i + k}]') - json_extract(b.lane,'$[${3 * i + k}]')`; return `COUNT(${d(0)}) n${i}, AVG(${d(0)}) g${i}, AVG(${d(1)}) c${i}, AVG(${d(2)}) x${i}`; }).join(", ");
+      const rows = q<Record<string, number | string>>(`SELECT b.champion champion, ${cols} FROM participants a JOIN participants b ON a.match_id = b.match_id AND a.team <> b.team AND b.role = a.role
+        JOIN matches m ON m.id = a.match_id WHERE a.champion = ? AND a.role = ? AND a.lane IS NOT NULL AND b.lane IS NOT NULL${w.sql} GROUP BY b.champion`, champion, role, ...w.args);
+      const r1 = (v: unknown) => Math.round(Number(v) * 10) / 10, out = new Map<string, LaneDiff[]>();
+      for (const r of rows) {
+        const diffs = LANE_MINUTES.flatMap((minute, i): LaneDiff[] => Number(r[`n${i}`]) > 0 ? [{ minute, games: Number(r[`n${i}`]), gold: r1(r[`g${i}`]), cs: r1(r[`c${i}`]), xp: r1(r[`x${i}`]) }] : []);
+        if (diffs.length) out.set(String(r.champion), diffs);
+      }
+      return out;
     },
     /**
      * Games and wins per patch, per champion and role, for the patches in `f` (the caller passes every kept patch). Optionally one champion.

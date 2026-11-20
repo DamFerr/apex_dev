@@ -38,7 +38,9 @@ export interface ItemWpa { wpa: number; lo: number; hi: number; expected: number
 export interface StatLine { name: string; games: number; wins: number; id?: number | string; /** Only on item rows. */ wpa?: ItemWpa }
 export interface ChampionSummary { id: string; name: string; roles: Role[]; tags: string[]; games: number; wins: number; bans: number }
 /** One champion met in a lane matchup (opposite team, same role) or played with as a teammate. `baseGames/baseWins` are THAT champion's own games in `role`, so the client can work out what the pairing is expected to do. */
-export interface RelationLine { champion: string; name: string; role: Role; games: number; wins: number; baseGames: number; baseWins: number }
+export interface RelationLine { champion: string; name: string; role: Role; games: number; wins: number; baseGames: number; baseWins: number; /** Matchups only: lane lead over this opponent, from the collected games that kept a timeline (a small sample, show `games`). Absent when none did. */ lane?: LaneDiff[] }
+/** Average lead of the champion over its lane opponent at `minute` (gold, CS, XP; negative = behind), over `games` games that reached that minute. A correlation with the result, not a cause. */
+export interface LaneDiff { minute: 10 | 15 | 20; games: number; gold: number; cs: number; xp: number }
 /** Matchups and synergies of one champion in one role. role is null when the champion has no collected games (then every list is empty). */
 export interface ChampionRelations {
   champion: string; role: Role | null; base: { games: number; wins: number };

@@ -15,7 +15,9 @@ export interface RiotMatch { metadata: { matchId: string }; info: { gameDuration
   teams?: { teamId: number; bans: { championId: number }[] }[] } }
 /** Match-v5 timeline, only the parts Apex reads. participantId is the 1-based index into metadata.participants. */
 export interface RiotTimelineEvent { type: string; timestamp: number; participantId?: number; itemId?: number; beforeId?: number; afterId?: number; skillSlot?: number; levelUpType?: string }
-export interface RiotTimeline { metadata: { participants: string[] }; info: { frames: { events?: RiotTimelineEvent[] }[] } }
+/** One per-minute snapshot of a player in a timeline frame (names as in Riot's match-v5 typings, NOT checked against a live match). */
+export interface RiotParticipantFrame { totalGold?: number; xp?: number; minionsKilled?: number; jungleMinionsKilled?: number }
+export interface RiotTimeline { metadata: { participants: string[] }; info: { frames: { timestamp?: number; participantFrames?: Record<string, RiotParticipantFrame>; events?: RiotTimelineEvent[] }[] } }
 export interface LeagueEntry { queueType: string; tier: string; rank: string; leaguePoints: number; wins: number; losses: number; hotStreak?: boolean }
 export interface LadderEntry { puuid?: string; tier: string; rank: string; leaguePoints: number }
 export interface ActiveParticipant { puuid?: string; riotId?: string; teamId: number; championId: number; spell1Id?: number; spell2Id?: number; bot?: boolean; /** Spectator-v5 runes: perkIds[0] is the keystone, perkSubStyle the secondary tree. */ perks?: { perkIds?: number[]; perkStyle?: number; perkSubStyle?: number } }

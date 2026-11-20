@@ -243,8 +243,8 @@ export async function buildApp(deps: Deps) {
     const nameOf = (id: string) => [...data.champs.values()].find((c) => c.id === id)?.name ?? id;
     const line = (r: { champion: string; role: string; games: number; wins: number }): RelationLine => { const b = base.get(`${r.champion}|${r.role}`) ?? { games: r.games, wins: 0 };
       return { champion: r.champion, name: nameOf(r.champion), role: r.role as Role, games: r.games, wins: r.wins, baseGames: b.games, baseWins: b.wins }; };
-    const rel = store.relations(champion, role, f);
-    return { champion, role, base: own, matchups: rel.matchups.map(line), synergies: rel.synergies.map(line) };
+    const rel = store.relations(champion, role, f), lane = store.laneDiffs(champion, role, f);
+    return { champion, role, base: own, matchups: rel.matchups.map((r) => { const l = line(r), d = lane.get(r.champion); return d ? { ...l, lane: d } : l; }), synergies: rel.synergies.map(line) };
   });
 
   /** Patch comparisons always span every kept patch (newest first): the patch filter is ignored, region and rank still apply. */
