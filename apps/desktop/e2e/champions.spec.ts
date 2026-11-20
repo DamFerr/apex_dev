@@ -58,7 +58,7 @@ test("champion page shows patch history, and withholds a change that has too lit
   await expect(panel.getByRole("heading", { name: "Patch history" })).toBeVisible();
   const rows = panel.locator("tbody tr");
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText("26.22"); await expect(rows.nth(0)).toContainText("newest"); await expect(rows.nth(0)).toContainText("40");
+  await expect(rows.nth(0)).toContainText("26.22"); await expect(rows.nth(0)).toContainText("NEWEST"); await expect(rows.nth(0)).toContainText("40");
   await expect(rows.nth(1)).toContainText("26.21"); await expect(rows.nth(1)).toContainText("20");
   await expect(rows.nth(0).getByTitle(/Needs at least 50 games in both patches/)).toHaveText("–");
   await expect(panel.getByRole("img", { name: /Adjusted win rate by patch: 26\.21 .*26\.22/ })).toBeVisible();
