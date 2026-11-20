@@ -48,16 +48,17 @@ export function StatCard({ label, value, suffix, decimals, hint }:
   );
 }
 
-export function ProgressRing({ value, size = 88, label, text }: { value: number; size?: number; label?: string; text?: string }) {
-  const reduce = useUi((s) => s.reduceMotion);
+/** `value` is clamped to 0..100. `tone` colours the arc (gold = no progress claim, see `lpRing`); `aria` overrides the screen reader text. */
+export function ProgressRing({ value, size = 88, label, text, tone = "accent", aria }: { value: number; size?: number; label?: string; text?: string; tone?: "accent" | "gold"; aria?: string }) {
+  const reduce = useUi((s) => s.reduceMotion), v = Math.min(100, Math.max(0, value)), sw = tone === "gold" ? 4 : 6; // gold ring thinner: a wide number (3604 LP) must not touch it
   const r = (size - 10) / 2, circ = 2 * Math.PI * r;
   return (
-    <div className="relative" style={{ width: size, height: size }} role="img" aria-label={`${label ?? "Progress"} ${value}%`}>
+    <div className="relative" style={{ width: size, height: size }} role="img" aria-label={aria ?? `${label ?? "Progress"} ${Math.round(v)}%`}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--line) / .1)" strokeWidth={6} />
-        <motion.circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--accent))" strokeWidth={6}
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--line) / .1)" strokeWidth={sw} />
+        <motion.circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`rgb(var(--${tone}))`} strokeWidth={sw}
           strokeLinecap="round" strokeDasharray={circ} initial={{ strokeDashoffset: circ }}
-          animate={{ strokeDashoffset: circ * (1 - value / 100) }} transition={{ duration: reduce ? 0 : 1, ease: "easeOut" }} />
+          animate={{ strokeDashoffset: circ * (1 - v / 100) }} transition={{ duration: reduce ? 0 : 1, ease: "easeOut" }} />
       </svg>
       <div className="absolute inset-0 grid place-items-center font-display text-lg font-semibold">{text ?? `${Math.round(value)}%`}</div>
     </div>

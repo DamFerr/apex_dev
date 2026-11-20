@@ -5,6 +5,8 @@ import { Link } from "react-router-dom";
 import { useUi } from "../lib/store";
 import { shrink, wilson, sampleBadge } from "@apex/stats-core";
 import { Skeleton, StatCard, ProgressRing } from "../components/ui";
+import { rankTitle } from "../lib/lpRing";
+import { CUTOFF_HINT, useApexRing } from "../lib/useApexRing";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { MatchFilterChips, QueueFilterChips } from "../components/MatchRow";
 import { ExpandableMatchRow } from "../components/MatchDetail";
@@ -21,7 +23,7 @@ export function Home() {
   const [lo, hi] = wilson(wins, ms.length);
   const kda = ms.length ? (ms.reduce((a, m) => a + m.kills + m.assists, 0) / Math.max(1, ms.reduce((a, m) => a + m.deaths, 0))) : 0;
   const csm = ms.length ? ms.reduce((a, m) => a + m.cs / (m.durationSec / 60), 0) / ms.length : 0;
-  const r = sum.data?.rank;
+  const r = sum.data?.rank, ring = useApexRing(r, sum.data?.platform);
   if (!me) return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight">Home</h1>
     <p className="text-sm text-muted mt-1 mb-6">Press Ctrl+K to search any player, or add your own Riot ID to see your rank and recent games here.</p>
@@ -32,9 +34,10 @@ export function Home() {
     <p className="text-sm text-muted mt-1 mb-6">Your recent games. Win rates show their uncertainty.</p>
     <div className="grid grid-cols-3 gap-4">
       <div className="glass rounded-lg p-5 flex items-center gap-4">
-        {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} /><TierIcon tier={r.tier} division={r.division} size={44} />
-          <div><div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
-            <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L{sum.data?.platform ? ` · ${sum.data.platform.toUpperCase()}` : ""}</div></div></>
+        {r ? <><ProgressRing value={ring!.value} tone={ring!.full ? "gold" : "accent"} aria={ring!.label} text={`${r.lp} LP`} /><TierIcon tier={r.tier} division={r.division} size={44} />
+          <div><div className="font-display text-xl font-semibold">{rankTitle(r.tier, r.division)}</div>
+            <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L{sum.data?.platform ? ` · ${sum.data.platform.toUpperCase()}` : ""}</div>
+            {ring!.note && <div className="text-xs text-muted" title={CUTOFF_HINT}>{ring!.note}</div>}</div></>
           : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : sum.isError ? <div className="text-sm text-bad">{(sum.error as Error).message}</div> : <Skeleton className="h-20 w-full" />}
       </div>
       {games.data && ms.length ? <>

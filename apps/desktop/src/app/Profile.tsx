@@ -8,6 +8,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { isQueueFilter, QUEUE_FILTERS } from "@apex/schema";
 import { Chip, ProgressRing, Skeleton } from "../components/ui";
+import { rankTitle } from "../lib/lpRing";
+import { CUTOFF_HINT, useApexRing } from "../lib/useApexRing";
 import { api, usePool, useScope, useSummoner } from "../lib/api";
 import { useChampName } from "../lib/ddragon";
 import { useUi } from "../lib/store";
@@ -55,7 +57,7 @@ export function Profile() {
     const io = new IntersectionObserver(([e]) => { if (e.isIntersecting && hasNextPage && !isFetchingNextPage) fetchNextPage(); }, { rootMargin: "200px" });
     io.observe(el); return () => io.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, tab]);
-  const r = sum.data?.rank;
+  const r = sum.data?.rank, ring = useApexRing(r, sum.data?.platform);
   if (!id) return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight mb-1">Profile</h1>
     <p className="text-sm text-muted mb-6">Press Ctrl+K to search any Name#TAG, or add your own Riot ID.</p>
@@ -70,9 +72,10 @@ export function Profile() {
     </div>
     {sum.isError ? <div className="glass rounded-lg p-8 text-sm text-bad">{(sum.error as Error).message}</div> : <>
       <div className="glass rounded-lg p-5 flex items-center gap-5 max-w-md">
-        {r ? <><ProgressRing value={r.lp} label="LP" text={`${r.lp} LP`} /><TierIcon tier={r.tier} division={r.division} size={44} /><div>
-          <div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
-          <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L · Level {sum.data!.level}{sum.data!.platform ? ` · ${sum.data!.platform.toUpperCase()}` : ""}</div></div></> : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : <Skeleton className="h-20 w-full" />}
+        {r ? <><ProgressRing value={ring!.value} tone={ring!.full ? "gold" : "accent"} aria={ring!.label} text={`${r.lp} LP`} /><TierIcon tier={r.tier} division={r.division} size={44} /><div>
+          <div className="font-display text-xl font-semibold">{rankTitle(r.tier, r.division)}</div>
+          <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L · Level {sum.data!.level}{sum.data!.platform ? ` · ${sum.data!.platform.toUpperCase()}` : ""}</div>
+            {ring!.note && <div className="text-xs text-muted" title={CUTOFF_HINT}>{ring!.note}</div>}</div></> : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : <Skeleton className="h-20 w-full" />}
       </div>
       <div className={wide ? "mt-6 grid grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start" : "mt-6"}><div className="min-w-0">
       <Tabs id="profile" value={tab} onChange={setTab} tabs={tabs} />

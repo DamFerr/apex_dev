@@ -19,6 +19,8 @@ export interface RiotTimelineEvent { type: string; timestamp: number; participan
 export interface RiotParticipantFrame { totalGold?: number; xp?: number; minionsKilled?: number; jungleMinionsKilled?: number }
 export interface RiotTimeline { metadata: { participants: string[] }; info: { frames: { timestamp?: number; participantFrames?: Record<string, RiotParticipantFrame>; events?: RiotTimelineEvent[] }[] } }
 export interface LeagueEntry { queueType: string; tier: string; rank: string; leaguePoints: number; wins: number; losses: number; hotStreak?: boolean }
+/** Riot's Grandmaster / Challenger list; Apex reads only the LP of each entry. */
+export interface ApexLeague { entries: { leaguePoints: number }[] }
 export interface LadderEntry { puuid?: string; tier: string; rank: string; leaguePoints: number }
 export interface ActiveParticipant { puuid?: string; riotId?: string; teamId: number; championId: number; spell1Id?: number; spell2Id?: number; bot?: boolean; /** Spectator-v5 runes: perkIds[0] is the keystone, perkSubStyle the secondary tree. */ perks?: { perkIds?: number[]; perkStyle?: number; perkSubStyle?: number } }
 export interface RiotActiveGame { gameId: number; gameMode: string; gameType?: string; gameLength: number; gameQueueConfigId?: number; participants: ActiveParticipant[]; bannedChampions?: { championId: number; teamId: number }[] }
@@ -34,6 +36,8 @@ export interface RiotApi {
   match(id: string, region: string, low?: boolean): Promise<RiotMatch>;
   timeline(id: string, region: string, low?: boolean): Promise<RiotTimeline>;
   ladder(platform: string, tier: string, division: string, page: number, low?: boolean): Promise<LadderEntry[]>;
+  /** The whole Master, Grandmaster or Challenger list of Ranked Solo on a platform (one call each). An empty list for a 404. */
+  apexLeague(platform: string, tier: "MASTER" | "GRANDMASTER" | "CHALLENGER"): Promise<ApexLeague>;
   mastery(puuid: string, platform: string, count: number): Promise<RiotMastery[]>;
   /** Spectator-v5. Throws HttpError 404 when the player is not in a game. */
   activeGame(puuid: string, platform: string): Promise<RiotActiveGame>;
@@ -85,6 +89,7 @@ export class HttpRiot implements RiotApi {
   match = (id: string, r: string, low = false) => this.get<RiotMatch>(r, `/lol/match/v5/matches/${id}`, low);
   timeline = (id: string, r: string, low = false) => this.get<RiotTimeline>(r, `/lol/match/v5/matches/${id}/timeline`, low);
   ladder = (pf: string, tier: string, division: string, page: number, low = false) => this.get<LadderEntry[]>(pf, `/lol/league-exp/v4/entries/RANKED_SOLO_5x5/${tier}/${division}?page=${page}`, low);
+  apexLeague = (pf: string, tier: "MASTER" | "GRANDMASTER" | "CHALLENGER") => this.get<ApexLeague>(pf, `/lol/league/v4/${tier === "CHALLENGER" ? "challengerleagues" : tier === "GRANDMASTER" ? "grandmasterleagues" : "masterleagues"}/by-queue/RANKED_SOLO_5x5`).catch((e) => { if (e instanceof HttpError && e.status === 404) return { entries: [] }; throw e; });
   mastery = (p: string, pf: string, c: number) => this.get<RiotMastery[]>(pf, `/lol/champion-mastery/v4/champion-masteries/by-puuid/${p}/top?count=${c}`);
   activeGame = (p: string, pf: string) => this.get<RiotActiveGame>(pf, `/lol/spectator/v5/active-games/by-summoner/${p}`);
 }

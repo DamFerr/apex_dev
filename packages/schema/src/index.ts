@@ -11,6 +11,13 @@ export interface Summoner { riotId: string; level: number; rank: RankInfo | null
 /** Your Ranked Solo rank as Apex saw it at one moment. Apex only knows LP at the moments it checked, never per game. */
 export interface RankSnapshot { at: string; rank: RankInfo }
 export interface RankHistory { snapshots: RankSnapshot[] }
+/**
+ * Today's Master+ cut-offs on one platform (RC.1, RC.4): `challenger` = LP of the last Challenger seat, `grandmaster` = LP of the last Grandmaster seat,
+ * read from the pooled Master+ ladder (a Master player needs `grandmaster` LP, a Grandmaster player `challenger` LP). Where the seats are unknown
+ * (or not filled) it is the lowest LP in Riot's own list. null = no data (tiny region). Riot re-cuts the tiers once a day, so a player can be above
+ * a cut-off and still show the lower tier until then. `at` = when Apex read them (cached for an hour).
+ */
+export interface ApexCutoffs { platform: string; grandmaster: number | null; challenger: number | null; at: string }
 /** Optional champion / role narrowing of a match list (the backend checks both on each loaded match). */
 export interface MatchFilter { champion?: string; role?: Role }
 export interface MatchSummary {
@@ -195,6 +202,8 @@ export interface ApexApi {
   getOverview(riotId: string, limit?: number, queue?: QueueFilter): Promise<PlayerOverview>;
   /** Skill radar of the latest games in one role (default: the most played) against the collected Ranked Solo average; `queue` default all. */
   getRadar(riotId: string, queue?: QueueFilter, role?: Role): Promise<PlayerRadar>;
+  /** Today's Master+ cut-offs on a platform (e.g. "euw1", as `Summoner.platform`), for the Master+ LP ring. */
+  getCutoffs(platform: string): Promise<ApexCutoffs>;
   /** `queue`: only games of that queue group (default all). */
   /** `filter`: only games on that champion (Data Dragon id, as in `MatchSummary.champion`) and/or in that role. */
   getMatchPage(riotId: string, cursor: number, limit: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchPage>;

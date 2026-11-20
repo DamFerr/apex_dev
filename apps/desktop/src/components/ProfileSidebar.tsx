@@ -7,9 +7,10 @@ import { ROLE_LABEL, RoleIcon } from "./RoleIcon";
 import { SkillRadarChart } from "./SkillRadar";
 import { WinRateCell, LowChip, rate } from "./StatRows";
 import { Chip, Skeleton, spring } from "./ui";
-import { useMatches, useOverview, useRadar } from "../lib/api";
+import { useMatches, useOverview, usePool, useRadar } from "../lib/api";
 import { profilePath } from "../lib/nav";
 import { useChampName } from "../lib/ddragon";
+import { poolInsight, type PoolShape } from "../lib/poolInsight";
 import { championPerformance, csPerMin, kdaOf, rolePerformance } from "../lib/profileStats";
 
 /** Games the overview looks at: the player's latest finished games (read in pages of 20 by the API client). */
@@ -61,6 +62,42 @@ function RadarPanel({ id, queue }: { id: string; queue: QueueFilter }) {
     </Panel>);
 }
 
+const SHAPE_LABEL: Record<PoolShape, string> = { focused: "Focused", balanced: "Balanced", wide: "Wide" };
+const kPoints = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
+/**
+ * Champion pool chips (P3.1) for the top of Champion performance. All text is visible (no hover needed: the sidebar sits at the window edge and clips tooltips):
+ * the spread of the latest 20 games of any queue (`usePool`, not the queue filter), a one-trick flag, and high-mastery champions not played in those games.
+ * Describes what is played, not what is best. Renders nothing under 10 games (see `poolInsight`).
+ */
+function PoolChips({ id }: { id: string }) {
+  const pool = usePool(id), champName = useChampName();
+  const p = useMemo(() => poolInsight(pool.data ?? []), [pool.data]);
+  if (!p) return null;
+  const share = Math.round(p.topShare * 100), top = Math.min(3, p.champions);
+  return (
+    <div className="mb-3 space-y-2" aria-label="Champion pool">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="rounded-full bg-accent/15 text-accent text-xs font-semibold px-2 py-0.5" title={`${p.champions} different champions in the latest ${p.games} games, any queue`}>
+          {SHAPE_LABEL[p.shape]} pool: {top} {top === 1 ? "champ" : "champs"} = {share}% of {p.games} games
+        </span>
+        {p.oneTrick && <span className="rounded-full bg-gold/15 text-gold text-xs font-semibold px-2 py-0.5">
+          One-trick: {champName(p.oneTrick.champion)} ({p.oneTrick.games} of {p.games})
+        </span>}
+      </div>
+      {p.dusty.length > 0 && <div>
+        <div className="text-xs text-muted mb-1">High mastery, not played in those {p.games} games</div>
+        <ul className="flex flex-wrap gap-1.5">
+          {p.dusty.map((d) => (
+            <li key={d.champion} className="flex items-center gap-1.5 rounded-full bg-white/5 pl-0.5 pr-2 py-0.5 text-xs" title={`${d.points.toLocaleString("en-US")} mastery points`}>
+              <ChampIcon id={d.champion} name={champName(d.champion)} size={20} />
+              <span>{champName(d.champion)}</span><span className="text-muted tabular-nums">{kPoints(d.points)}</span>
+            </li>))}
+        </ul>
+      </div>}
+    </div>);
+}
+
 /**
  * Overview of a player's latest games for the profile: champion performance and role performance plus teammates seen twice (P.2, from `useOverview`).
  * Computed from the match list the backend already serves, for the queue chosen on the match history. `stacked` = two columns, for the Overview tab on narrow windows.
@@ -80,6 +117,7 @@ export function ProfileSidebar({ id, queue, stacked = false }: { id: string; que
       {q.isSuccess && n === 0 && <div className="glass rounded-lg p-4 text-sm text-muted">No {queueLabel} games in the latest history to summarise.</div>}
       {n > 0 && <>
         <Panel title="Champion performance" games={n}>
+          <PoolChips key={id} id={id} />
           <ul className="space-y-1">
             {champs.map((c) => {
               const name = champName(c.champion), kda = kdaOf(c.kills, c.deaths, c.assists), cs = csPerMin(c.cs, c.seconds);

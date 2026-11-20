@@ -33,6 +33,7 @@ export function createHttpApi(base: () => string): ApexApi {
     },
     getOverview: (id, limit = 50, queue) => get(`${player(id)}/overview`, { limit: String(limit), ...(queue && queue !== "all" ? { queue } : {}) }),
     getRadar: (id, queue, role) => get(`${player(id)}/radar`, { ...(queue && queue !== "all" ? { queue } : {}), ...(role ? { role } : {}) }),
+    getCutoffs: (platform) => get(`/v1/ladder/${encodeURIComponent(platform)}/cutoffs`),
     getMatchDetail: (matchId, riotId) => get(`/v1/matches/${matchId}`, riotId ? { riotId } : {}),
     getMastery: (id) => get(`${player(id)}/mastery`),
     getRankHistory: (id, opts) => get(`${player(id)}/lp-history`, opts?.fresh ? { fresh: "1" } : {}),

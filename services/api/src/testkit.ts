@@ -62,6 +62,7 @@ export function fakeRiot(): RiotApi & { calls: Record<string, number> } {
     summoner: async () => { hit("summoner"); return { summonerLevel: 321 }; },
     league: async (puuid) => { hit("league"); return [{ queueType: "RANKED_FLEX_SR", tier: "GOLD", rank: "I", leaguePoints: 1, wins: 1, losses: 1 }, { queueType: "RANKED_SOLO_5x5", tier: "EMERALD", rank: "II", leaguePoints: 64, wins: 87, losses: 79, hotStreak: puuid === "p1" }]; },
     ladder: async () => { hit("ladder"); return [{ puuid: "p0", tier: "EMERALD", rank: "II", leaguePoints: 10 }, { puuid: "p1", tier: "EMERALD", rank: "II", leaguePoints: 20 }, { tier: "EMERALD", rank: "II", leaguePoints: 30 }]; },
+    apexLeague: async (_pf, tier) => { hit("apexLeague"); return { entries: (tier === "CHALLENGER" ? [900, 700, 1200] : tier === "GRANDMASTER" ? [500, 400, 650] : [300, 200, 100]).map((leaguePoints) => ({ leaguePoints })) }; },
     matchIds: async (_p, _r, start, count) => { hit("matchIds"); return Array.from({ length: Math.min(count, 25 - start) }, (_, i) => `EUW1_${start + i}`); },
     match: async (id) => { hit("match"); return matchFixture(id); },
     timeline: async () => { hit("timeline"); return timelineFixture(); },

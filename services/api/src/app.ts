@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { LiveRoleHistory, ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
+import type { LiveRoleHistory, ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, ApexCutoffs, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
@@ -9,6 +9,7 @@ import { toOverview } from "./overview";
 import { pickReference, toPlayerRadar } from "./radar";
 import { HISTORY_GAMES, roleCounts } from "./liveRoleHistory";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
+import { apexCutoffs } from "./cutoffs";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
 import { computeBuild, isFinished, itemWpas } from "./build";
@@ -335,6 +336,18 @@ export async function buildApp(deps: Deps) {
   app.get<{ Querystring: { patch?: string; region?: string; rank?: string } }>("/v1/draft/data", async (req) => {
     const f = filterOf(req.query);
     return cached(`draft:${JSON.stringify(f)}`, 10 * MIN, async () => ({ ...store.draftStats(f), patch: f.label }));
+  });
+  /**
+   * Today's Master+ cut-offs on one platform (RC.1, RC.4): LP of the last Challenger and Grandmaster seat of the pooled Master+ ladder, so the client can
+   * draw how far a Master or Grandmaster player is from the next tier. Three Riot calls (the Master list is big), cached for an hour per platform.
+   */
+  app.get<{ Params: { platform: string } }>("/v1/ladder/:platform/cutoffs", async (req): Promise<ApexCutoffs> => {
+    const platform = req.params.platform.toLowerCase();
+    if (!PLATFORM_IDS.includes(platform)) throw new HttpError(400, "Unknown platform");
+    return cached<ApexCutoffs>(`cutoffs:v2:${platform}`, 60 * MIN, async () => {
+      const [master, grandmaster, challenger] = await Promise.all([riot.apexLeague(platform, "MASTER"), riot.apexLeague(platform, "GRANDMASTER"), riot.apexLeague(platform, "CHALLENGER")]);
+      return apexCutoffs(platform, { master, grandmaster, challenger }, new Date(now()).toISOString());
+    });
   });
   /** Your own recent champion pool (last 20 games, split by role) plus your top 30 mastery champions, for personalised draft suggestions. */
   app.get<{ Params: { riotId: string } }>("/v1/players/:riotId/pool", async (req): Promise<PoolEntry[]> => {

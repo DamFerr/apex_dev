@@ -20,6 +20,9 @@ export const useOverview = (id: string, limit = 50, queue: QueueFilter = "all") 
   useQuery({ queryKey: [useScope(), "overview", id, limit, queue], queryFn: () => api.getOverview(id, limit, queue), enabled: !!id });
 export const useRadar = (id: string, queue: QueueFilter = "all", role?: Role) =>
   useQuery({ queryKey: [useScope(), "radar", id, queue, role ?? "auto"], queryFn: () => api.getRadar(id, queue, role), enabled: !!id });
+/** Today's Master+ cut-offs for the platform; only asked for when `enabled` (a Master+ player), cached for 30 minutes (the backend caches an hour). */
+export const useCutoffs = (platform: string | undefined, enabled = true) =>
+  useQuery({ queryKey: [useScope(), "cutoffs", platform], queryFn: () => api.getCutoffs(platform!), enabled: !!platform && enabled, staleTime: 30 * 60_000 });
 export const useChampions = (role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "champions", role ?? "all", f], queryFn: () => api.getChampions(role, f) }); };
 export const useChampion = (id: string) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "champion", id, f], queryFn: () => api.getChampion(id, f) }); };
 export const useChampionBuild = (id: string, role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "build", id, role ?? "any", f], queryFn: () => api.getChampionBuild(id, role, f) }); };

@@ -25,3 +25,8 @@ describe("getRadar", () => {
     expect(await createHttpApi(() => "b").getRadar("A#1")).toEqual(radar);
   });
 });
+
+describe("getCutoffs", () => {
+  it("asks the ladder cut-offs route of the platform", async () =>
+    expect(await urlOf((a) => a.getCutoffs("euw1"))).toBe("http://127.0.0.1:8787/v1/ladder/euw1/cutoffs?"));
+});
