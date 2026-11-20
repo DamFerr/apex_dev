@@ -17,6 +17,10 @@ import { LpHistoryTab } from "./LpHistory";
 import { LiveGameView } from "./LiveGameView";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { ExpandableMatchRow } from "../components/MatchDetail";
+import { ProfileSidebar } from "../components/ProfileSidebar";
+import { useMediaQuery } from "../lib/useMediaQuery";
+
+type ProfileTab = "matches" | "overview" | "lp" | "mastery" | "live";
 
 export function Profile() {
   const { riotId } = useParams(), me = useUi((s) => s.myRiotId), id = riotId ? decodeURIComponent(riotId) : me;
@@ -33,7 +37,10 @@ export function Profile() {
   }, [id, me]);
   const poolChamps = [...(pool.data ?? [])].map((p) => ({ id: p.champion, name: champName(p.champion) })).sort((a, b) => a.name.localeCompare(b.name));
   const [open, setOpen] = useState<string | null>(null);
-  const [tab, setTab] = useState<"matches" | "lp" | "mastery" | "live">("matches");
+  // Wide windows show the overview (champion and role performance) as a sidebar; narrower ones get it as an Overview tab, so the match rows keep their room.
+  const wide = useMediaQuery("(min-width: 1600px)");
+  const [tabRaw, setTab] = useState<ProfileTab>("matches"), tab: ProfileTab = wide && tabRaw === "overview" ? "matches" : tabRaw;
+  const tabs: { key: ProfileTab; label: string }[] = [{ key: "matches", label: "Match history" }, ...(wide ? [] : [{ key: "overview" as const, label: "Overview" }]), { key: "lp", label: "LP history" }, { key: "mastery", label: "Mastery" }, { key: "live", label: "Live game" }];
   const q = useInfiniteQuery({
     queryKey: [useScope(), "matchpages", id, queue, mf.champion ?? "", mf.role ?? ""], initialPageParam: 0,
     queryFn: ({ pageParam }) => api.getMatchPage(id, pageParam, 10, queue, mf),
@@ -54,7 +61,7 @@ export function Profile() {
     <p className="text-sm text-muted mb-6">Press Ctrl+K to search any Name#TAG, or add your own Riot ID.</p>
     <RiotIdPrompt />
   </>);
-  return (<>
+  return (<div className={wide ? "grid grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start" : undefined}><div className="min-w-0">
     <div className="flex items-start justify-between gap-6 mb-6">
       <div><h1 className="font-display text-3xl font-semibold tracking-tight">{id}</h1>
         <p className="text-sm text-muted mt-1">{riotId ? "Profile data." : "Showing your Riot ID (set it in Settings). Press Ctrl+K to search any Name#TAG."}</p></div>
@@ -67,7 +74,8 @@ export function Profile() {
           <div className="font-display text-xl font-semibold">{r.tier[0] + r.tier.slice(1).toLowerCase()} {r.division}</div>
           <div className="text-xs text-muted">{r.lp} LP · {r.wins}W {r.losses}L · Level {sum.data!.level}{sum.data!.platform ? ` · ${sum.data!.platform.toUpperCase()}` : ""}</div></div></> : sum.data ? <div className="text-sm text-muted">Unranked in Ranked Solo/Duo</div> : <Skeleton className="h-20 w-full" />}
       </div>
-      <div className="mt-6"><Tabs id="profile" value={tab} onChange={setTab} tabs={[{ key: "matches", label: "Match history" }, { key: "lp", label: "LP history" }, { key: "mastery", label: "Mastery" }, { key: "live", label: "Live game" }] } /></div>
+      <div className="mt-6"><Tabs id="profile" value={tab} onChange={setTab} tabs={tabs} /></div>
+      {tab === "overview" && <ProfileSidebar id={id} queue={queue} stacked />}
       {tab === "mastery" && <MasteryTab id={id} />}
       {tab === "live" && <div className="mt-4"><LiveGameView id={id} refresh /></div>}
       {tab === "lp" && <LpHistoryTab id={id} />}
@@ -87,5 +95,5 @@ export function Profile() {
         {isFetchingNextPage ? "Loading more…" : hasNextPage ? "" : all.length ? "End of history" : q.isSuccess ? `No ${QUEUE_FILTERS.find((f) => f.key === queue)?.label ?? ""} games${mf.champion || mf.role ? " for this champion/role" : ""} in your match history.` : ""}</div>
       </>}
     </>}
-  </>);
+  </div>{wide && !sum.isError && <ProfileSidebar id={id} queue={queue} />}</div>);
 }
