@@ -30,6 +30,21 @@ describe("assignRoles with summoner spells", () => {
     expect(assignRoles([c(["MID", "TOP"]), c(["MID"]), c(["JUNGLE"], true), c(["ADC"]), c(["SUPPORT"])])).toEqual(["TOP", "MID", "JUNGLE", "ADC", "SUPPORT"]));
 });
 
+describe("assignRoles with the players' own role history", () => {
+  const h = (roles: RoleCandidate["roles"], history: RoleCandidate["history"], smite = false): RoleCandidate => ({ roles, smite, history });
+  // The owner's game: Yone (pool mid/top), Yasuo (mid/top/bot/support), Shen (top/support); Shaco jungle, Veigar mid. Without history: Yone top, Yasuo bot, Shen support.
+  const team = (hy: RoleCandidate["history"], ya: RoleCandidate["history"], sh: RoleCandidate["history"]) => assignRoles([
+    h(["MID", "TOP", "ADC"], hy), h(["JUNGLE"], undefined, true), h(["MID"], undefined), h(["MID", "TOP", "ADC", "SUPPORT"], ya), h(["TOP", "SUPPORT"], sh)]);
+  it("puts flex picks where the players actually played: Shen top, Yone bot, Yasuo support", () =>
+    expect(team({ games: 5, roles: { ADC: 5 } }, { games: 5, roles: { SUPPORT: 4, MID: 1 } }, { games: 5, roles: { TOP: 5 } })).toEqual(["ADC", "JUNGLE", "MID", "SUPPORT", "TOP"]));
+  it("ignores a history of fewer than 2 games", () =>
+    expect(team({ games: 1, roles: { ADC: 1 } }, { games: 1, roles: { SUPPORT: 1 } }, { games: 1, roles: { TOP: 1 } })).toEqual(["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]));
+  it("still lets Smite decide the jungle against a contrary history", () => {
+    const r = assignRoles([h(["TOP"], { games: 5, roles: { JUNGLE: 5 } }), h(["MID"], undefined, true), h(["MID"], undefined), h(["ADC"], undefined), h(["SUPPORT"], undefined)]);
+    expect(r[1]).toBe("JUNGLE"); expect(r[0]).not.toBe("JUNGLE");
+  });
+});
+
 describe("sortByRole", () => {
   it("orders top, jungle, mid, bot, support", () => {
     const team = [{ n: "sup", r: "SUPPORT" }, { n: "mid", r: "MID" }, { n: "top", r: "TOP" }, { n: "adc", r: "ADC" }, { n: "jg", r: "JUNGLE" }] as const;

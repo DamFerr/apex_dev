@@ -9,7 +9,16 @@ export interface RoleCandidate {
   smite: boolean;
   /** The player's summoner spell ids (optional): a weak hint, see SPELL_HINT. Missing = no hint. */
   spells?: readonly number[];
+  /** Roles the player really played in their last games (optional). Needs HISTORY_MIN games to count; see HISTORY_WEIGHT. */
+  history?: { games: number; roles: Partial<Record<Role, number>> };
 }
+
+/** Fewest recent games before the player's own history is trusted. */
+export const HISTORY_MIN = 2;
+/** Games at which the history counts fully; with fewer it counts proportionally (3 games = 3/5). Some of the last games are ARAM etc. and carry no position. */
+const HISTORY_FULL = 5;
+/** Cost bonus for a role the player played in ALL recent games (scaled by the share). Larger than the champion term (0 to 5), so a player's own habit beats the champion's pooled role, but smaller than Smite (20). */
+const HISTORY_WEIGHT = 6;
 
 /**
  * Cost change per role for a summoner spell (negative = the spell fits that role). Deliberately small next to the champion term:
@@ -38,6 +47,7 @@ export function assignRoles(team: readonly RoleCandidate[]): (Role | null)[] {
     const i = p.roles.indexOf(r);
     let c = i < 0 ? ALL.length : i;
     if (anySmite && (p.smite !== (r === "JUNGLE"))) c += 20;
+    if (p.history && p.history.games >= HISTORY_MIN) c -= (HISTORY_WEIGHT * (p.history.roles[r] ?? 0)) / Math.max(p.history.games, HISTORY_FULL);
     for (const sp of p.spells ?? []) c += SPELL_HINT[sp]?.[r] ?? 0;
     return c;
   };

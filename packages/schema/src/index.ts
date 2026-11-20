@@ -184,6 +184,8 @@ export interface LivePlayer {
 export interface LiveBan { champion: string; championName: string; team: "blue" | "red" }
 export interface LiveGame { inGame: true; queue: string; mode: string; lengthSec: number; bans: LiveBan[]; players: LivePlayer[] }
 export type LiveResult = LiveGame | { inGame: false };
+/** Each live player's role counts over their last few games (match-v5 `teamPosition`), keyed by `riotId` as in LivePlayer. Separate from LiveGame because it costs many Riot calls. */
+export interface LiveRoleHistory { players: { riotId: string; games: number; roles: Partial<Record<Role, number>> }[] }
 
 /** Every screen talks to this interface only; the local backend implements it over HTTP. */
 export interface ApexApi {
@@ -220,4 +222,6 @@ export interface ApexApi {
   getRecap(riotId: string, matchId?: string): Promise<PostGameRecap>;
   /** Is this player in a game right now? If so, all ten players. */
   getLiveGame(riotId: string): Promise<LiveResult>;
+  /** Role history of the ten players of the live game (slow, so fetched after the game). Empty players when not in a game. */
+  getLiveRoleHistory(riotId: string): Promise<LiveRoleHistory>;
 }

@@ -38,6 +38,8 @@ export const useDraftStats = () => { const f = useFilter(); return useQuery({ qu
 /** Refreshes every 30 s while a game is running (the backend caches for 45 s, so this is cheap). retry is off so "not found" shows at once. */
 export const useLiveGame = (id: string) => useQuery({ queryKey: [useScope(), "live", id], queryFn: () => api.getLiveGame(id), enabled: !!id, retry: false, staleTime: 15_000,
   refetchInterval: (q) => (q.state.data?.inGame ? 30_000 : false) });
+/** Role history of the live players: slow (many Riot calls), so it only runs once the game is known, never retries, and the screen works without it. */
+export const useLiveRoleHistory = (id: string, enabled: boolean) => useQuery({ queryKey: [useScope(), "liveRoles", id], queryFn: () => api.getLiveRoleHistory(id), enabled: !!id && enabled, retry: false, staleTime: 5 * 60_000 });
 export const useRecap = (id: string, matchId?: string) => useQuery({ queryKey: [useScope(), "recap", id, matchId ?? "latest"], queryFn: () => api.getRecap(id, matchId), enabled: !!id, retry: false, staleTime: 60_000 });
 
 /**

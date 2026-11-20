@@ -48,6 +48,7 @@ export function createHttpApi(base: () => string): ApexApi {
     getDraftStats: (f) => get("/v1/draft/data", filterParams(f)),
     getRecap: (id, matchId) => get(`${player(id)}/recap`, matchId ? { matchId } : {}),
     getLiveGame: (id) => get(`/v1/live/${encodeURIComponent(id)}`),
+    getLiveRoleHistory: (id) => get(`/v1/live/${encodeURIComponent(id)}/roles`),
     getChampionPool: (id) => get(`${player(id)}/pool`),
   };
 }

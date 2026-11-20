@@ -9,7 +9,7 @@ import { GameIcon } from "../components/GameIcon";
 import { ROLE_LABEL, RoleIcon } from "../components/RoleIcon";
 import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
 import { Button, Skeleton, spring } from "../components/ui";
-import { useLiveGame } from "../lib/api";
+import { useLiveGame, useLiveRoleHistory } from "../lib/api";
 import { assignRoles, sortByRole } from "../lib/liveRoles";
 import { tierName } from "../lib/platforms";
 import { useDraftData } from "./DraftContext";
@@ -74,16 +74,19 @@ function Team({ game, side, roles }: { game: Game; side: "blue" | "red"; roles: 
 export function LiveGameView({ id, watch = false, refresh = false }: { id: string; watch?: boolean; refresh?: boolean }) {
   const q = useLiveGame(id), g = q.data, { refetch } = q, { champs, data } = useDraftData();
   // Estimated roles per team, only on Summoner's Rift (CLASSIC). Needs the collected games for the champions' usual roles; without them only Smite shows the jungler.
+  // The players' own role history arrives later (slow); until then (or if it fails) the estimate uses champions and spells only.
+  const rh = useLiveRoleHistory(id, !!g?.inGame && g.mode === "CLASSIC");
   const roles = useMemo(() => {
+    const hist = new Map((rh.data?.players ?? []).map((x) => [x.riotId, x]));
     const out = new Map<LivePlayer, Role | null>();
     if (!g?.inGame || g.mode !== "CLASSIC") return out;
     const key = new Map((champs ?? []).map((c) => [c.id, c.key]));
     for (const side of ["blue", "red"] as const) {
       const team = g.players.filter((p) => p.team === side);
-      assignRoles(team.map((p) => ({ roles: data && key.has(p.champion) ? data.roles(key.get(p.champion)!) : [], smite: p.jungle, spells: p.spells }))).forEach((r, i) => out.set(team[i], r));
+      assignRoles(team.map((p) => ({ roles: data && key.has(p.champion) ? data.roles(key.get(p.champion)!) : [], smite: p.jungle, spells: p.spells, history: hist.get(p.riotId) }))).forEach((r, i) => out.set(team[i], r));
     }
     return out;
-  }, [g, champs, data]);
+  }, [g, champs, data, rh.data]);
   useEffect(() => {
     if (!watch || !id || g?.inGame) return;
     const t = setInterval(() => void refetch(), 20_000);
@@ -96,7 +99,7 @@ export function LiveGameView({ id, watch = false, refresh = false }: { id: strin
     {g && !g.inGame && <div className="glass rounded-lg p-8 text-sm max-w-xl"><div className="font-medium mb-1">{id.split("#")[0]} is not in a game right now.</div>
       <div className="text-muted">{watch ? "Your game is starting. Riot's spectator data appears a minute or two after the start, and this page checks again by itself." : "Spectator data appears a minute or two after a game starts. Press Refresh, or scout another Riot ID."}</div></div>}
     {g?.inGame && <>
-      <div className="flex items-center gap-3 text-sm text-muted mb-4"><span className="rounded-full bg-good/15 text-good text-xs font-semibold tracking-wide px-2 py-0.5">LIVE</span><span>{g.queue}</span><span aria-label="Game time" className="tabular-nums">{mmss(g.lengthSec)} in</span><span>updates every 30 s</span></div>
+      <div className="flex items-center gap-3 text-sm text-muted mb-4"><span className="rounded-full bg-good/15 text-good text-xs font-semibold tracking-wide px-2 py-0.5">LIVE</span><span>{g.queue}</span><span aria-label="Game time" className="tabular-nums">{mmss(g.lengthSec)} in</span><span>updates every 30 s</span>{g.mode === "CLASSIC" && <span title="Roles are estimated from spells, champions and each player's last games (match history), which loads after the game">roles: {rh.isError ? "history failed" : rh.isLoading ? "checking history…" : `history for ${(rh.data?.players ?? []).filter((x) => x.games >= 2).length} players`}</span>}</div>
       <div className="grid grid-cols-2 gap-6"><Team game={g} side="blue" roles={roles} /><Team game={g} side="red" roles={roles} /></div>
     </>}
   </>);

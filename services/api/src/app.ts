@@ -1,12 +1,13 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
+import type { LiveRoleHistory, ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
 import type { Store } from "./store";
 import { toOverview } from "./overview";
 import { pickReference, toPlayerRadar } from "./radar";
+import { HISTORY_GAMES, roleCounts } from "./liveRoleHistory";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
@@ -405,6 +406,23 @@ export async function buildApp(deps: Deps) {
       for (const r of store.championRows({ patches: store.recentPatches(1) })) { const e = pop.get(r.champion) ?? { games: 0, wins: 0 }; e.games += r.games; e.wins += r.wins; pop.set(r.champion, e); }
       return toLiveGame(game, { youPuuid: acct.puuid, champs: data.champs, entries, pop });
     });
+  });
+
+  // Role history of the ten live players (the spectator data has no roles). Slow and call-hungry (up to 8 x (1 + 5) Riot calls at normal priority, cached for 30 min), so the app asks after the game is shown.
+  app.get<{ Params: { riotId: string } }>("/v1/live/:riotId/roles", async (req): Promise<LiveRoleHistory> => {
+    const acct = await identity(req.params.riotId), platform = await homePlatform(acct.puuid), region = regionOf(platform);
+    let game: RiotActiveGame;
+    try { game = await cached(`liveg:${platform}:${acct.puuid}`, 45_000, () => riot.activeGame(acct.puuid, platform)); }
+    catch (e) { if (e instanceof HttpError && e.status === 404) return { players: [] }; throw e; }
+    const players = await Promise.all(game.participants.filter((p) => p.puuid && !p.bot && p.spell1Id !== 11 && p.spell2Id !== 11).map(async (p) => {
+      // One player failing (rate limit, private data) must not break the others: that player simply has no history.
+      try {
+        const ids = await cached(`ids:${region}:${p.puuid}`, 30 * MIN, () => riot.matchIds(p.puuid!, region, 0, HISTORY_GAMES));
+        const ms = await Promise.all(ids.map((id) => cached<RiotMatch>(`match:${id}`, Infinity, () => riot.match(id, region))));
+        return { ...roleCounts(ms, p.puuid!), riotId: p.riotId || "" };
+      } catch (e) { app.log.warn(`live roles: ${p.riotId} failed: ${(e as Error).message}`); return { riotId: p.riotId || "", games: 0, roles: {} }; }
+    }));
+    return { players };
   });
 
   // ---- Collector control (POSTs need a custom header, so other websites cannot trigger them from your browser) ----
