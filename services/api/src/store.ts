@@ -36,6 +36,8 @@ export function perksJson(p: RiotMatch["info"]["participants"][number]): string 
 }
 
 /** Normalised match data (plan section 5.5), one SQLite file. Aggregates are computed with SQL on demand. */
+/** Game-length buckets for the scaling measure: under 25 minutes is early, over 33 minutes is late (seconds). */
+export const LENGTH_EARLY_SEC = 1500, LENGTH_LATE_SEC = 1980;
 export function makeStore(db: DatabaseSync) {
   db.exec(`CREATE TABLE IF NOT EXISTS matches (id TEXT PRIMARY KEY, patch TEXT NOT NULL, bracket TEXT, platform TEXT, ended_at INTEGER NOT NULL, duration INTEGER NOT NULL, blue_win INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS participants (match_id TEXT NOT NULL, puuid TEXT, team INTEGER NOT NULL, champion TEXT NOT NULL, role TEXT, win INTEGER NOT NULL, keystone INTEGER,
@@ -214,6 +216,17 @@ export function makeStore(db: DatabaseSync) {
         `SELECT p.champion id, p.role role, COUNT(*) games, SUM(p.dmg_p) phys, SUM(p.dmg_m) magic, SUM(p.dmg_t) trueDmg, SUM(COALESCE(p.taken, 0)) taken, SUM(COALESCE(p.cc, 0)) cc, SUM(m.duration) seconds
          FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.dmg_p IS NOT NULL AND p.dmg_m IS NOT NULL AND p.dmg_t IS NOT NULL${w.sql} GROUP BY p.champion, p.role`, ...w.args);
     },
+    /**
+     * Games and wins per champion, role and game-length bucket, for the scaling measure (E.2c): 0 = early (under 25 min), 1 = mid, 2 = late (over 33 min).
+     * Rows are [champion, role, bucket, games, wins]; games without a role are left out (a role-less record cannot be a role's scaling).
+     */
+    lengthBuckets(f: Filter) {
+      const w = filt(f);
+      return q<{ id: string; r: string; b: number; g: number; w: number }>(
+        `SELECT p.champion id, p.role r, CASE WHEN m.duration < ${LENGTH_EARLY_SEC} THEN 0 WHEN m.duration > ${LENGTH_LATE_SEC} THEN 2 ELSE 1 END b, COUNT(*) g, SUM(p.win) w
+         FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.role IS NOT NULL${w.sql} GROUP BY p.champion, p.role, b`, ...w.args)
+        .map((o) => [o.id, o.r, o.b, o.g, o.w] as [string, string, number, number, number]);
+    },
     /** Everything the draft engine needs, as compact arrays. Pairs with fewer than `min` games are left out. */
     draftStats(f: Filter, min = 3) {
       const w = filt(f);
@@ -227,7 +240,7 @@ export function makeStore(db: DatabaseSync) {
         AND a.team <> b.team AND a.role IS NOT NULL AND a.role = b.role JOIN matches m ON m.id = a.match_id WHERE 1=1${w.sql} GROUP BY a.champion, b.champion, a.role HAVING g >= ${min}`, ...w.args)
         .map((o) => [o.x, o.y, o.r, o.g, o.w] as [string, string, string, number, number]);
       const roleChampions = champions.filter((r) => r.role).map((r) => ({ id: r.champion, role: r.role as string, games: r.games, wins: r.wins }));
-      return { roleChampions, roleMatchups, games: this.matchCount(f), champions: [...per].map(([id, e]) => ({ id, games: e.games, wins: e.wins, roles: [...e.roles].filter(([, g]) => g >= Math.max(2, e.games * 0.1)).map(([r]) => r) })), matchups: pairs(false), synergies: pairs(true), profiles: this.compProfiles(f) };
+      return { roleChampions, roleMatchups, games: this.matchCount(f), champions: [...per].map(([id, e]) => ({ id, games: e.games, wins: e.wins, roles: [...e.roles].filter(([, g]) => g >= Math.max(2, e.games * 0.1)).map(([r]) => r) })), matchups: pairs(false), synergies: pairs(true), profiles: this.compProfiles(f), lengthBuckets: this.lengthBuckets(f) };
     },
     /** Which slice of this player's match history the next crawl reads (0 = the newest games; back to 0 once the history is done). */
     setSeedDepth: (puuid: string, depth: number) => void db.prepare("UPDATE seeds SET depth = ? WHERE puuid = ?").run(depth, puuid),

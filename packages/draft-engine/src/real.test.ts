@@ -24,6 +24,29 @@ describe("createRealData: games", () => {
   });
 });
 
+describe("createRealData: scaling", () => {
+  const roleRow = { id: "Ahri", role: "MID", games: 200, wins: 100 };
+  const withBuckets = (lengthBuckets: DraftStats["lengthBuckets"]) => createRealData(stats({ champions: champs({ Ahri: [200, 100] }), roleChampions: [roleRow], lengthBuckets }), keys, tags);
+  it("is positive for a champion that wins more in long games than in short ones, and negative for the reverse", () => {
+    expect(withBuckets([["Ahri", "MID", 0, 100, 40], ["Ahri", "MID", 2, 100, 60]]).scaling(1, "MID")!.score).toBeGreaterThan(0.05);
+    expect(withBuckets([["Ahri", "MID", 0, 100, 60], ["Ahri", "MID", 2, 100, 40]]).scaling(1, "MID")!.score).toBeLessThan(-0.05);
+  });
+  it("reports the games behind it and stays near 0 for a flat champion", () => {
+    const s = withBuckets([["Ahri", "MID", 0, 100, 50], ["Ahri", "MID", 2, 80, 40]]).scaling(1, "MID")!;
+    expect(s.games).toBe(180); expect(Math.abs(s.score)).toBeLessThan(1e-9);
+  });
+  it("is null without a role, without both buckets, with too few games in either, or for an unknown champion", () => {
+    const d = withBuckets([["Ahri", "MID", 0, 100, 40], ["Ahri", "MID", 2, 19, 15]]);
+    expect(d.scaling(1, "MID")).toBeNull(); expect(d.scaling(1)).toBeNull(); expect(d.scaling(99, "MID")).toBeNull();
+    expect(withBuckets([["Ahri", "MID", 0, 100, 40]]).scaling(1, "MID")).toBeNull(); expect(withBuckets(undefined).scaling(1, "MID")).toBeNull();
+  });
+  it("pulls a small gap toward nothing: the same split of wins moves less with few games than with many", () => {
+    const few = withBuckets([["Ahri", "MID", 0, 20, 6], ["Ahri", "MID", 2, 20, 14]]).scaling(1, "MID")!.score;
+    const many = withBuckets([["Ahri", "MID", 0, 400, 120], ["Ahri", "MID", 2, 400, 280]]).scaling(1, "MID")!.score;
+    expect(few).toBeGreaterThan(0); expect(few).toBeLessThan(many);
+  });
+});
+
 describe("createRealData: pair effects", () => {
   it("lane matchups are antisymmetric and positive when a champion beats the opponent more than expected", () => {
     const d = createRealData(stats({ matchups: [["Ahri", "Lux", 100, 70]] }), keys, tags);

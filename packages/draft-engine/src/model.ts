@@ -20,6 +20,12 @@ export const PAIR_PRIOR = 30;
 /** Layer D: your own record on a champion is pulled toward the population rate. */
 export const PERSONAL_PRIOR = 15;
 
+// ---- Layer B: scaling (win rate late minus early, E.2c) ------------------------------------------------------------
+/** Games a champion needs in BOTH the early and the late bucket (in the role) before a scaling number exists. */
+export const SCALING_MIN_GAMES = 20;
+/** Virtual games pulling each bucket's win rate toward the champion's rate in that role. */
+export const SCALING_PRIOR = 30;
+
 // ---- Layer D: your champion pool ----------------------------------------------------------------------------------
 /** Mastery counts three times as much as your recent games (owner request): it is long-term comfort, recent games are a small sample. */
 export const MASTERY_WEIGHT = 0.75;

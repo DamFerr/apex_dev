@@ -1,7 +1,7 @@
 import type { DraftStats, Role } from "@apex/schema";
 import type { DraftData } from "./engine";
 import { shrink } from "@apex/stats-core";
-import { STRENGTH_PRIOR, logit, shrunkEdge, shrunkStrength } from "./model";
+import { SCALING_MIN_GAMES, SCALING_PRIOR, STRENGTH_PRIOR, logit, shrunkEdge, shrunkStrength } from "./model";
 import { MIN_PROFILE_GAMES, profileBaseline, type CompProfile } from "./comp";
 
 export type { DraftStats };
@@ -16,7 +16,15 @@ const addProfiles = (a: CompProfile, b: CompProfile): CompProfile => ({ games: a
  * strengths already predict, so the engine's strength term and these edges never count the same thing twice.
  * Everything is shrunk toward its expectation, so a pairing seen 3 times barely moves the result.
  */
-export function createRealData(stats: DraftStats, keyOf: ReadonlyMap<string, number>, tagsOf: (key: number) => string[]): DraftData {
+/**
+ * What `createRealData` returns: the engine's `DraftData` plus the measured scaling of a champion in a role (E.2c; the model does not use it yet).
+ * `score` = shrunk win rate in late games (over 33 min) minus shrunk win rate in early games (under 25 min), as a fraction (+0.04 = 4 points better late).
+ * `games` = early plus late games behind it. null = fewer than `SCALING_MIN_GAMES` in either bucket, or no role.
+ * It is a correlation (long games are also won by stronger teams), and the UI has to say so.
+ */
+export type RealDraftData = DraftData & { scaling(champion: number, role?: Role | null): { score: number; games: number } | null };
+
+export function createRealData(stats: DraftStats, keyOf: ReadonlyMap<string, number>, tagsOf: (key: number) => string[]): RealDraftData {
   // Profiles per champion AND role (rows without a role count as "all roles"), plus the champion's total over its roles as the fallback.
   const byRole = new Map<string, CompProfile>(), total = new Map<string, CompProfile>();
   for (const r of stats.profiles ?? []) {
@@ -31,6 +39,8 @@ export function createRealData(stats: DraftStats, keyOf: ReadonlyMap<string, num
   // about the role, but the champion's general strength still holds. No games in the role = the overall rate.
   const inRole = new Map((stats.roleChampions ?? []).map((c) => [`${c.id}|${c.role}`, c] as const));
   const roleStrength = (id: string, role?: string | null) => { const c = role ? inRole.get(`${id}|${role}`) : undefined; return c ? shrink(c.wins, c.games, strength(id), STRENGTH_PRIOR) : strength(id); };
+  const buckets = new Map<string, { games: number; wins: number }>(); // "id|role|bucket"
+  for (const [id, role, bucket, games, wins] of stats.lengthBuckets ?? []) buckets.set(`${id}|${role}|${bucket}`, { games, wins });
   const edges = (pairs: DraftStats["matchups"], expected: (x: string, y: string) => number) =>
     new Map(pairs.map(([x, y, games, wins]) => [`${x}|${y}`, shrunkEdge(wins, games, expected(x, y))] as const));
   const lane = edges(stats.matchups, (x, y) => logit(strength(x)) - logit(strength(y)));      // x against y, all roles (old data / no role known)
@@ -40,6 +50,13 @@ export function createRealData(stats: DraftStats, keyOf: ReadonlyMap<string, num
   return {
     strength: (c, role) => { const id = idOf.get(c); return id ? roleStrength(id, role) : 0.5; },
     tags: tagsOf,
+    scaling: (c, role) => {
+      const id = idOf.get(c); if (!id || !role) return null;
+      const early = buckets.get(`${id}|${role}|0`), late = buckets.get(`${id}|${role}|2`);
+      if (!early || !late || early.games < SCALING_MIN_GAMES || late.games < SCALING_MIN_GAMES) return null;
+      const prior = roleStrength(id, role); // each bucket is pulled toward the champion's own (shrunk) rate in this role
+      return { score: shrink(late.wins, late.games, prior, SCALING_PRIOR) - shrink(early.wins, early.games, prior, SCALING_PRIOR), games: early.games + late.games };
+    },
     games: (c, role) => { const id = idOf.get(c); if (!id) return 0; const r = role ? inRole.get(`${id}|${role}`) : undefined; return r ? r.games : champ.get(id)?.games ?? 0; },
     // The role's own numbers when it has enough games, else the champion's total over all its roles.
     profile: (c, role) => { const id = idOf.get(c) ?? ""; const r = role ? byRole.get(`${id}|${role}`) : undefined; return r && r.games >= MIN_PROFILE_GAMES ? r : total.get(id) ?? null; },

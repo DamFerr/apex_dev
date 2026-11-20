@@ -24,6 +24,16 @@ describe("store", () => {
     expect(rows).toHaveLength(10);
     expect(s.draftStats({}).profiles).toEqual(rows);
   });
+  it("counts games and wins per champion, role and game-length bucket (early under 25 min, late over 33 min)", () => {
+    const s = makeStore(new DatabaseSync(":memory:"));
+    s.saveMatch(matchFixture("A", { gameDuration: 1400 }, true), "EMERALD", "euw1");   // early, blue (Ahri) wins
+    s.saveMatch(matchFixture("B", { gameDuration: 1800 }, true), "EMERALD", "euw1");   // mid
+    s.saveMatch(matchFixture("C", { gameDuration: 2100 }, false), "EMERALD", "euw1");  // late, Ahri loses
+    s.saveMatch(matchFixture("D", { gameDuration: 2400 }, true), "EMERALD", "euw1");   // late, Ahri wins
+    const ahri = s.lengthBuckets({}).filter((r) => r[0] === "Ahri").map((r) => [r[2], r[3], r[4]]).sort();
+    expect(ahri).toEqual([[0, 1, 1], [1, 1, 1], [2, 2, 1]]);
+    expect(s.draftStats({}).lengthBuckets).toEqual(s.lengthBuckets({}));
+  });
   it("keeps one profile row per champion and role", () => {
     const s = makeStore(new DatabaseSync(":memory:"));
     const typed = (id: string, pos: string) => matchFixture(id, { participants: Array.from({ length: 10 }, (_, i) => participant(i, { win: i < 5, ...(i === 0 ? { teamPosition: pos } : {}),

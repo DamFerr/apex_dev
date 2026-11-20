@@ -116,6 +116,8 @@ export interface DraftStats {
   roleMatchups?: [string, string, string, number, number][];
   /** Damage split, damage taken and CC per champion AND role (optional: older backends and test fixtures omit it). */
   profiles?: CompProfileRow[];
+  /** Games and wins per champion, role and game-length bucket (0 early under 25 min, 1 mid, 2 late over 33 min), rows [champion, role, bucket, games, wins]. Optional: older backends omit it. */
+  lengthBuckets?: [string, string, number, number, number][];
 }
 /** Filters shared by every stats screen. platform: "all" or a region id; patch: "latest", "all" (= the last 5 patches, the only ones Apex keeps) or e.g. "26.22"; rank: "all" or a tier such as "EMERALD", which always means that tier AND ABOVE (Emerald IV and up). */
 export interface StatsFilter { platform: string; patch: string; rank: string }
