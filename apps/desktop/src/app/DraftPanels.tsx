@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { RoleIcon } from "../components/RoleIcon";
 import type { BanSuggestion, Evaluation, Factor, Recommendation, TeamComp } from "@apex/draft-engine";
 import { ChampIcon } from "../components/ChampIcon";
+import { LowBadge } from "../components/StatRows";
 import { AnimatedNumber, spring } from "../components/ui";
 import { champId, champName } from "../lib/lcu";
 
@@ -59,6 +60,7 @@ export function Recommendations({ recs, role, source, onHover, onLock }: { recs:
               {id && <ChampIcon id={id} name={champName(r.champion)} size={44} />}
               <span className="w-40 shrink-0 text-[1rem] font-medium truncate">{champName(r.champion)}</span>
               <span className="tabular-nums font-display text-xl w-20 shrink-0">{(r.winProb * 100).toFixed(1)}%</span>
+              {r.games !== undefined && <span className="tabular-nums text-xs text-muted w-28 shrink-0 whitespace-nowrap" title={`Collected games of ${champName(r.champion)} in ${role} behind this suggestion`}>{r.games.toLocaleString()} games<LowBadge games={r.games} /></span>}
               <span className={`tabular-nums text-sm w-16 shrink-0 ${r.deltaPP >= 0 ? "text-good" : "text-bad"}`}>{sign(r.deltaPP)}</span>
               <span className="text-sm text-muted flex-1 min-w-0">{r.why ? `${sign(r.why.pp)}% ${describe(r.why)}` : ""}{r.note && <span className="text-gold"> · {r.note}</span>}</span>
             </div>

@@ -11,6 +11,8 @@ export interface DraftData {
   synergy(a: number, b: number): number;         // log-odds bonus when a and b are on the same team (symmetric)
   tags(champion: number): string[];
   roles(champion: number): Role[];
+  /** Collected games behind `strength` (in `role` when that role has games, else the champion overall); 0 = none. Optional, for the sample size next to a suggestion. */
+  games?(champion: number, role?: Role | null): number;
   /** Measured damage split, damage taken and CC of a champion, when collected games have it (optional). */
   /** `role`: the role the champion is picked in, when known; the answer is that role's numbers when it has enough games, else the champion's overall numbers. */
   profile?(champion: number, role?: Role | null): CompProfile | null;
@@ -20,7 +22,7 @@ export interface DraftData {
 export interface Pick { champion: number; role: Role | null }
 export interface Factor { kind: "strength" | "matchup" | "synergy" | "comp" | "personal"; champs: number[]; label: string; z: number; pp: number }
 export interface Evaluation { winProb: number; band: number; factors: Factor[] }
-export interface Recommendation { champion: number; winProb: number; deltaPP: number; why?: Factor; note?: string }
+export interface Recommendation { champion: number; winProb: number; deltaPP: number; why?: Factor; note?: string; /** Collected games of this champion in the role (see `DraftData.games`); undefined when the data cannot say. */ games?: number }
 
 export { logit, sigmoid };
 
@@ -106,7 +108,7 @@ export function recommend(ally: Pick[], enemy: Pick[], role: Role, candidates: n
     const winProb = per ? sigmoid(logit(ev.winProb) + per.z) : ev.winProb; // layer D: your own record on this champion
     const top = ev.factors.find((f) => f.champs.includes(c)) ?? ev.factors[0];
     const pf: Factor | undefined = per && Math.abs(per.z) > 1e-9 ? { kind: "personal", champs: [c], label: "Your history", z: per.z, pp: toPP(per.z) } : undefined;
-    out.push({ champion: c, winProb, deltaPP: (winProb - base) * 100, note: per?.note, why: pf && (!top || Math.abs(pf.pp) >= Math.abs(top.pp)) ? pf : top });
+    out.push({ champion: c, winProb, deltaPP: (winProb - base) * 100, note: per?.note, games: data.games?.(c, role), why: pf && (!top || Math.abs(pf.pp) >= Math.abs(top.pp)) ? pf : top });
   }
   return out.sort((a, b) => b.winProb - a.winProb).slice(0, opts.limit ?? 6);
 }

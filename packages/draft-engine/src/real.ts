@@ -40,6 +40,7 @@ export function createRealData(stats: DraftStats, keyOf: ReadonlyMap<string, num
   return {
     strength: (c, role) => { const id = idOf.get(c); return id ? roleStrength(id, role) : 0.5; },
     tags: tagsOf,
+    games: (c, role) => { const id = idOf.get(c); if (!id) return 0; const r = role ? inRole.get(`${id}|${role}`) : undefined; return r ? r.games : champ.get(id)?.games ?? 0; },
     // The role's own numbers when it has enough games, else the champion's total over all its roles.
     profile: (c, role) => { const id = idOf.get(c) ?? ""; const r = role ? byRole.get(`${id}|${role}`) : undefined; return r && r.games >= MIN_PROFILE_GAMES ? r : total.get(id) ?? null; },
     baseline: () => baseline,

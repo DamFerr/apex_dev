@@ -15,13 +15,14 @@ import { FilterBar } from "../components/FilterBar";
 import { usePool } from "../lib/api";
 import { BanSuggestions, Recommendations } from "./DraftPanels";
 import { DraftBoard, DraftInsights, useDraftData, useLockedPicks } from "./DraftContext";
-import { runImport, useDraft } from "../lib/lcu";
-import { Download, Maximize2, Minimize2, Swords, Timer, Unplug } from "lucide-react";
+import { champId, runImport, useDraft } from "../lib/lcu";
+import { useNavigate } from "react-router-dom";
+import { Download, Hammer, Maximize2, Minimize2, Swords, Timer, Unplug } from "lucide-react";
 
 /** A small pill toggle (checkbox inside, so it stays a real, labelled checkbox for keyboard and screen readers). The explanation is the tooltip. */
-function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
-  return <label title={hint} className="h-8 px-3 rounded-full border border-line/10 inline-flex items-center gap-2 text-xs cursor-pointer hover:bg-raised/40 focus-within:ring-2 focus-within:ring-accent/60">
-    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="size-3.5 accent-[rgb(var(--accent))]" />{label}</label>;
+function Toggle({ checked, onChange, label, hint, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean }) {
+  return <label title={hint} className={`h-8 px-3 rounded-full border border-line/10 inline-flex items-center gap-2 text-xs focus-within:ring-2 focus-within:ring-accent/60 ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-raised/40"}`}>
+    <input type="checkbox" checked={checked && !disabled} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="size-3.5 accent-[rgb(var(--accent))]" />{label}</label>;
 }
 
 export function Draft() {
@@ -35,7 +36,11 @@ export function Draft() {
   const [tab, setTab] = useState<"draft" | "live">(gameOn ? "live" : "draft");
   useEffect(() => { if (draft.gameflow === "ChampSelect") setTab("draft"); else if (gameOn) setTab("live"); }, [draft.gameflow, gameOn]);
   const me = draft.slots.find((x) => x.isLocal), myKey = me ? (me.locked ? me.championId : me.hoverId) : 0; // Import writes your real pick
-  const [personalize, setPersonalize] = useState(true), poolQ = usePool(myId);
+  const nav = useNavigate(), lockedKey = me?.locked ? champId(me.championId) : undefined;
+  const [personalizeOn, setPersonalize] = useState(true), poolQ = usePool(myId);
+  // The pool overlay needs your Riot ID and a loaded pool; say so on the toggle instead of silently doing nothing.
+  const poolMissing = !myId ? "Add your Riot ID in Settings to use your champion pool." : poolQ.isError ? "Your champion pool could not be loaded (backend or Riot unreachable)." : poolQ.isLoading ? "Loading your champion pool…" : null;
+  const personalize = personalizeOn && poolMissing === null;
   // Your pool (mastery plus recent games per role), keyed by numeric champion key ...
   const poolAll = useMemo<PoolChampion[] | null>(() => {
     if (!poolQ.data || !champs) return null;
@@ -69,8 +74,9 @@ export function Draft() {
     {tab === "live" ? (myId ? <LiveGameView id={myId} watch={gameOn} refresh /> : <RiotIdPrompt />) : <>
     <FilterBar />
     <div className="flex flex-wrap items-center gap-2 mb-5" role="group" aria-label="Draft options">
+      {draft.active && lockedKey && <Button variant="ghost" title="Back to the build and rune setup of your locked champion" onClick={() => nav(`/draft/setup/${encodeURIComponent(lockedKey)}${me?.role ? `/${me.role}` : ""}`)}><Hammer size={14} aria-hidden />Open setup</Button>}
       {isTauri && <Button variant="ghost" disabled={!draft.connected || !myKey} title={'Writes the rune page, summoner spells and item set(s) the champion page shows (its best build), named "Apex: <champion>"'} onClick={() => void runImport(myKey, me?.role ?? null)}><Download size={14} aria-hidden />Import now</Button>}
-      <Toggle checked={personalize} onChange={setPersonalize} label="Use my champion pool" hint="Favours champions you have mastery on and play in this role. Mastery counts more than recent games." />
+      <Toggle checked={personalize} onChange={setPersonalize} label="Use my champion pool" disabled={poolMissing !== null} hint={poolMissing ?? "Favours champions you have mastery on and play in this role. Mastery counts more than recent games."} />
       <Toggle checked={spells} onChange={setSpells} label="Also set summoner spells" />
       <Toggle checked={items} onChange={setItems} label="Also import item sets" />
       <Toggle checked={autoImport} onChange={setAutoImport} label="Auto-import on lock-in" hint="Imports as soon as you lock in. Off by default." />

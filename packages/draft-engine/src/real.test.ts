@@ -17,6 +17,13 @@ describe("createRealData: strength", () => {
   });
 });
 
+describe("createRealData: games", () => {
+  it("counts the role's games when the role has some, else the champion's total, 0 for an unknown champion", () => {
+    const d = createRealData(stats({ champions: champs({ Ahri: [100, 50] }), roleChampions: [{ id: "Ahri", role: "MID", games: 12, wins: 6 }] }), keys, tags);
+    expect(d.games!(1, "MID")).toBe(12); expect(d.games!(1, "TOP")).toBe(100); expect(d.games!(1)).toBe(100); expect(d.games!(99, "MID")).toBe(0);
+  });
+});
+
 describe("createRealData: pair effects", () => {
   it("lane matchups are antisymmetric and positive when a champion beats the opponent more than expected", () => {
     const d = createRealData(stats({ matchups: [["Ahri", "Lux", 100, 70]] }), keys, tags);
