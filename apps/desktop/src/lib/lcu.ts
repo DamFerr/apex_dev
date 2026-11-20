@@ -2,11 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { champIndex } from "./ddragon";
-import type { Role } from "@apex/schema";
+import type { ChampionBuild, Role } from "@apex/schema";
 import { fetchBuild, importItemSet, importRunes, importSpells } from "./importer";
 import type { PickSetup } from "./pickSetup";
 import { isTauri } from "./tauri";
-import { summarizeImport, wroteAnything, type ImportOutcome } from "./importSummary";
+import { summarizeImport, wroteAnything, type ImportOutcome, type ImportStep } from "./importSummary";
 import { toast } from "./toast";
 import { initialDraft, nextPick, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent, type OverlayPick } from "@apex/lcu-core";
 
@@ -21,24 +21,27 @@ interface DraftStore {
   /** Opt-in (off by default): suggestion cards get Hover / Ban / Lock in buttons that act on your own champ select action, one click = one action. */ clickActions: boolean; setClickActions: (v: boolean) => void;
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
+/** What to write and how. `build`: the build the setup page already shows (skips fetching it again). `only`: just these parts (default all). `quiet`: no success toast (errors still show). */
+export interface ImportOptions { build?: ChampionBuild | null; only?: readonly ImportStep[]; quiet?: boolean }
 /** Imports runes (and optionally summoner spells and an item set); the outcome is one summary toast, plus an error toast per failed step. */
-export async function runImport(championKey: number, role: Role | null, sel?: PickSetup) {
+export async function runImport(championKey: number, role: Role | null, sel?: PickSetup, opts: ImportOptions = {}) {
   const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)), out: ImportOutcome[] = [];
   const collected = (source: string) => source.includes("collected");
-  const build = await fetchBuild(championKey, role).catch(() => null); // null = use defaults, each step says which it used
-  try { const r = await importRunes(championKey, build, sel); out.push({ step: "runes", done: "rune page", defaults: !collected(r.source) }); }
+  const want = (step: ImportStep) => !opts.only || opts.only.includes(step);
+  const build = opts.build !== undefined ? opts.build : await fetchBuild(championKey, role).catch(() => null); // null = use defaults, each step says which it used
+  if (want("runes")) try { const r = await importRunes(championKey, build, sel); out.push({ step: "runes", done: "rune page", defaults: !collected(r.source) }); }
   catch (e) { out.push({ step: "runes", error: msg(e) }); }
-  if (useDraft.getState().spells) {
+  if (want("spells") && useDraft.getState().spells) {
     try { const r = await importSpells(role, build, sel); out.push({ step: "spells", done: `spells ${r.text}`, defaults: !collected(r.source) }); }
     catch (e) { out.push({ step: "spells", error: msg(e) }); }
   }
-  if (useDraft.getState().items) {
+  if (want("items") && useDraft.getState().items) {
     try { const t = await importItemSet(championKey, build); out.push(t ? { step: "items", done: `${t.length} item ${t.length > 1 ? "sets" : "set"}` } : { step: "items", skipped: true }); }
     catch (e) { out.push({ step: "items", error: msg(e) }); }
   }
   if (wroteAnything(out)) useDraft.setState({ imported: championKey });
   const { message, errors } = summarizeImport(out);
-  if (message) toast(message);
+  if (message && !opts.quiet) toast(message);
   for (const e of errors) toast(e, "error");
 }
 export const useDraft = create<DraftStore>((set, get) => ({

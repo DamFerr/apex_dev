@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Download } from "lucide-react";
 import type { Role } from "@apex/schema";
@@ -9,13 +9,12 @@ import { useChampionBuild } from "../lib/api";
 import { champIndex } from "../lib/ddragon";
 import { MIN_BUILD_GAMES } from "../lib/importer";
 import { runImport, useDraft } from "../lib/lcu";
-import { resolveSetup, type PickSetup } from "../lib/pickSetup";
+import type { ImportStep } from "../lib/importSummary";
+import { changedSteps, resolveSetup, type PickSetup } from "../lib/pickSetup";
 import { isTauri } from "../lib/tauri";
 import { BuildPanel } from "./BuildPanel";
 
 const ROLES: readonly string[] = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
-/** Wait this long after the last click before writing, so clicking through a few pages writes once (imports also run one at a time). */
-const IMPORT_DELAY_MS = 500;
 /** The route carries the Data Dragon id ("Ahri"); the import needs the numeric champion key. */
 const keyOf = (id: string) => { for (const c of champIndex.values()) if (c.id === id) return c.key; return undefined; };
 const indexOrNull = <T,>(list: readonly T[], item: T | null): number | null => { const i = item ? list.indexOf(item) : -1; return i < 0 ? null : i; };
@@ -23,23 +22,33 @@ const indexOrNull = <T,>(list: readonly T[], item: T | null): number | null => {
 /**
  * Setup page for the champion you locked: the same build view as the champion page (`BuildPanel`: build types, full rune pages, spells, items, skill order),
  * where the build type, rune page and summoner spells are YOUR choice. What is lit is exactly what Import writes (`resolveSetup`).
- * Every click writes it to the League client during champ select (after a short pause), so you never need the button; it stays as "Import again".
+ * Every click writes it to the League client during champ select at once (only what you changed), so you never need the button; it stays as "Import again".
  * Only your own rune page, spells and item set are written, and only after your own click (docs/COMPLIANCE.md row 3).
  */
 export function PickSetupPage() {
   const { id = "", role: roleParam } = useParams(), role = roleParam && ROLES.includes(roleParam) ? (roleParam as Role) : undefined;
-  const [sel, setSel] = useState<PickSetup>({}), touched = useRef(false);
+  const [sel, setSel] = useState<PickSetup>({});
   const connected = useDraft((s) => s.draft.connected), active = useDraft((s) => s.draft.active), imported = useDraft((s) => s.imported);
   const { data: b } = useChampionBuild(id, role), key = keyOf(id), name = champIndex.get(key ?? -1)?.name ?? id;
   const r = resolveSetup(b ?? null, sel, MIN_BUILD_GAMES), core = r.core;
   const done = key !== undefined && imported === key, canWrite = isTauri && connected && key !== undefined;
 
-  const choose = (next: PickSetup) => { touched.current = true; setSel(next); };
-  useEffect(() => {   // only after a click of yours (not on opening the page), and only while champ select runs
-    if (!touched.current || !canWrite || !active) return;
-    const t = setTimeout(() => void runImport(key, role ?? null, sel), IMPORT_DELAY_MS);
-    return () => clearTimeout(t);
-  }, [sel, canWrite, active, key, role]);
+  // A click writes at once, and only what it changed. While a write runs, further clicks are merged into ONE follow-up write with the latest choice (so a fast
+  // series of clicks never queues up). The item sets do not depend on your choice: they are written with the first import of this champion only.
+  const busy = useRef(false), itemsSent = useRef(false), queued = useRef<{ sel: PickSetup; only: Set<ImportStep> } | null>(null);
+  const write = async (next: PickSetup, only: Set<ImportStep>) => {
+    if (busy.current) { const q = queued.current; queued.current = { sel: next, only: new Set([...(q?.only ?? []), ...only]) }; return; }
+    busy.current = true;
+    try { await runImport(key!, role ?? null, next, { build: b, only: [...only], quiet: true }); }
+    finally { busy.current = false; const q = queued.current; queued.current = null; if (q) void write(q.sel, q.only); }
+  };
+  const choose = (next: PickSetup) => {
+    const steps = changedSteps(sel, next);
+    setSel(next);
+    if (!canWrite || !active || !steps.length) return;   // only after a click of yours, and only while champ select runs
+    if (!done && !itemsSent.current) { steps.push("items"); itemsSent.current = true; }
+    void write(next, new Set(steps));
+  };
 
   return (<div className="space-y-4">
     <Link to="/draft" className="focus-ring inline-flex items-center gap-1 text-sm text-muted hover:text-text rounded-md"><ArrowLeft size={14} /> Draft</Link>

@@ -1,4 +1,5 @@
 import type { ChampionBuild, SpellPairStat } from "@apex/schema";
+import type { ImportStep } from "./importSummary";
 import { DEFAULT_VARIANT_SORT, pageBuild, spellPairsOf, type PageCore } from "@apex/lcu-core";
 
 /**
@@ -29,4 +30,15 @@ export function resolveSetup(build: ChampionBuild | null, sel: PickSetup = {}, m
     rune: at(core.runePages, sel.runePage) ?? (top && top.games >= minGames ? top : null),
     spell: at(pairs, sel.spellPair) ?? (topPair && topPair.games >= minGames ? topPair : null),
   };
+}
+
+/**
+ * Which parts of the import a change of choice touches, so a click writes only that (a rune click never rewrites spells or item sets).
+ * A new build type changes both the rune page and the spell pair. The item sets never depend on the choice (every build type is written).
+ */
+export function changedSteps(prev: PickSetup, next: PickSetup): ImportStep[] {
+  const variant = prev.variantId !== next.variantId, steps: ImportStep[] = [];
+  if (variant || prev.runePage !== next.runePage) steps.push("runes");
+  if (variant || prev.spellPair !== next.spellPair) steps.push("spells");
+  return steps;
 }

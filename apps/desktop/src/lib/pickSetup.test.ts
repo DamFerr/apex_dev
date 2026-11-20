@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChampionBuild } from "@apex/schema";
-import { resolveSetup } from "./pickSetup";
+import { resolveSetup, changedSteps } from "./pickSetup";
 
 const rune = (games: number, id: number) => ({ primaryStyleId: id, subStyleId: 8000, perkIds: [id], games, wins: Math.floor(games / 2) });
 const pair = (games: number, a: number) => ({ ids: [a, 4], games, wins: Math.floor(games / 2) });
@@ -37,4 +37,13 @@ describe("resolveSetup", () => {
     expect(r.spell?.ids).toEqual([14, 4]);
     expect(resolveSetup(build(), { runePage: 1.5 }).rune?.primaryStyleId).toBe(1);
   });
+});
+
+describe("changedSteps", () => {
+  it("a rune click only touches runes, a spell click only spells", () => {
+    expect(changedSteps({}, { runePage: 1 })).toEqual(["runes"]);
+    expect(changedSteps({ runePage: 1 }, { runePage: 1, spellPair: 2 })).toEqual(["spells"]);
+  });
+  it("a new build type touches both (it resets the other choices)", () => expect(changedSteps({ variantId: "ap", runePage: 2 }, { variantId: "ad" })).toEqual(["runes", "spells"]));
+  it("nothing changed, nothing to write", () => expect(changedSteps({ variantId: "ap", runePage: 1 }, { variantId: "ap", runePage: 1 })).toEqual([]));
 });
