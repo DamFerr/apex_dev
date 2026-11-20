@@ -137,12 +137,13 @@ export interface PostGameRecap {
   baseline: { label: string; games: number } | null; personal: { games: number } | null;
 }
 
-/** Live game scouting (Spectator-v5). Only what the game's own loading screen already shows, plus public rank data. */
+/** Live game scouting (Spectator-v5): the ten players and champions, summoner spells and runes Riot's spectator data lists, plus public rank data. Never in-game state. */
 export interface LivePlayer {
   riotId: string; champion: string; championName: string; team: "blue" | "red"; rank: RankInfo | null;
   /** Riot's "hot streak" flag on the Ranked Solo entry (won several in a row). */ hotStreak: boolean;
   /** Carries Smite, so almost certainly the jungler. Spectator data has no role field; Apex does not guess the other roles. */ jungle: boolean;
   isYou: boolean;
+  /** Keystone rune id and secondary rune tree id from the spectator data (owner decision Nov 20 2026: shown for all ten players). null = Riot gave none (bots). */ keystone: number | null; secondaryStyle: number | null;
   /** The player's two summoner spells in THEIR slot order (D, then F), as the spectator data reports them; shown as they are. Empty when Riot gives none. */ spells: number[];
   /** Collected games on this champion (current patch, all roles), for a population win rate next to the player. 0 = no data. */ champGames: number; champWins: number;
 }

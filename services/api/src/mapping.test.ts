@@ -53,6 +53,12 @@ describe("toLiveGame", () => {
     const g = toLiveGame(two, { youPuuid: "a", champs, entries: new Map(), pop: new Map() });
     expect(g.players.map((p) => p.spells)).toEqual([[4, 14], [14, 4], []]);
   });
+  it("takes the keystone and the secondary tree from the spectator runes, null when there are none (bots)", () => {
+    const withPerks = { ...base, participants: [{ ...base.participants[0]!, perks: { perkIds: [8112, 8126], perkStyle: 8100, perkSubStyle: 8200 } }, base.participants[1]!] };
+    const g = toLiveGame(withPerks, { youPuuid: "me", champs, entries: new Map(), pop: new Map() });
+    expect(g.players[0]).toMatchObject({ keystone: 8112, secondaryStyle: 8200 });
+    expect(g.players[1]).toMatchObject({ keystone: null, secondaryStyle: null });
+  });
   it("uses the queue name when the queue id is known", () => {
     expect(toLiveGame({ ...base, gameQueueConfigId: 450 }, { youPuuid: "x", champs, entries: new Map(), pop: new Map() }).queue).toBe("ARAM");
   });

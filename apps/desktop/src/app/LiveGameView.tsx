@@ -1,36 +1,43 @@
 import { motion } from "framer-motion";
 import { TierIcon } from "../components/TierIcon";
 import { RefreshCw } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import type { LiveGame as Game, LivePlayer } from "@apex/schema";
+import type { LiveGame as Game, LivePlayer, Role } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
 import { GameIcon } from "../components/GameIcon";
+import { ROLE_LABEL, RoleIcon } from "../components/RoleIcon";
 import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
 import { Button, Skeleton, spring } from "../components/ui";
 import { useLiveGame } from "../lib/api";
+import { assignRoles } from "../lib/liveRoles";
 import { tierName } from "../lib/platforms";
+import { useDraftData } from "./DraftContext";
 
 const rankText = (r: LivePlayer["rank"]) => (!r ? "Unranked" : ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(r.tier) ? `${tierName(r.tier)} ${r.lp} LP` : `${tierName(r.tier)} ${r.division}`);
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-function PlayerCard({ p }: { p: LivePlayer }) {
+function PlayerCard({ p, role }: { p: LivePlayer; role: Role | null }) {
   const season = p.rank ? rate(p.rank.wins, p.rank.wins + p.rank.losses) : null, champ = p.champGames > 0 ? rate(p.champWins, p.champGames) : null;
   const name = p.riotId.split("#")[0];
   return (
     <motion.li variants={{ h: { opacity: 0, y: 8 }, s: { opacity: 1, y: 0 } }} whileHover={{ y: -2 }} transition={spring}
       className={`glass rounded-lg p-3 flex items-center gap-3 ${p.isYou ? "ring-1 ring-gold/60" : ""}`} aria-label={`${p.riotId} playing ${p.championName}`}>
       <ChampIcon id={p.champion} name={p.championName} size={44} />
+      {role && <span className="shrink-0" title={`${ROLE_LABEL[role]} (estimated: the spectator data has no role field, Apex fits it from Smite and the champion's usual roles)`}><RoleIcon role={role} size={22} /></span>}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-sm">
           {p.riotId.includes("#") ? <Link to={`/profile/${encodeURIComponent(p.riotId)}`} className="focus-ring rounded truncate font-medium hover:underline">{name}</Link> : <span className="truncate text-muted">{p.riotId}</span>}
-          {p.isYou && <span className="rounded-full bg-gold/15 text-gold text-[10px] px-2 py-0.5">you</span>}
-          {p.jungle && <span className="rounded-full bg-accent/20 text-[10px] px-2 py-0.5" title="Carries Smite">jungle</span>}
-          {p.hotStreak && <span className="rounded-full bg-good/15 text-good text-[10px] px-2 py-0.5" title="Riot marks this player as on a win streak">hot streak</span>}
+          {p.isYou && <span className="sr-only">you</span>}
+          {p.hotStreak && <span className="rounded-full bg-good/15 text-good text-[10px] font-semibold tracking-wide px-2 py-0.5" title="Riot marks this player as on a win streak">HOT STREAK</span>}
         </div>
         <div className="text-xs text-muted truncate">{p.championName}</div>
         {/* The player's own slot order (D, F), exactly as the spectator data reports it: not rearranged to put Flash first. */}
-        {p.spells.length > 0 && <div className="flex gap-0.5 mt-1" role="group" aria-label="Summoner spells">{p.spells.map((id, i) => <GameIcon key={i} kind="spell" id={id} size={20} />)}</div>}
+        {(p.spells.length > 0 || p.keystone !== null) && <div className="flex items-center gap-0.5 mt-1">
+          {p.spells.length > 0 && <div className="flex gap-0.5" role="group" aria-label="Summoner spells">{p.spells.map((id, i) => <GameIcon key={i} kind="spell" id={id} size={20} />)}</div>}
+          {/* Keystone and secondary tree, as the spectator data reports them (the tree icon is smaller and dimmer, like in the match rows). */}
+          {p.keystone !== null && <div className="flex items-center gap-0.5 ml-1.5" role="group" aria-label="Runes"><GameIcon kind="rune" id={p.keystone} size={20} />{p.secondaryStyle !== null && <GameIcon kind="rune" id={p.secondaryStyle} size={16} className="opacity-70" />}</div>}
+        </div>}
       </div>
       <div className="flex items-center justify-end gap-2 text-right text-xs shrink-0 w-44">
         {p.rank && <TierIcon tier={p.rank.tier} division={p.rank.division} size={28} />}<div>
@@ -45,12 +52,12 @@ function PlayerCard({ p }: { p: LivePlayer }) {
     </motion.li>);
 }
 
-function Team({ game, side }: { game: Game; side: "blue" | "red" }) {
+function Team({ game, side, roles }: { game: Game; side: "blue" | "red"; roles: Map<LivePlayer, Role | null> }) {
   const players = game.players.filter((p) => p.team === side), bans = game.bans.filter((b) => b.team === side);
   return (
     <section aria-label={`${side === "blue" ? "Blue" : "Red"} team`}>
       <h2 className={`font-display text-lg font-semibold mb-2 ${side === "blue" ? "text-accent" : "text-bad"}`}>{side === "blue" ? "Blue team" : "Red team"}</h2>
-      <motion.ul initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }} className="grid gap-2">{players.map((p, i) => <PlayerCard key={`${p.riotId}-${i}`} p={p} />)}</motion.ul>
+      <motion.ul initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }} className="grid gap-2">{players.map((p, i) => <PlayerCard key={`${p.riotId}-${i}`} p={p} role={roles.get(p) ?? null} />)}</motion.ul>
       {bans.length > 0 && <p className="text-xs text-muted mt-2">Bans: {bans.map((b) => b.championName).join(", ")}</p>}
     </section>);
 }
@@ -62,7 +69,18 @@ function Team({ game, side }: { game: Game; side: "blue" | "red" }) {
  * `refresh`: show a Refresh button (the scout page has its own).
  */
 export function LiveGameView({ id, watch = false, refresh = false }: { id: string; watch?: boolean; refresh?: boolean }) {
-  const q = useLiveGame(id), g = q.data, { refetch } = q;
+  const q = useLiveGame(id), g = q.data, { refetch } = q, { champs, data } = useDraftData();
+  // Estimated roles per team, only on Summoner's Rift (CLASSIC). Needs the collected games for the champions' usual roles; without them only Smite shows the jungler.
+  const roles = useMemo(() => {
+    const out = new Map<LivePlayer, Role | null>();
+    if (!g?.inGame || g.mode !== "CLASSIC") return out;
+    const key = new Map((champs ?? []).map((c) => [c.id, c.key]));
+    for (const side of ["blue", "red"] as const) {
+      const team = g.players.filter((p) => p.team === side);
+      assignRoles(team.map((p) => ({ roles: data && key.has(p.champion) ? data.roles(key.get(p.champion)!) : [], smite: p.jungle }))).forEach((r, i) => out.set(team[i], r));
+    }
+    return out;
+  }, [g, champs, data]);
   useEffect(() => {
     if (!watch || !id || g?.inGame) return;
     const t = setInterval(() => void refetch(), 20_000);
@@ -75,8 +93,8 @@ export function LiveGameView({ id, watch = false, refresh = false }: { id: strin
     {g && !g.inGame && <div className="glass rounded-lg p-8 text-sm max-w-xl"><div className="font-medium mb-1">{id.split("#")[0]} is not in a game right now.</div>
       <div className="text-muted">{watch ? "Your game is starting. Riot's spectator data appears a minute or two after the start, and this page checks again by itself." : "Spectator data appears a minute or two after a game starts. Press Refresh, or scout another Riot ID."}</div></div>}
     {g?.inGame && <>
-      <div className="flex items-center gap-3 text-sm text-muted mb-4"><span className="rounded-full bg-good/15 text-good text-xs px-2 py-0.5">live</span><span>{g.queue}</span><span aria-label="Game time" className="tabular-nums">{mmss(g.lengthSec)} in</span><span>updates every 30 s</span></div>
-      <div className="grid grid-cols-2 gap-6"><Team game={g} side="blue" /><Team game={g} side="red" /></div>
+      <div className="flex items-center gap-3 text-sm text-muted mb-4"><span className="rounded-full bg-good/15 text-good text-xs font-semibold tracking-wide px-2 py-0.5">LIVE</span><span>{g.queue}</span><span aria-label="Game time" className="tabular-nums">{mmss(g.lengthSec)} in</span><span>updates every 30 s</span></div>
+      <div className="grid grid-cols-2 gap-6"><Team game={g} side="blue" roles={roles} /><Team game={g} side="red" roles={roles} /></div>
     </>}
   </>);
 }

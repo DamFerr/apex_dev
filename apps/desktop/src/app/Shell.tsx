@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Search, Square, Star, User, UserSearch, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { NAV, SETTINGS_ITEM, buildPaletteEntries, liveTabOnGameStart, setupPathOnLock, shouldOpenDraft, type NavItem, type PaletteEntry } from "../lib/nav";
+import { NAV, SETTINGS_ITEM, buildPaletteEntries, leaveSetupOnChampSelectEnd, liveTabOnGameStart, setupPathOnLock, shouldOpenDraft, type NavItem, type PaletteEntry } from "../lib/nav";
 import { ChampIcon } from "../components/ChampIcon";
 import { useUi } from "../lib/store";
 import { publicPatch } from "@apex/schema";
@@ -170,6 +170,12 @@ export function Shell() {
     if (shouldOpenDraft(wasActive.current, active, openDraft, loc.pathname)) nav("/draft");
     wasActive.current = active;
   }, [active, openDraft, loc.pathname, nav]);
+  const wasChampSelect = useRef(false);
+  useEffect(() => { // champ select ended while you are on the setup page (dodge, remake, closed lobby): back to the Draft page
+    const to = leaveSetupOnChampSelectEnd(wasChampSelect.current, active, loc.pathname);
+    wasChampSelect.current = active;
+    if (to) nav(to);
+  }, [active, loc.pathname, nav]);
   const gameOn = useDraft((s) => s.draft.gameflow === "GameStart" || isInGame(s.draft.gameflow)), wasGameOn = useRef(false);
   useEffect(() => { // the game starts while you are on the setup page: show the live game (the Draft page's tab follows the client)
     const to = liveTabOnGameStart(wasGameOn.current, gameOn, loc.pathname);

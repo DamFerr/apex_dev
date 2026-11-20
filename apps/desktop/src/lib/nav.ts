@@ -82,3 +82,9 @@ export const setupPathOnLock = (wasLocked: boolean, locked: boolean, enabled: bo
  * the League client and so shows the live game. Never moves you off any other screen.
  */
 export const liveTabOnGameStart = (wasOn: boolean, on: boolean, path: string): string | null => on && !wasOn && path.startsWith("/draft/setup") ? "/draft" : null;
+
+/**
+ * Champ select just ended (running before, not now: a dodge, a remake or a closed lobby) while you are on the setup page: back to the Draft page.
+ * The setup page only makes sense during champ select. Never moves you off any other screen. (A game start ends champ select too and goes to the same page.)
+ */
+export const leaveSetupOnChampSelectEnd = (wasActive: boolean, active: boolean, path: string): string | null => wasActive && !active && path.startsWith("/draft/setup") ? "/draft" : null;

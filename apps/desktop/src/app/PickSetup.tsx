@@ -13,6 +13,7 @@ import type { ImportStep } from "../lib/importSummary";
 import { changedSteps, resolveSetup, type PickSetup } from "../lib/pickSetup";
 import { isTauri } from "../lib/tauri";
 import { BuildPanel } from "./BuildPanel";
+import { DraftContext } from "./DraftContext";
 
 const ROLES: readonly string[] = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
 /** The route carries the Data Dragon id ("Ahri"); the import needs the numeric champion key. */
@@ -59,7 +60,11 @@ export function PickSetupPage() {
       {isTauri && <Button disabled={!canWrite} title={!connected ? "Connect to the League client first" : 'Writes the chosen rune page and summoner spells, plus the item set(s), named "Apex: <champion>". Changes are also written by themselves during champ select.'}
         onClick={() => key !== undefined && void runImport(key, role ?? null, sel)}><Download size={14} aria-hidden />{done ? "Import again" : "Import"}</Button>}
     </div>
+    {/* Build chooser = main column; the read-only draft context (teams, bans, win probability, composition) beside it on wide windows, below on narrow ones (I.7). */}
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem] items-start">
     <BuildPanel id={id} roles={role ? [role] : []} pick={{ sel, variantId: r.variantId, runeIndex: core ? indexOrNull(core.runePages, r.rune) : null, spellIndex: core ? indexOrNull(spellPairsOf(core), r.spell) : null, onChange: choose }} />
+    <DraftContext />
+    </div>
     <p className="text-xs text-muted px-1" title="Item sets are written for every build type, so you can switch in game from the shop. A rune page or spell pair you pick yourself is written even with few games.">Item sets are written for every build type · {isTauri ? "each change is imported by itself during champ select" : "importing needs the desktop app"}</p>
   </div>);
 }

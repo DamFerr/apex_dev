@@ -1,7 +1,5 @@
-import { motion } from "framer-motion";
 import { type Slot } from "@apex/lcu-core";
-import { ChampIcon } from "../components/ChampIcon";
-import { Button, spring } from "../components/ui";
+import { Button } from "../components/ui";
 import { applyCompact } from "../lib/compact";
 import { isTauri } from "../lib/tauri";
 import { actInChampSelect } from "../lib/champSelectActions";
@@ -12,12 +10,12 @@ import { isInGame } from "@apex/lcu-core";
 import { Tabs } from "../components/Tabs";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { LiveGameView } from "./LiveGameView";
-import { createRealData, evaluate, familiarity, poolForRole, poolNote, poolZ, recommend, recommendBans, resolve, teamComp, type PoolChampion } from "@apex/draft-engine";
+import { familiarity, poolForRole, poolNote, poolZ, recommend, recommendBans, type PoolChampion } from "@apex/draft-engine";
 import { FilterBar } from "../components/FilterBar";
-import { useDraftStats, usePool } from "../lib/api";
-import { useDdChampions } from "../lib/ddragon";
-import { BanSuggestions, CompAnalysis, Recommendations, WinProbability } from "./DraftPanels";
-import { champId, champName, runImport, useDraft } from "../lib/lcu";
+import { usePool } from "../lib/api";
+import { BanSuggestions, Recommendations } from "./DraftPanels";
+import { DraftBoard, DraftInsights, useDraftData, useLockedPicks } from "./DraftContext";
+import { runImport, useDraft } from "../lib/lcu";
 import { Download, Maximize2, Minimize2, Swords, Timer, Unplug } from "lucide-react";
 
 /** A small pill toggle (checkbox inside, so it stays a real, labelled checkbox for keyboard and screen readers). The explanation is the tooltip. */
@@ -26,30 +24,8 @@ function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange
     <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="size-3.5 accent-[rgb(var(--accent))]" />{label}</label>;
 }
 
-function SlotCard({ s }: { s: Slot }) {
-  const id = s.locked ? s.championId : s.hoverId, key = champId(id);
-  return (
-    <motion.div layout transition={spring} animate={{ scale: s.locked ? 1 : 0.98 }}
-      aria-label={`${s.team === "ally" ? "Your team" : "Enemy team"} ${s.role ?? "slot"}: ${id ? champName(id) : "empty"}`}
-      className={`glass rounded-lg h-[4.5rem] w-full px-4 flex items-center gap-4 text-left border ${s.locked ? "border-accent/60 shadow-glow" : "border-line/10"} ${s.isLocal ? "ring-1 ring-gold/60" : ""}`}>
-      <span className={s.locked || !id ? "" : "opacity-50"}>{key ? <ChampIcon id={key} name={champName(id)} size={48} /> : <span className="block size-12 rounded-md bg-raised/70" />}</span>
-      <span className="min-w-0"><span className="block text-[1rem] font-medium truncate">{id ? champName(id) : "Picking…"}</span>
-        <span className="block text-xs text-muted">{s.role ?? "—"}{s.isLocal ? " · you" : ""}{!s.locked && id ? " · hovering" : ""}</span></span>
-      {s.locked && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring} className="ml-auto text-xs font-semibold text-accent">LOCKED</motion.span>}
-    </motion.div>
-  );
-}
-
 export function Draft() {
-  const champsQ = useDdChampions(), champs = champsQ.data; // also re-renders once the full champion list has loaded
-  // Suggestions come only from games the collector has stored for the current filters.
-  const statsQ = useDraftStats(), stats = statsQ.data, myId = useUi((s) => s.myRiotId);
-  const data = useMemo(() => {
-    if (!champs || !stats || stats.games === 0) return null;
-    const tags = new Map(champs.map((c) => [c.key, c.tags]));
-    return createRealData(stats, new Map(champs.map((c) => [c.id, c.key])), (k) => tags.get(k) ?? []);
-  }, [champs, stats]);
-  const source = stats && stats.games > 0 ? `${stats.games.toLocaleString()} collected games` : "";
+  const d = useDraftData(), { champsQ, champs, stats, data, source } = d, myId = useUi((s) => s.myRiotId);
   const poolSource = "your mastery and recent games";
   const { draft, autoImport, setAutoImport, spells, setSpells, items, setItems, clickActions, setClickActions } = useDraft();
   const compact = useUi((s) => s.compact);
@@ -69,13 +45,7 @@ export function Draft() {
   }, [poolQ.data, champs]);
   // ... cut down to the role you are playing now: a champion you only play in another role (your top-lane Irelia in a jungle game) is not part of it.
   const pool = useMemo(() => (data && poolAll && me?.role ? new Map(poolForRole(poolAll, me.role, data.roles).map((p) => [p.champion, p] as const)) : null), [data, poolAll, me?.role]);
-  const picks = useMemo(() => {
-    const locked = (t: Slot["team"]) => draft.slots.filter((s) => s.team === t && s.locked).map((s) => ({ champion: s.championId, role: s.role }));
-    return { ally: locked("ally"), enemy: locked("enemy") };
-  }, [draft.slots]);
-  const ev = useMemo(() => (data && draft.active ? evaluate(picks.ally, picks.enemy, data) : null), [data, draft.active, picks]);
-  // Team composition of the locked picks. Same data as the engine's layer B, so the panel shows what the win probability used.
-  const comps = useMemo(() => (data && draft.active ? { ally: teamComp(resolve(picks.ally, data), (c, r) => data.profile?.(c, r), data.tags), enemy: teamComp(resolve(picks.enemy, data), (c, r) => data.profile?.(c, r), data.tags) } : null), [data, draft.active, picks]);
+  const picks = useLockedPicks(draft.slots);
   const recs = useMemo(() => {
     if (!data || !champs || !draft.active || !me?.role || me.locked) return [];
     const t0 = performance.now();
@@ -92,7 +62,6 @@ export function Draft() {
     const exclude = takenChampions(draft);
     return recommendBans(me.role, champs.map((c) => c.key), data, personalize && pool ? [...pool.values()].map((p) => ({ champion: p.champion, games: p.games, weight: familiarity(p.points, p.games) })).filter((p) => p.weight > 0) : [], { exclude, limit: 5 });
   }, [data, champs, draft.banning, draft.slots, draft.bans, me, pool, personalize]);
-  const team = (t: Slot["team"]) => draft.slots.filter((x) => x.team === t);
   return (<>
     <h1 className="font-display text-3xl font-semibold tracking-tight mb-5">Draft</h1>
     {!draft.connected && <div role="status" className="glass rounded-lg px-4 py-3 mb-5 text-sm text-muted flex items-center gap-3"><Unplug size={16} aria-hidden />League client not detected. Start it and Apex connects automatically.</div>}
@@ -115,18 +84,13 @@ export function Draft() {
       // Board on top, the assistant panels full width underneath (more room, easier to read). Compact mode puts the panels first.
       <div className="flex flex-col gap-6">
         <div className={compact ? "order-2" : ""}>
-          <div className="flex gap-8 mb-4 text-sm text-muted">{(["ally", "enemy"] as const).map((t) => <div key={t} className="flex items-center gap-2.5">{t === "ally" ? "Your bans" : "Enemy bans"}
-            {draft.bans[t].map((b) => champId(b) && <ChampIcon key={b} id={champId(b)!} name={champName(b)} size={32} />)}</div>)}</div>
-          <div className={`grid ${compact ? "grid-cols-1 gap-4" : "grid-cols-2 gap-8"}`}>{(["ally", "enemy"] as const).map((t) => <div key={t} className="space-y-3">
-            <div className="font-display text-lg font-semibold">{t === "ally" ? "Your team" : "Enemy team"}</div>{team(t).map((s) => <SlotCard key={s.cellId} s={s} />)}</div>)}</div>
+          <DraftBoard layout={compact ? "stacked" : "wide"} />
         </div>
         <aside aria-label="Draft assistant" className={compact ? "order-1 space-y-6" : "space-y-6"}>
-          {champsQ.isError && <div className="glass rounded-lg p-6 text-sm text-muted">Champion data from Riot’s Data Dragon couldn’t be loaded (offline?), so there is no win probability or suggestions.</div>}
-          {!data && !champsQ.isError && <div role="status" className="glass rounded-lg p-6 text-sm text-muted">{statsQ.isError ? (statsQ.error as Error).message : statsQ.isLoading ? "Loading collected statistics…" : "No collected games for these filters yet, so there are no suggestions. The collector gathers them in the background; check its progress in Settings."}</div>}
-          {ev && <WinProbability ev={ev} source={source} games={stats?.games ?? 0} />}
-          {banSuggestions.length > 0 && me?.role && <BanSuggestions bans={banSuggestions} role={me.role} source={source} pool={poolSource} onHover={canClick && draft.myActions.ban !== null ? (c) => void actInChampSelect("ban", "hover", c) : undefined} onBan={canClick && draft.myActions.ban !== null ? (c) => void actInChampSelect("ban", "commit", c) : undefined} />}
-          {recs.length > 0 && me?.role && <Recommendations recs={recs} role={me.role} source={source} onHover={canClick && draft.myActions.pick !== null ? (c) => void actInChampSelect("pick", "hover", c) : undefined} onLock={canClick && draft.myActions.pickLive ? (c) => void actInChampSelect("pick", "commit", c) : undefined} />}
-          {comps && comps.ally.picks + comps.enemy.picks > 0 && <CompAnalysis ally={comps.ally} enemy={comps.enemy} />}
+          <DraftInsights d={d} slots={draft.slots} active={draft.active}>
+            {banSuggestions.length > 0 && me?.role && <BanSuggestions bans={banSuggestions} role={me.role} source={source} pool={poolSource} onHover={canClick && draft.myActions.ban !== null ? (c) => void actInChampSelect("ban", "hover", c) : undefined} onBan={canClick && draft.myActions.ban !== null ? (c) => void actInChampSelect("ban", "commit", c) : undefined} />}
+            {recs.length > 0 && me?.role && <Recommendations recs={recs} role={me.role} source={source} onHover={canClick && draft.myActions.pick !== null ? (c) => void actInChampSelect("pick", "hover", c) : undefined} onLock={canClick && draft.myActions.pickLive ? (c) => void actInChampSelect("pick", "commit", c) : undefined} />}
+          </DraftInsights>
         </aside>
       </div>)}
     </>}

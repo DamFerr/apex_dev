@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPaletteEntries, championPath, liveTabOnGameStart, profilePath, setupPathOnLock, shouldOpenDraft } from "./nav";
+import { buildPaletteEntries, championPath, leaveSetupOnChampSelectEnd, liveTabOnGameStart, profilePath, setupPathOnLock, shouldOpenDraft } from "./nav";
 
 const L = [
   { id: "Kaisa", name: "Kai'Sa" }, { id: "MonkeyKing", name: "Wukong" }, { id: "Draven", name: "Draven" }, { id: "Ahri", name: "Ahri" },
@@ -128,4 +128,10 @@ describe("liveTabOnGameStart", () => {
   it("goes from the setup page to the Draft page (live tab) when the game starts", () => expect(liveTabOnGameStart(false, true, "/draft/setup/Ahri/MID")).toBe("/draft"));
   it("fires only on the start, not while the game keeps running", () => { expect(liveTabOnGameStart(true, true, "/draft/setup/Ahri/MID")).toBeNull(); expect(liveTabOnGameStart(false, false, "/draft/setup/Ahri/MID")).toBeNull(); });
   it("never moves you off another screen", () => { for (const p of ["/", "/champions", "/draft", "/settings"]) expect(liveTabOnGameStart(false, true, p)).toBeNull(); });
+});
+
+describe("leaveSetupOnChampSelectEnd", () => {
+  it("goes from the setup page to the Draft page when champ select ends (dodge)", () => expect(leaveSetupOnChampSelectEnd(true, false, "/draft/setup/Ahri/MID")).toBe("/draft"));
+  it("fires only on the change", () => { expect(leaveSetupOnChampSelectEnd(true, true, "/draft/setup/Ahri/MID")).toBeNull(); expect(leaveSetupOnChampSelectEnd(false, false, "/draft/setup/Ahri/MID")).toBeNull(); });
+  it("never moves you off another screen", () => { for (const p of ["/", "/champions", "/draft", "/settings"]) expect(leaveSetupOnChampSelectEnd(true, false, p)).toBeNull(); });
 });

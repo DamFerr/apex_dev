@@ -11,7 +11,7 @@ export function rate(wins: number, games: number) {
   return { adj: shrink(wins, games, 0.5, 50), raw: games ? wins / games : 0, lo, hi, badge: sampleBadge(games) };
 }
 export function LowBadge({ games }: { games: number }) {
-  return sampleBadge(games) === "low" ? <span className="ml-2 rounded-full bg-gold/15 text-gold text-[10px] px-2 py-0.5">low data</span> : null;
+  return sampleBadge(games) === "low" ? <span className="ml-2 rounded-full bg-gold/15 text-gold text-[10px] font-semibold tracking-wide px-2 py-0.5">LOW DATA</span> : null;
 }
 
 /**

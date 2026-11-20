@@ -51,7 +51,7 @@ export const idleCollector = (riot: RiotApi, store: Store) => new Collector(riot
 
 /** A live game: p0..p4 blue, p5..p9 red, p4 (Lee Sin) carries Smite, one bot-free lobby, one ban of Ahri and one empty ban slot. */
 export const activeGameFixture = (): RiotActiveGame => ({ gameId: 1, gameMode: "CLASSIC", gameLength: 372, gameQueueConfigId: 420,
-  participants: [103, 222, 412, 86, 64, 99, 238, 22, 516, 157].map((championId, i) => ({ puuid: `p${i}`, riotId: `Player${i}#EUW`, teamId: i < 5 ? 100 : 200, championId, spell1Id: i === 4 || i === 8 ? 11 : 4, spell2Id: 14 })),
+  participants: [103, 222, 412, 86, 64, 99, 238, 22, 516, 157].map((championId, i) => ({ puuid: `p${i}`, riotId: `Player${i}#EUW`, teamId: i < 5 ? 100 : 200, championId, spell1Id: i === 4 || i === 8 ? 11 : 4, spell2Id: 14, perks: { perkIds: [8112, 8126, 8138, 8135, 8226, 8210], perkStyle: 8100, perkSubStyle: 8200 } })),
   bannedChampions: [{ championId: 103, teamId: 100 }, { championId: -1, teamId: 200 }, { championId: 222, teamId: 200 }] });
 
 /** Fake Riot that counts calls, so tests can prove caching works. */

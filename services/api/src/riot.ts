@@ -18,7 +18,7 @@ export interface RiotTimelineEvent { type: string; timestamp: number; participan
 export interface RiotTimeline { metadata: { participants: string[] }; info: { frames: { events?: RiotTimelineEvent[] }[] } }
 export interface LeagueEntry { queueType: string; tier: string; rank: string; leaguePoints: number; wins: number; losses: number; hotStreak?: boolean }
 export interface LadderEntry { puuid?: string; tier: string; rank: string; leaguePoints: number }
-export interface ActiveParticipant { puuid?: string; riotId?: string; teamId: number; championId: number; spell1Id?: number; spell2Id?: number; bot?: boolean }
+export interface ActiveParticipant { puuid?: string; riotId?: string; teamId: number; championId: number; spell1Id?: number; spell2Id?: number; bot?: boolean; /** Spectator-v5 runes: perkIds[0] is the keystone, perkSubStyle the secondary tree. */ perks?: { perkIds?: number[]; perkStyle?: number; perkSubStyle?: number } }
 export interface RiotActiveGame { gameId: number; gameMode: string; gameType?: string; gameLength: number; gameQueueConfigId?: number; participants: ActiveParticipant[]; bannedChampions?: { championId: number; teamId: number }[] }
 export interface RiotMastery { championId: number; championLevel: number; championPoints: number }
 
