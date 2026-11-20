@@ -8,7 +8,7 @@ import type { PickSetup } from "./pickSetup";
 import { isTauri } from "./tauri";
 import { summarizeImport, wroteAnything, type ImportOutcome, type ImportStep } from "./importSummary";
 import { toast } from "./toast";
-import { initialDraft, nextPick, parseLcuMessage, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type LcuEvent, type OverlayPick } from "@apex/lcu-core";
+import { initialDraft, needsPickResume, nextPick, parseLcuMessage, pickFromGameflowSession, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type GameflowSession, type LcuEvent, type Me, type OverlayPick } from "@apex/lcu-core";
 
 /** Address of the local League client simulator (packages/lcu-mock). Only used by the browser dev preview, never in the desktop app. */
 const DEV_LCU_HOST = "127.0.0.1:8765";
@@ -44,12 +44,30 @@ export async function runImport(championKey: number, role: Role | null, sel?: Pi
   if (message && !opts.quiet) toast(message);
   for (const e of errors) toast(e, "error");
 }
+/** True once the client was asked for your pick in this loading screen / game, so it is asked once, not on every event. Reset when the game phase ends. */
+let resumeTried = false;
+/**
+ * Apex started after champ select (mid-game or on the loading screen), so no lock-in was seen: read your own champion from the client's gameflow session.
+ * Read-only (two GETs), only your entry is used, and a pick that arrived meanwhile is never overwritten.
+ */
+async function resumePick() {
+  try {
+    const [session, me] = await Promise.all([
+      invoke<GameflowSession>("lcu_request", { method: "GET", path: "/lol-gameflow/v1/session" }),
+      invoke<Me>("lcu_request", { method: "GET", path: "/lol-summoner/v1/current-summoner" }),
+    ]);
+    const pick = pickFromGameflowSession(session, me);
+    if (pick && needsPickResume(useDraft.getState().overlayPick, useDraft.getState().draft)) useDraft.setState({ overlayPick: pick });
+  } catch { /* client busy or session not readable: the overlay simply stays hidden */ }
+}
 export const useDraft = create<DraftStore>((set, get) => ({
   draft: initialDraft, imported: null, overlayPick: null, autoImport: true, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }),
   setAutoImport: (autoImport) => set({ autoImport }), clickActions: true, setClickActions: (clickActions) => set({ clickActions }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });
     set({ draft: next, overlayPick: nextPick(get().overlayPick, next), ...(next.active && !prev.active ? { imported: null } : {}) });
+    if (needsPickResume(get().overlayPick, next)) { if (isTauri && !resumeTried) { resumeTried = true; void resumePick(); } }
+    else if (next.gameflow !== "GameStart" && next.gameflow !== "InProgress" && next.gameflow !== "Reconnect") resumeTried = false;
     if (!imp) return;
     if (isTauri) void runImport(imp.championId, imp.role);
     else toast(`Import skipped for ${champName(imp.championId)}: writing to the League client needs the desktop app.`);

@@ -62,7 +62,7 @@ export function PatchPanel({ id, roles }: { id: string; roles: Role[] }) {
           <th className="font-normal text-right pl-2">Ban rate</th><th className="font-normal text-right pl-2">Change</th></tr></thead>
         <tbody>{rows.map(({ p, d }, i) => { const adj = p.games > 0 ? shrink(p.wins, p.games, 0.5, 50) : null; return (
           <tr key={p.patch} className="h-9 border-t border-line/5">
-            <td className="whitespace-nowrap font-medium">{p.patch}{i === 0 && <span className="ml-2 rounded-full bg-accent/20 text-[10px] px-2 py-0.5">newest</span>}</td>
+            <td className="whitespace-nowrap font-medium">{p.patch}{i === 0 && <span className="ml-2 rounded-full bg-accent/20 text-[10px] font-semibold tracking-wide px-2 py-0.5">NEWEST</span>}</td>
             <td className="text-right tabular-nums text-muted">{p.games.toLocaleString()}{p.games > 0 && <LowBadge games={p.games} />}</td>
             <td className={`text-right tabular-nums font-medium pl-2 ${adj === null ? "text-muted" : wrClass(adj)}`} title={p.games ? `Raw ${pct(p.wins / p.games)}` : undefined}>{adj === null ? "–" : pct(adj)}</td>
             <td className="text-right pl-2">{d ? <Delta value={d.winDelta} tone={winTone(d)} title={d.winDelta === null ? `Needs at least ${MIN_DELTA_GAMES} games in both patches` : `95% range ${signed(d.winRange![0])} to ${signed(d.winRange![1])} pp${d.significant ? "" : ": could be luck"}`} /> : <span className="text-muted">–</span>}</td>

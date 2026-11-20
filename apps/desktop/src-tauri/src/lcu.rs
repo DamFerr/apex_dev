@@ -100,6 +100,7 @@ pub async fn lcu_request(method: String, path: String, body: Option<Value>) -> R
     const PERKS: [&str; 2] = ["/lol-perks/v1/pages", "/lol-perks/v1/currentpage"];
     const SELECTION: &str = "/lol-champ-select/v1/session/my-selection";
     const SUMMONER: &str = "/lol-summoner/v1/current-summoner";
+    const GAMEFLOW_SESSION: &str = "/lol-gameflow/v1/session"; // read-only: your own champion when Apex starts mid-game
     const ACTIONS: &str = "/lol-champ-select/v1/session/actions/";
     let perks_path = PERKS.iter().any(|p| path == *p || path.starts_with(&format!("{p}/")));
     // Item sets: /lol-item-sets/v1/item-sets/<numeric summoner id>/sets, read and write. Nothing else under /lol-item-sets.
@@ -121,7 +122,7 @@ pub async fn lcu_request(method: String, path: String, body: Option<Value>) -> R
             method == "PATCH"
         } else if action_patch || action_complete {
             (method == "PATCH" && action_patch) || (method == "POST" && action_complete)
-        } else if path == SUMMONER {
+        } else if path == SUMMONER || path == GAMEFLOW_SESSION {
             method == "GET"
         } else if item_sets_path {
             matches!(method.as_str(), "GET" | "PUT")
