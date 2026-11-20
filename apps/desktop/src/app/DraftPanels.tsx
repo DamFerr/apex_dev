@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { RoleIcon } from "../components/RoleIcon";
 import type { BanSuggestion, Evaluation, Factor, Recommendation, TeamComp, TeamScaling } from "@apex/draft-engine";
@@ -97,8 +97,8 @@ function DamageBar({ c, label }: { c: TeamComp; label: string }) {
   const empty = c.picks === 0, text = `${label}: ${pct(c.ad)} physical, ${pct(c.ap)} magic${c.trueShare >= 0.005 ? `, ${pct(c.trueShare)} true` : ""}${c.measured ? "" : ", estimated from champion classes"}`;
   return (
     <div>
-      <div className="flex justify-between text-sm mb-1.5"><span className="font-medium">{label}</span>
-        <span className="text-muted tabular-nums">{empty ? "no picks yet" : <><span className="text-gold">AD {pct(c.ad)}</span> · <span className="text-accent">AP {pct(c.ap)}</span>{c.trueShare >= 0.005 && <> · True {pct(c.trueShare)}</>}</>}</span></div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm mb-1.5"><span className="font-medium">{label}</span>
+        <span className="text-muted tabular-nums whitespace-nowrap">{empty ? "no picks yet" : <><span className="text-gold">AD {pct(c.ad)}</span> · <span className="text-accent">AP {pct(c.ap)}</span>{c.trueShare >= 0.005 && <> · True {pct(c.trueShare)}</>}</>}</span></div>
       <div className="relative h-3 rounded-full bg-raised/70 overflow-hidden" role="img" aria-label={text}>
         <motion.div className="absolute inset-0 origin-left bg-text/70" initial={false} animate={{ scaleX: empty ? 0 : 1 }} transition={spring} />
         <motion.div className="absolute inset-0 origin-left bg-accent" initial={false} animate={{ scaleX: empty ? 0 : c.ad + c.ap }} transition={spring} />
@@ -108,14 +108,21 @@ function DamageBar({ c, label }: { c: TeamComp; label: string }) {
   );
 }
 
+/** One metric for both teams: a heading line (name, LOW DATA, games) and two rows (team, bar, number), so the numbers never fight the label for width. */
+const ROWS = "grid grid-cols-[3.25rem_1fr_auto] items-center gap-x-3 gap-y-1.5";
 /** A per-minute number for both teams, bars relative to the larger one. Only drawn when both teams are measured. */
 function Versus({ label, ally, enemy, unit, digits = 0, games, hint }: { label: string; ally: number; enemy: number; unit: string; digits?: number; games?: number; hint?: string }) {
-  const top = Math.max(ally, enemy, 1e-9), f = (n: number) => n.toFixed(digits);
+  const top = Math.max(ally, enemy, 1e-9), f = (n: number) => n.toFixed(digits), show = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   return (
     <div className="text-sm" title={hint}>
-      <div className="flex justify-between mb-1.5"><span className="font-medium">{label}{games !== undefined && <LowBadge games={games} />}</span><span className="text-muted tabular-nums">you {f(ally)} · enemy {f(enemy)} {unit}{games !== undefined && <> · {games.toLocaleString()} games</>}</span></div>
-      <div className="grid gap-1" role="img" aria-label={`${label}: your team ${f(ally)}, enemy team ${f(enemy)} ${unit}`}>
-        {[[ally, "bg-accent"], [enemy, "bg-bad"]].map(([v, c], i) => <div key={i} className="h-2 rounded-full bg-raised/70 overflow-hidden"><motion.div className={`h-full w-full origin-left ${c}`} initial={false} animate={{ scaleX: (v as number) / top }} transition={spring} /></div>)}
+      <div className="flex items-baseline justify-between gap-3 mb-2"><span className="font-medium">{label}{games !== undefined && <LowBadge games={games} />}</span>
+        {games !== undefined && <span className="text-xs text-muted tabular-nums whitespace-nowrap">{games.toLocaleString()} games</span>}</div>
+      <div className={ROWS} role="img" aria-label={`${label}: your team ${f(ally)}, enemy team ${f(enemy)} ${unit}`}>
+        {([["You", ally, "bg-accent"], ["Enemy", enemy, "bg-bad"]] as const).map(([who, v, c]) => <Fragment key={who}>
+          <span className="text-xs text-muted">{who}</span>
+          <div className="h-2 rounded-full bg-raised/70 overflow-hidden"><motion.div className={`h-full w-full origin-left ${c}`} initial={false} animate={{ scaleX: v / top }} transition={spring} /></div>
+          <span className="text-right tabular-nums whitespace-nowrap">{show(v)} <span className="text-xs text-muted">{unit}</span></span>
+        </Fragment>)}
       </div>
       {hint && <span className="sr-only">{hint}</span>}
     </div>
@@ -136,15 +143,18 @@ function ScalingRow({ ally, enemy }: { ally: TeamScaling; enemy: TeamScaling }) 
   if (measured.length === 0) return null;
   const detail = `Scaling is the late (over 33 min) minus early (under 25 min) win rate of each pick in its role, averaged over the team's picks; a pick without enough games counts 0. Based on ${ally.games.toLocaleString()} games for your team and ${enemy.games.toLocaleString()} for the enemy. A correlation, not a cause: long games are also won by stronger teams.`;
   return (
-    <div className="text-sm md:col-span-2" title={detail}>
-      <div className="flex justify-between mb-1.5"><span className="font-medium">Scaling<span className="ml-2 text-xs text-muted">correlation</span><LowBadge games={Math.min(...measured.map((t) => t.games))} /></span>
-        <span className="text-muted tabular-nums">you {signed(ally.score)} · enemy {signed(enemy.score)} pts · {ally.games.toLocaleString()} / {enemy.games.toLocaleString()} games</span></div>
-      <div className="grid gap-1" role="img" aria-label={`Scaling, late minus early win rate in points: your team ${signed(ally.score)}, enemy team ${signed(enemy.score)}`}>
-        {([[ally.score, "bg-accent"], [enemy.score, "bg-bad"]] as const).map(([v, c], i) => (
-          <div key={i} className="relative h-2 rounded-full bg-raised/70 overflow-hidden">
+    <div className="text-sm" title={detail}>
+      <div className="flex items-baseline justify-between gap-3 mb-2"><span className="font-medium">Scaling<span className="ml-2 text-xs text-muted">correlation</span><LowBadge games={Math.min(...measured.map((t) => t.games))} /></span>
+        <span className="text-xs text-muted tabular-nums whitespace-nowrap">{ally.games.toLocaleString()} / {enemy.games.toLocaleString()} games</span></div>
+      <div className={ROWS} role="img" aria-label={`Scaling, late minus early win rate in points: your team ${signed(ally.score)}, enemy team ${signed(enemy.score)}`}>
+        {([["You", ally.score, "bg-accent"], ["Enemy", enemy.score, "bg-bad"]] as const).map(([who, v, c]) => <Fragment key={who}>
+          <span className="text-xs text-muted">{who}</span>
+          <div className="relative h-2 rounded-full bg-raised/70 overflow-hidden">
             <div className="absolute inset-y-0 left-1/2 w-px bg-text/30" />
             <motion.div className={`absolute inset-y-0 w-1/2 ${v >= 0 ? "left-1/2 origin-left" : "right-1/2 origin-right"} ${c}`} initial={false} animate={{ scaleX: Math.min(1, Math.abs(v) / SCALING_BAR_FULL) }} transition={spring} />
-          </div>))}
+          </div>
+          <span className="text-right tabular-nums whitespace-nowrap">{signed(v)} <span className="text-xs text-muted">pts</span></span>
+        </Fragment>)}
       </div>
       <span className="sr-only">{detail}</span>
     </div>
@@ -160,13 +170,13 @@ export function CompAnalysis({ ally, enemy, allyScaling, enemyScaling }: { ally:
   return (
     <section className="glass rounded-lg p-6" aria-label="Team composition">
       <div className="font-display text-xl font-semibold mb-4">Team composition</div>
-      <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
-        <DamageBar c={ally} label="Your team" /><DamageBar c={enemy} label="Enemy team" />
+      <div className="space-y-4"><DamageBar c={ally} label="Your team" /><DamageBar c={enemy} label="Enemy team" /></div>
+      {(both || (ally.peelPerMin != null && enemy.peelPerMin != null) || (allyScaling && enemyScaling)) && <div className="mt-5 space-y-5 border-t border-line/10 pt-5">
         {both && <><Versus label="Damage taken" ally={ally.takenPerMin!} enemy={enemy.takenPerMin!} unit="/min" /><Versus label="Crowd control time" ally={ally.ccPerMin!} enemy={enemy.ccPerMin!} unit="s/min" digits={1} /></>}
         {ally.peelPerMin != null && enemy.peelPerMin != null && <Versus label="Heals and shields" ally={ally.peelPerMin} enemy={enemy.peelPerMin} unit="/min" games={Math.min(ally.peelGames, enemy.peelGames)}
           hint={`Healing and shielding on teammates per minute, summed over the locked picks, measured from collected games that carry it (older games do not). Fewest games behind a pick: ${ally.peelGames.toLocaleString()} for your team, ${enemy.peelGames.toLocaleString()} for the enemy.`} />}
         {allyScaling && enemyScaling && <ScalingRow ally={allyScaling} enemy={enemyScaling} />}
-      </div>
+      </div>}
       {skewed.length > 0 && <p className="mt-5 text-sm text-gold" role="status">{skewed.join(" ")} One resistance item goes a long way against it.</p>}
       <p className="mt-3 text-sm text-muted">{estimated
         ? "Estimated from champion classes where a champion has fewer than 20 collected games with damage data. Damage taken and CC appear once both teams are measured."
