@@ -66,7 +66,7 @@ export function PatchPanel({ id, role }: { id: string; role?: Role }) {
             <td className="text-right whitespace-nowrap pl-2"><span className="tabular-nums font-medium">{p.matches ? pct(rateOf(p.bans, p.matches)) : "–"}</span><InlineDelta value={d ? d.banDelta : undefined} tone="plain" /></td>
           </tr>); })}</tbody>
       </table>
-      <p className="text-[11px] text-muted" title={CHANGE_TIP}>(±) change vs the patch below, in pp · win-rate changes need {MIN_DELTA_GAMES}+ games each<span className="sr-only">. {CHANGE_TIP}</span></p>
+      <p className="text-[11px] text-muted" title={CHANGE_TIP}>Change vs the patch below, in brackets (pp) · {MIN_DELTA_GAMES}+ games each<span className="sr-only">. {CHANGE_TIP}</span></p>
     </>}
   </div>);
 }
