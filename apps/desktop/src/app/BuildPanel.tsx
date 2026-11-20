@@ -4,6 +4,7 @@ import { RoleIcon } from "../components/RoleIcon";
 import type { BuildItem, ChampionBuild, ItemPathStat, Role, RunePageStat } from "@apex/schema";
 import { itemLayout, SHARD_ROWS, sortVariants, SPELL_NAMES, type PageCore, type VariantSort } from "@apex/lcu-core";
 import { displaySpells } from "../lib/spells";
+import type { PickSetup } from "../lib/pickSetup";
 import { Chip, Skeleton } from "../components/ui";
 import { pct, rate, LowBadge, Wpa, wrClass } from "../components/StatRows";
 import { useChampionBuild } from "../lib/api";
@@ -41,14 +42,17 @@ function Shards({ ids }: { ids: number[] }) {
   </div>);
 }
 
-function RunesColumn({ b }: { b: Core }) {
-  const [pick, setPick] = useState(0), names = useRuneLookup();
-  const page: RunePageStat | undefined = b.runePages[Math.min(pick, b.runePages.length - 1)];
+/** `choose`: on the draft setup page the pages are the import's choice (index = the page that is written, null = none chosen and too few games, so Apex defaults are written). */
+interface Choose { index: number | null; onPick: (i: number) => void }
+function RunesColumn({ b, choose }: { b: Core; choose?: Choose }) {
+  const [shown, setShown] = useState(0), names = useRuneLookup(), at = choose ? (choose.index ?? 0) : shown;
+  const page: RunePageStat | undefined = b.runePages[Math.min(at, b.runePages.length - 1)];
   return (<div className="space-y-5 mx-auto w-full max-w-[640px]">
     <Heading>Runes</Heading>
-    {b.runePages.length > 1 && <div className="flex flex-wrap justify-center gap-2">{b.runePages.map((p, i) =>
-      <button key={i} onClick={() => setPick(i)} aria-pressed={i === pick} className={`focus-ring rounded-lg border px-3 py-2 flex items-center gap-2.5 text-sm transition-colors ${i === pick ? "border-accent/60 bg-accent/15" : "border-line/10 hover:bg-raised/60"}`} title={`${names.get(p.perkIds[0])?.name ?? "Page"}: ${p.games} games`}>
+    {(b.runePages.length > 1 || (choose && b.runePages.length > 0)) && <div className="flex flex-wrap justify-center gap-2">{b.runePages.map((p, i) =>
+      <button key={i} onClick={() => (choose ? choose.onPick(i) : setShown(i))} aria-pressed={choose ? choose.index === i : i === shown} aria-label={choose ? `Rune page ${i + 1}, ${p.games} games` : undefined} className={`focus-ring rounded-lg border px-3 py-2 flex items-center gap-2.5 text-sm transition-colors ${(choose ? choose.index === i : i === shown) ? "border-accent/60 bg-accent/15" : "border-line/10 hover:bg-raised/60"}`} title={`${names.get(p.perkIds[0])?.name ?? "Page"}: ${p.games} games`}>
         <GameIcon kind="rune" id={p.perkIds[0]} size={32} /><span className="text-left leading-tight"><span className="block">{wr(p.wins, p.games)}</span><span className="block text-muted">{p.games.toLocaleString()} games</span></span></button>)}</div>}
+    {page && choose && choose.index === null && <div className="text-xs text-center text-muted" title="Pick a page to write it anyway.">Too few games for a default: Apex writes its own rune page unless you pick one.</div>}
     {page && <>
       <div className="grid grid-cols-2 gap-x-8 gap-y-6 rounded-lg bg-raised/30 border border-line/5 p-6">
         <RuneTree styleId={page.primaryStyleId} chosen={page.perkIds.slice(0, 4)} primary label="Primary runes" />
@@ -71,14 +75,21 @@ function RunesColumn({ b }: { b: Core }) {
 /** Why only keystones show: detail for the tooltip and screen readers. */
 const KEYSTONE_TIP = "Full rune pages (all runes and shards) are stored for newly collected games only. They appear as the collector gathers more.";
 
-function SpellsBlock({ b }: { b: Core }) {
+function SpellsBlock({ b, choose }: { b: Core; choose?: Choose }) {
   const pairs = b.spellPairs?.length ? b.spellPairs : b.spells ? [b.spells] : [];
   if (!pairs.length) return null;
+  const row = "flex items-center gap-4 rounded-lg border px-4 py-3 w-full text-left ";
   return (<div className="space-y-3 shrink-0 w-[380px] max-w-full">
     <Heading>Summoner spells</Heading>
-    {pairs.map((p) => <div key={p.ids.join()} role="group" aria-label={`Summoner spells ${spellText(p.ids)}`} className="flex items-center gap-4 rounded-lg bg-raised/40 border border-line/5 px-4 py-3">
-      <span className="inline-flex items-center gap-2">{displaySpells(p.ids).map((sid) => <GameIcon key={sid} kind="spell" id={sid} size={40} />)}</span>
-      <span className="text-[1rem] leading-6">{wr(p.wins, p.games)}</span><span className="text-sm text-muted ml-auto">{p.games.toLocaleString()} games<LowBadge games={p.games} /></span></div>)}
+    {pairs.map((p, i) => {
+      const inner = <>
+        <span className="inline-flex items-center gap-2">{displaySpells(p.ids).map((sid) => <GameIcon key={sid} kind="spell" id={sid} size={40} />)}</span>
+        <span className="text-[1rem] leading-6">{wr(p.wins, p.games)}</span><span className="text-sm text-muted ml-auto">{p.games.toLocaleString()} games<LowBadge games={p.games} /></span></>;
+      return choose
+        ? <button key={p.ids.join()} onClick={() => choose.onPick(i)} aria-pressed={choose.index === i} aria-label={`Spell pair ${i + 1}, ${p.games} games`}
+            className={`focus-ring transition-colors ${row}${choose.index === i ? "border-accent/60 bg-accent/15" : "border-line/10 hover:bg-raised/60"}`}>{inner}</button>
+        : <div key={p.ids.join()} role="group" aria-label={`Summoner spells ${spellText(p.ids)}`} className={`${row}bg-raised/40 border-line/5`}>{inner}</div>;
+    })}
   </div>);
 }
 
@@ -181,16 +192,22 @@ function VariantList({ b, sort, setSort, selected, setSelected }: { b: ChampionB
 }
 
 /** Recommended runes, summoner spells, items and skill order from collected games, as separate builds when players really build differently (AP, AD, Tank, Lethality ...). */
-export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
+/**
+ * With `pick` the panel is the draft setup page's chooser: build type, rune page and spell pair are what the import writes (what is lit is what is written),
+ * and a click reports the new choice through `onChange`. The indexes and the build type come from `resolveSetup`, so the defaults match the import exactly.
+ */
+export interface BuildPick { sel: PickSetup; variantId: string | null; runeIndex: number | null; spellIndex: number | null; onChange: (next: PickSetup) => void }
+export function BuildPanel({ id, roles, pick }: { id: string; roles: Role[]; pick?: BuildPick }) {
   const [role, setRole] = useState<Role | undefined>(roles[0]), [sort, setSort] = useState<VariantSort>("best"), [vid, setVid] = useState("");
   const { data: b, isError, isLoading } = useChampionBuild(id, role);
-  const variants = b?.variants ?? [], sorted = b ? sortVariants(b, sort) : [], active = sorted.find((v) => v.id === vid) ?? sorted[0];
+  const variants = b?.variants ?? [], sorted = b ? sortVariants(b, sort) : [];
+  const active = pick ? sorted.find((v) => v.id === pick.variantId) : sorted.find((v) => v.id === vid) ?? sorted[0];
   const cur: Core | undefined = active ? active.build : b;
   const has = !!cur && (cur.runePages.length > 0 || cur.keystones.length > 0 || cur.itemBlocks.length > 0 || !!cur.skillOrder);
 
   return (<div className="glass rounded-lg p-5 space-y-5" aria-label="Recommended build">
     <div className="flex flex-wrap items-center gap-3">
-      <h2 className="font-display text-lg font-semibold mr-auto">Recommended build</h2>
+      <h2 className="font-display text-lg font-semibold mr-auto">{pick ? "Pick your build" : "Recommended build"}</h2>
       {roles.length > 1 && roles.map((r) => <Chip key={r} active={role === r} onClick={() => { setRole(r); setVid(""); }}><span className="inline-flex items-center gap-1.5"><RoleIcon role={r} size={16} decorative />{r}</span></Chip>)}
     </div>
     {isLoading && <Skeleton className="h-32" />}
@@ -201,12 +218,12 @@ export function BuildPanel({ id, roles }: { id: string; roles: Role[] }) {
           row 1: build variants | runes | items;  row 2: summoner spells | skill order, together as wide as the three columns.
           Narrower: variants on the left, everything else stacked in the right column (spells beside the skill order when they fit). */}
       <div className="min-w-0 min-[1400px]:col-start-1 min-[1400px]:row-start-1">
-        {variants.length > 0 ? <VariantList b={b} sort={sort} setSort={setSort} selected={active?.id ?? ""} setSelected={setVid} /> : <SingleBuild b={b} />}
+        {variants.length > 0 ? <VariantList b={b} sort={sort} setSort={setSort} selected={active?.id ?? ""} setSelected={pick ? (v) => pick.onChange({ variantId: v }) : setVid} /> : <SingleBuild b={b} />}
       </div>
-      <div key={`r-${active?.id ?? "all"}`} className="min-w-0 col-start-2 min-[1400px]:row-start-1"><RunesColumn b={cur} /></div>
+      <div key={`r-${active?.id ?? "all"}`} className="min-w-0 col-start-2 min-[1400px]:row-start-1"><RunesColumn b={cur} choose={pick && { index: pick.runeIndex, onPick: (i) => pick.onChange({ ...pick.sel, runePage: i }) }} /></div>
       {/* Bottom row: spells (fixed width) | skill order (takes the rest), covering all three columns on wide screens. */}
       <div className="col-start-2 flex flex-wrap items-start gap-x-10 gap-y-8 min-[1400px]:col-start-1 min-[1400px]:col-span-3 min-[1400px]:row-start-2 min-[1400px]:flex-nowrap">
-        <SpellsBlock b={cur} />
+        <SpellsBlock b={cur} choose={pick && { index: pick.spellIndex, onPick: (i) => pick.onChange({ ...pick.sel, spellPair: i }) }} />
         {cur.skillOrder && <div className="flex-1 min-w-[420px] min-[1400px]:min-w-0"><SkillBlock id={id} b={cur} /></div>}
       </div>
       <div className="min-w-0 col-start-2 min-[1400px]:col-start-3 min-[1400px]:row-start-1"><ItemsColumn b={cur} /></div>

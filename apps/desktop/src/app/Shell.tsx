@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Search, Square, Star, User, UserSearch, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { NAV, SETTINGS_ITEM, buildPaletteEntries, setupPathOnLock, shouldOpenDraft, type NavItem, type PaletteEntry } from "../lib/nav";
+import { NAV, SETTINGS_ITEM, buildPaletteEntries, liveTabOnGameStart, setupPathOnLock, shouldOpenDraft, type NavItem, type PaletteEntry } from "../lib/nav";
 import { ChampIcon } from "../components/ChampIcon";
 import { useUi } from "../lib/store";
 import { publicPatch } from "@apex/schema";
@@ -12,6 +12,7 @@ import { win } from "../lib/tauri";
 import { Skeleton, spring } from "../components/ui";
 import { preload } from "./lazyPages";
 import { GameSummary } from "./GameSummary";
+import { isInGame } from "@apex/lcu-core";
 import { champId, useDraft } from "../lib/lcu";
 import { useDdChampions, useDdVersion } from "../lib/ddragon";
 import { applyCompact } from "../lib/compact";
@@ -169,6 +170,12 @@ export function Shell() {
     if (shouldOpenDraft(wasActive.current, active, openDraft, loc.pathname)) nav("/draft");
     wasActive.current = active;
   }, [active, openDraft, loc.pathname, nav]);
+  const gameOn = useDraft((s) => s.draft.gameflow === "GameStart" || isInGame(s.draft.gameflow)), wasGameOn = useRef(false);
+  useEffect(() => { // the game starts while you are on the setup page: show the live game (the Draft page's tab follows the client)
+    const to = liveTabOnGameStart(wasGameOn.current, gameOn, loc.pathname);
+    wasGameOn.current = gameOn;
+    if (to) nav(to);
+  }, [gameOn, loc.pathname, nav]);
   const openSetup = useUi((s) => s.autoOpenSetup), me = useDraft((s) => s.draft.slots.find((x) => x.isLocal)), locked = active && !!me?.locked, wasLocked = useRef(false);
   useEffect(() => { // you just locked in: show the setup page for that champion (only from the Draft page, once per lock-in; not in the compact window)
     const to = setupPathOnLock(wasLocked.current, locked, openSetup && !compact, loc.pathname, me ? champId(me.championId) : undefined, me?.role ?? null);

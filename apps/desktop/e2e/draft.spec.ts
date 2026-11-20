@@ -125,3 +125,14 @@ test("locking in opens the setup page for your champion, once", async ({ page, r
   await play(request, "reset");
   expect(errors).toEqual([]);
 });
+
+test("when the game starts, the setup page gives way to the Draft page on its Live game tab", async ({ page, request }) => {
+  const errors = collectErrors(page);
+  await open(page, request, { setupPage: true });
+  await play(request, "normal");
+  await expect(page).toHaveURL(/#\/draft\/setup\//, { timeout: 60_000 });
+  await expect(page).toHaveURL(/#\/draft$/, { timeout: 60_000 });              // the simulator ends the draft with "InProgress"
+  await expect(page.getByRole("tab", { name: "Live game" })).toHaveAttribute("aria-selected", "true");
+  await play(request, "reset");
+  expect(errors).toEqual([]);
+});

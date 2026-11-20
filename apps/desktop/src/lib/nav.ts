@@ -76,3 +76,9 @@ export const shouldOpenDraft = (wasActive: boolean, active: boolean, enabled: bo
  */
 export const setupPathOnLock = (wasLocked: boolean, locked: boolean, enabled: boolean, path: string, id: string | undefined, role: string | null): string | null =>
   enabled && locked && !wasLocked && id && path === "/draft" ? `/draft/setup/${encodeURIComponent(id)}${role ? `/${role}` : ""}` : null;
+
+/**
+ * The game just started (not running before, running now) and you are on the setup page that Apex itself opened: back to the Draft page, whose tab follows
+ * the League client and so shows the live game. Never moves you off any other screen.
+ */
+export const liveTabOnGameStart = (wasOn: boolean, on: boolean, path: string): string | null => on && !wasOn && path.startsWith("/draft/setup") ? "/draft" : null;
