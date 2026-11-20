@@ -129,5 +129,6 @@ export function relationStat(kind: "matchup" | "synergy", own: Tally, other: Tal
 export * from "./winRateBand";
 export * from "./timeAgo";
 export * from "./ladder";
+export * from "./radar";
 export * from "./wpa";
 export * from "./patchDelta";

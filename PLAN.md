@@ -125,7 +125,7 @@ Never show information the game itself hides.
 ### 6.6 Account analysis (differentiator)
 | Feature | Phase | Status |
 |---|---|---|
-| Performance score per game/champion (normalized by role, rank, patch) | P2 | ⬜ |
+| Performance score per game/champion (normalized by role, rank, patch) | P2 | ✅ per game vs rank and own average (E.7/E.8); per champion not done |
 | Skill radar, strengths/weaknesses report with evidence, champion pool analysis, rank-up roadmap, improvement tracker, vision heatmaps, build review | P3 | ⬜ |
 | Replay key moments, AI coaching summary | P4 | ⬜ |
 
@@ -251,8 +251,13 @@ Compliance (`docs/COMPLIANCE.md` row 3): writes only your rune page, spells and 
 - [x] **E.10** Overlay works when Apex starts mid-game: read the locked champion from the gameflow session (Rust + `lcu-core`).
 - [x] **E.11** Overlay hotkey via the global-shortcut plugin. DROPPED (owner decision Nov 20 2026): did not work with the game focused; removed again, no replacement button.
 
+### R. Skill radar (first P3 item, split Nov 20 2026; the per-game performance score is already done as E.7/E.8)
+- [x] **R.1** Pure `skillRadar` in `packages/stats-core/src/radar.ts` (+ `radar.test.ts`, 8 tests): five axes (fighting = KDA, farming = CS/min, damage/min, economy = gold/min, vision/min) from a player's games vs a caller-supplied reference, scored 0..100 with the shared `performanceScore`/`perfGrade` scale; totals over totals; LOW DATA under 10 games; no overall under 3 axes. DONE Nov 20 2026.
+- [ ] **R.2** API: `GET /v1/players/:riotId/radar?queue=&role=` over the cached matches (like `/overview`): the player's last 50 games as `RadarGame[]` and a rank reference (average of collected games of the same role and rank tier; check which columns the collector stores for vision and game length first, no reference = axis skipped). Schema `PlayerRadar` + `ApexApi.getRadar` + `useRadar`, tests in a new `radar.test.ts`.
+- [ ] **R.3** UI: radar chart (SVG, drawn-in, reduce-motion aware, axis values in tooltips with sr-only text) on the Profile overview, LOW DATA chip, wording says "compared with the rank average, not who deserved to win". Strengths/weaknesses text (best/worst axis with evidence) is a later step.
+
 ### P3 and later (split into single-purpose steps only when one becomes NEXT)
-Performance score and skill radar; strengths/weaknesses insights; champion pool analysis; ML draft model (layers C and D); win rate by length and advanced filters; ARAM/Arena collection and stats; duo detection; notifications; patch notes reader; friends list; local player notes. Then P4 (pro data, leaderboards, sharing, localization, AI coaching, sync, smurf estimate) and P5 (plugins, duo board, mobile, web).
+Skill radar: see R above; strengths/weaknesses insights; champion pool analysis; ML draft model (layers C and D); win rate by length and advanced filters; ARAM/Arena collection and stats; duo detection; notifications; patch notes reader; friends list; local player notes. Then P4 (pro data, leaderboards, sharing, localization, AI coaching, sync, smurf estimate) and P5 (plugins, duo board, mobile, web).
 
 ## 9. Riot compliance guardrails (PDF section 12, condensed; repo detail in `docs/COMPLIANCE.md`)
 1. Register the product, use a production key when available, follow the Developer Policies, show the required legal disclaimer ("isn't endorsed by Riot Games...").
