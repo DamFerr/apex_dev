@@ -1,12 +1,13 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { QUEUE_FILTERS, type QueueFilter } from "@apex/schema";
+import { QUEUE_FILTERS, type QueueFilter, type Role } from "@apex/schema";
 import { ChampIcon } from "./ChampIcon";
 import { ROLE_LABEL, RoleIcon } from "./RoleIcon";
-import { WinRateCell, rate } from "./StatRows";
-import { Skeleton, spring } from "./ui";
-import { useMatches, useOverview } from "../lib/api";
+import { SkillRadarChart } from "./SkillRadar";
+import { WinRateCell, LowChip, rate } from "./StatRows";
+import { Chip, Skeleton, spring } from "./ui";
+import { useMatches, useOverview, useRadar } from "../lib/api";
 import { profilePath } from "../lib/nav";
 import { useChampName } from "../lib/ddragon";
 import { championPerformance, csPerMin, kdaOf, rolePerformance } from "../lib/profileStats";
@@ -32,6 +33,32 @@ function WinLoss({ wins, games }: { wins: number; games: number }) {
     <WinRateCell value={r.adj} raw={r.raw} lo={r.lo} hi={r.hi} note={`${games} games`} />
     <div className="text-xs text-muted tabular-nums">{wins}W · {games - wins}L</div>
   </div>);
+}
+
+const RADAR_ROLES: Role[] = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
+
+/**
+ * Skill radar (R.3, from `useRadar`): the latest games in one role against the collected Ranked Solo average of that role.
+ * No role chosen = the API picks the most played one and the chip shows it. Empty state when there is no reference or under 3 scored axes.
+ */
+function RadarPanel({ id, queue }: { id: string; queue: QueueFilter }) {
+  const [picked, setPicked] = useState<Role | undefined>();
+  const r = useRadar(id, queue, picked), d = r.data, active = picked ?? d?.role ?? undefined;
+  return (
+    <Panel title="Skill radar" games={d?.games ?? 0}>
+      <div className="flex flex-wrap gap-1.5 mb-3" role="group" aria-label="Radar role">
+        {RADAR_ROLES.map((role) => <Chip key={role} active={active === role} onClick={() => setPicked(role)}>{ROLE_LABEL[role]}</Chip>)}
+        {d?.low && <LowChip />}
+      </div>
+      {r.isLoading && <Skeleton className="h-64" />}
+      {r.isError && <div role="alert" className="text-sm text-bad">{(r.error as Error).message}</div>}
+      {d && d.reference === null && <p className="text-sm text-muted">Not enough collected {active ? ROLE_LABEL[active] : "role"} games yet to compare with a rank average.</p>}
+      {d && d.reference !== null && d.axes.length < 3 && <p className="text-sm text-muted">Too few measurable games in {active ? ROLE_LABEL[active] : "this role"} to draw a radar.</p>}
+      {d && d.reference !== null && d.axes.length >= 3 && <>
+        <SkillRadarChart radar={d} />
+        <p className="mt-3 text-xs text-muted">Compared with the {d.reference.label} average ({d.reference.games} games), not who deserved to win. Dashed ring = that average. Vision is not shown: it is not collected yet.</p>
+      </>}
+    </Panel>);
 }
 
 /**
@@ -82,6 +109,7 @@ export function ProfileSidebar({ id, queue, stacked = false }: { id: string; que
               </li>))}
           </ul>
         </Panel>
+        <RadarPanel key={id} id={id} queue={queue} />
         {o.isLoading && <Skeleton className="h-48" />}
         {o.isError && <div role="alert" className="glass rounded-lg p-4 text-sm text-bad">{(o.error as Error).message}</div>}
         {o.isSuccess && o.data.playedWith.length > 0 && (
