@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { TierIcon } from "../components/TierIcon";
-import { RefreshCw } from "lucide-react";
+import { Ban, RefreshCw } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { LiveGame as Game, LivePlayer, Role } from "@apex/schema";
@@ -10,7 +10,7 @@ import { ROLE_LABEL, RoleIcon } from "../components/RoleIcon";
 import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
 import { Button, Skeleton, spring } from "../components/ui";
 import { useLiveGame } from "../lib/api";
-import { assignRoles } from "../lib/liveRoles";
+import { assignRoles, sortByRole } from "../lib/liveRoles";
 import { tierName } from "../lib/platforms";
 import { useDraftData } from "./DraftContext";
 
@@ -53,12 +53,15 @@ function PlayerCard({ p, role }: { p: LivePlayer; role: Role | null }) {
 }
 
 function Team({ game, side, roles }: { game: Game; side: "blue" | "red"; roles: Map<LivePlayer, Role | null> }) {
-  const players = game.players.filter((p) => p.team === side), bans = game.bans.filter((b) => b.team === side);
+  const players = sortByRole(game.players.filter((p) => p.team === side), (p) => roles.get(p) ?? null), bans = game.bans.filter((b) => b.team === side);
   return (
     <section aria-label={`${side === "blue" ? "Blue" : "Red"} team`}>
       <h2 className={`font-display text-lg font-semibold mb-2 ${side === "blue" ? "text-accent" : "text-bad"}`}>{side === "blue" ? "Blue team" : "Red team"}</h2>
       <motion.ul initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }} className="grid gap-2">{players.map((p, i) => <PlayerCard key={`${p.riotId}-${i}`} p={p} role={roles.get(p) ?? null} />)}</motion.ul>
-      {bans.length > 0 && <p className="text-xs text-muted mt-2">Bans: {bans.map((b) => b.championName).join(", ")}</p>}
+      {bans.length > 0 && <div className="flex items-center gap-1.5 mt-3" role="group" aria-label={`${side === "blue" ? "Blue" : "Red"} team bans`}>
+        <Ban size={14} className="text-muted mr-0.5" aria-hidden />
+        {bans.map((b, i) => <span key={`${b.champion}-${i}`} title={`Banned: ${b.championName}`} className="opacity-80"><ChampIcon id={b.champion} name={b.championName} size={28} /></span>)}
+      </div>}
     </section>);
 }
 

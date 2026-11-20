@@ -30,13 +30,16 @@ function fromSession(s: DraftState, session: ChampSelectSession): DraftState {
     .filter((a) => a.type === "ban" && a.completed && a.isAllyAction === ally).map((a) => a.championId)])].filter((b) => b > 0);
   const mineOf = (type: string) => session.actions.flat().find((a) => a.type === type && a.actorCellId === session.localPlayerCellId && !a.completed);
   const myPick = mineOf("pick"), myBan = mineOf("ban");
+  // Bans only happen in the client's BAN_PICK phase. During PLANNING (hovering your champion before the bans) and after the bans, an unfinished ban
+  // action must not count as live, or the ban suggestions and their Hover / Ban buttons show up where they can do nothing. Phase unknown = trust the action.
+  const banPhase = session.timer?.phase === undefined || session.timer.phase === "BAN_PICK";
   const slots = [...session.myTeam.map((m) => slot(m, "ally")), ...session.theirTeam.map((m) => slot(m, "enemy"))];
   const me = slots.find((x) => x.isLocal && x.locked);
   return {
     ...s, active: true, slots,
-    banning: session.actions.flat().some((a) => a.type === "ban" && a.actorCellId === session.localPlayerCellId && !a.completed && a.isInProgress !== false), secondsLeft: Math.max(0, Math.round(session.timer.adjustedTimeLeftInPhase / 1000)),
+    banning: banPhase && session.actions.flat().some((a) => a.type === "ban" && a.actorCellId === session.localPlayerCellId && !a.completed && a.isInProgress !== false), secondsLeft: Math.max(0, Math.round(session.timer.adjustedTimeLeftInPhase / 1000)),
     bans: { ally: banned(true, session.bans?.myTeamBans ?? []), enemy: banned(false, session.bans?.theirTeamBans ?? []) },
-    myActions: { pick: myPick?.id ?? null, pickLive: myPick?.isInProgress === true, ban: myBan?.isInProgress === true ? myBan.id : null },
+    myActions: { pick: myPick?.id ?? null, pickLive: myPick?.isInProgress === true, ban: banPhase && myBan?.isInProgress === true ? myBan.id : null },
     localLocked: me ? { championId: me.championId, role: me.role } : null,
   };
 }

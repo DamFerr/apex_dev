@@ -37,6 +37,19 @@ export function teamComp(picks: Pick[], profile: (champion: number, role: Role |
   return { picks: n, measuredPicks, measured: false, ad: n ? (n - ap) / n : 0, ap: n ? ap / n : 0, trueShare: 0, takenPerMin: null, ccPerMin: null };
 }
 
+/** What `DraftData.scaling` answers for one champion in a role: late minus early win rate as a fraction, and the games behind it. */
+export interface ScalingScore { score: number; games: number }
+
+/** Scaling of one team (E.2d). `score` = mean over ALL picks, a pick without a measured score counts 0; `games` = early plus late games over the measured picks. */
+export interface TeamScaling { picks: number; measuredPicks: number; score: number; games: number }
+
+/** Averages the measured scaling of a team's picks. Picks without a role or without enough games are neutral, so a thin team stays near 0 instead of being extrapolated. */
+export function teamScaling(picks: Pick[], scaling: (champion: number, role: Role | null) => ScalingScore | null | undefined): TeamScaling {
+  let sum = 0, games = 0, measuredPicks = 0;
+  for (const p of picks) { const s = scaling(p.champion, p.role); if (s) { sum += s.score; games += s.games; measuredPicks++; } }
+  return { picks: picks.length, measuredPicks, score: picks.length ? sum / picks.length : 0, games };
+}
+
 /** The larger of the two main damage types, as a 0..1 share. 0 for an empty team. */
 export const damageSkew = (c: TeamComp) => Math.max(c.ad, c.ap);
 

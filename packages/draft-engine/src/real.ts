@@ -17,7 +17,7 @@ const addProfiles = (a: CompProfile, b: CompProfile): CompProfile => ({ games: a
  * Everything is shrunk toward its expectation, so a pairing seen 3 times barely moves the result.
  */
 /**
- * What `createRealData` returns: the engine's `DraftData` plus the measured scaling of a champion in a role (E.2c; the model does not use it yet).
+ * What `createRealData` returns: the engine's `DraftData` plus the measured scaling of a champion in a role (E.2c; `scalingTerms` in engine.ts feeds it into the win probability, E.2d).
  * `score` = shrunk win rate in late games (over 33 min) minus shrunk win rate in early games (under 25 min), as a fraction (+0.04 = 4 points better late).
  * `games` = early plus late games behind it. null = fewer than `SCALING_MIN_GAMES` in either bucket, or no role.
  * It is a correlation (long games are also won by stronger teams), and the UI has to say so.

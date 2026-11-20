@@ -36,7 +36,8 @@ export function toMatchDetail(m: RiotMatch, puuid?: string): MatchDetail {
   const participants: Participant[] = m.info.participants.map((p, i) => ({
     name: p.riotIdGameName || p.summonerName || `Player ${i + 1}`, loadout: toLoadout(p), champion: canonicalChampionId(p.championName), team: p.teamId === 100 ? "blue" : "red",
     kills: p.kills, deaths: p.deaths, assists: p.assists, cs: p.totalMinionsKilled + p.neutralMinionsKilled,
-    damage: p.totalDamageDealtToChampions, gold: p.goldEarned, vision: p.visionScore, isYou: !!puuid && p.puuid === puuid }));
+    damage: p.totalDamageDealtToChampions, gold: p.goldEarned, vision: p.visionScore, isYou: !!puuid && p.puuid === puuid,
+    ...(p.riotIdGameName && p.riotIdTagline ? { riotId: `${p.riotIdGameName}#${p.riotIdTagline}` } : {}) }));
   const names = new Set<string>(); // names are React keys in the UI, so make them unique
   participants.forEach((p, i) => { if (names.has(p.name)) p.name = `${p.name} (${i + 1})`; names.add(p.name); });
   return { id: m.metadata.matchId, blueWon: m.info.participants.find((p) => p.teamId === 100)?.win ?? false, participants };

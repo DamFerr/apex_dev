@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_PROFILE_GAMES, damageSkew, evaluate, profileBaseline, shortfall, teamComp, type CompProfile, type DraftData } from "./index";
+import { MIN_PROFILE_GAMES, damageSkew, evaluate, profileBaseline, shortfall, teamComp, teamScaling, type CompProfile, type DraftData } from "./index";
 
 // One game of 30 minutes = 1800 s, so a champion with 18000 physical damage per game does 600 per minute.
 const prof = (phys: number, magic: number, trueDmg = 0, over: Partial<CompProfile> = {}): CompProfile => ({ games: 50, phys: phys * 50, magic: magic * 50, trueDmg: trueDmg * 50, taken: 20000 * 50, cc: 30 * 50, seconds: 1800 * 50, ...over });
@@ -123,5 +123,21 @@ describe("teamComp passes the pick's role to the profile lookup", () => {
   it("calls the lookup with a null role when the pick has none", () => {
     const seen: (string | null)[] = []; teamComp([{ champion: 1, role: null }], (c, r) => { seen.push(r); return prof(1, 1); }, none);
     expect(seen).toEqual([null]);
+  });
+});
+
+describe("teamScaling", () => {
+  const sc = new Map([[1, { score: 0.06, games: 80 }], [2, { score: -0.02, games: 60 }]]);
+  it("averages over all picks; unmeasured picks count 0 and add no games", () => {
+    const t = teamScaling([...picks(1, 2, 3)], (c) => sc.get(c));
+    expect(t.score).toBeCloseTo((0.06 - 0.02) / 3, 12); expect(t.games).toBe(140); expect(t.measuredPicks).toBe(2); expect(t.picks).toBe(3);
+  });
+  it("is 0 for an empty team or when nothing is measured", () => {
+    expect(teamScaling([], () => null)).toEqual({ picks: 0, measuredPicks: 0, score: 0, games: 0 });
+    expect(teamScaling(picks(7, 8), () => undefined)).toEqual({ picks: 2, measuredPicks: 0, score: 0, games: 0 });
+  });
+  it("passes the pick's role through", () => {
+    const seen: (string | null)[] = []; teamScaling([{ champion: 1, role: "MID" }], (_c, r) => { seen.push(r); return null; });
+    expect(seen).toEqual(["MID"]);
   });
 });

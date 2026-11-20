@@ -39,3 +39,12 @@ export function assignRoles(team: readonly RoleCandidate[]): (Role | null)[] {
   walk(0, 0);
   return best;
 }
+
+/**
+ * Puts a team in the usual order: top, jungle, mid, bot (ADC), support. Players without an estimated role (ARAM, custom games, a team that is not five)
+ * keep the order they came in, after any with a role. Stable, and returns a new array.
+ */
+export function sortByRole<T>(players: readonly T[], roleOf: (p: T) => Role | null): T[] {
+  const rank = (p: T) => { const r = roleOf(p); return r ? ALL.indexOf(r) : ALL.length; };
+  return players.map((p, i) => ({ p, i, k: rank(p) })).sort((a, b) => a.k - b.k || a.i - b.i).map((x) => x.p);
+}

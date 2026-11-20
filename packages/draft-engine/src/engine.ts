@@ -1,6 +1,6 @@
 import type { Role } from "@apex/schema";
-import { damageSkew, shortfall, teamComp, type CompBaseline, type CompProfile } from "./comp";
-import { CROWD_CONTROL_MAX, DAMAGE_BALANCE_MAX, DAMAGE_FREE_SHARE, FRONTLINE_MAX, confidenceBand, logit, sigmoid, toPP } from "./model";
+import { damageSkew, shortfall, teamComp, teamScaling, type CompBaseline, type CompProfile, type ScalingScore } from "./comp";
+import { CROWD_CONTROL_MAX, DAMAGE_BALANCE_MAX, DAMAGE_FREE_SHARE, FRONTLINE_MAX, SCALING_MAX, SCALING_WEIGHT, confidenceBand, logit, sigmoid, toPP } from "./model";
 
 /** Where numbers come from. createRealData implements it from the games the collector has stored. */
 export interface DraftData {
@@ -18,6 +18,8 @@ export interface DraftData {
   profile?(champion: number, role?: Role | null): CompProfile | null;
   /** Typical damage taken and CC per player-minute over all collected games; with it Frontline and Crowd control are measured (optional). */
   baseline?(): CompBaseline | null;
+  /** Measured scaling (late minus early win rate, in the role) of a champion; null = not enough games in both buckets or no role. Optional (E.2d). */
+  scaling?(champion: number, role?: Role | null): ScalingScore | null;
 }
 export interface Pick { champion: number; role: Role | null }
 export interface Factor { kind: "strength" | "matchup" | "synergy" | "comp" | "personal"; champs: number[]; label: string; z: number; pp: number }
@@ -87,12 +89,23 @@ export function compTerms(A: Pick[], E: Pick[], data: DraftData): Term[] {
 }
 
 /**
+ * Layer B, scaling (E.2d): your team's mean scaling minus the enemy's, weighted and capped. Antisymmetric (the cap is symmetric), and 0 when
+ * the data has no scaling or neither team has a measured pick. A correlation, not a cause: the UI says so.
+ */
+export function scalingTerms(A: Pick[], E: Pick[], data: DraftData): Term[] {
+  if (!data.scaling) return [];
+  const of = (T: Pick[]) => teamScaling(T, (c, r) => data.scaling?.(c, r)).score;
+  const z = Math.max(-SCALING_MAX, Math.min(SCALING_MAX, SCALING_WEIGHT * (of(A) - of(E))));
+  return [{ kind: "comp", champs: [], label: "Scaling", z }];
+}
+
+/**
  * Win probability for your team: the layer terms are summed in log-odds space, then passed through a sigmoid.
  * Every term is antisymmetric, so evaluate(A, E) + evaluate(E, A) = 1. Layer D (personal) is applied in `recommend`, not here.
  */
 export function evaluate(allyIn: Pick[], enemyIn: Pick[], data: DraftData): Evaluation {
   const A = resolve(allyIn, data), E = resolve(enemyIn, data);
-  const factors: Factor[] = [...strengthTerm(A, E, data), ...matchupTerms(A, E, data), ...synergyTerms(A, E, data), ...compTerms(A, E, data)]
+  const factors: Factor[] = [...strengthTerm(A, E, data), ...matchupTerms(A, E, data), ...synergyTerms(A, E, data), ...compTerms(A, E, data), ...scalingTerms(A, E, data)]
     .filter((t) => Math.abs(t.z) > 1e-9).map((t) => ({ ...t, pp: toPP(t.z) }));
   const z = factors.reduce((s, f) => s + f.z, 0);
   return { winProb: sigmoid(z), band: confidenceBand(A.length + E.length), factors: factors.sort((a, b) => Math.abs(b.z) - Math.abs(a.z)) };

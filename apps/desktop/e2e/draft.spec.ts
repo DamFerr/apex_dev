@@ -87,10 +87,9 @@ test("dodge returns to the waiting state", async ({ page, request }) => {
   await expect(page.getByText("Waiting for champ select…")).toBeVisible({ timeout: 30_000 });
 });
 
-test("auto-import is off by default, and in the browser it only reports that it cannot write", async ({ page, request }) => {
+test("auto-import is on by default, and in the browser it only reports that it cannot write", async ({ page, request }) => {
   await open(page, request);
-  await expect(page.getByLabel(/Auto-import on lock-in/)).not.toBeChecked();
-  await page.getByLabel(/Auto-import on lock-in/).check();
+  await expect(page.getByLabel(/Auto-import on lock-in/)).toBeChecked();
   await play(request, "normal");
   await expect(page.getByText(/Import skipped for .* needs the desktop app/)).toBeVisible({ timeout: 45_000 });
 });

@@ -10,7 +10,7 @@ test("shows both teams, marks you, bans, the jungler, ranks and the hot streak",
   await expect(page.getByRole("region", { name: "Red team" }).getByRole("listitem")).toHaveCount(5);
   await expect(page.getByText("you", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("img", { name: "Jungle", exact: true }).first()).toBeVisible();
-  await expect(page.getByText(/^Bans:/).first()).toBeVisible();
+  await expect(page.getByRole("group", { name: /team bans/ }).first()).toBeVisible();
   await expect(page.getByLabel("Game time")).toContainText("6:12");
   await expect(blue.getByText("Emerald II").first()).toBeVisible();
   await expect(blue.getByText("87W 79L", { exact: false }).first()).toBeVisible();

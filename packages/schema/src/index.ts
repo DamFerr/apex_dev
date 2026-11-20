@@ -26,6 +26,8 @@ export interface Loadout { items: number[]; roleItem?: number | null; trinket: n
 export interface Participant {
   name: string; loadout: Loadout; champion: string; team: "blue" | "red"; kills: number; deaths: number; assists: number;
   cs: number; damage: number; gold: number; vision: number; isYou?: boolean;
+  /** Full Riot ID ("Name#TAG") when Riot reports both parts; the scoreboard links the player to their profile only with it. */
+  riotId?: string;
 }
 export interface MatchDetail { id: string; blueWon: boolean; participants: Participant[] }
 export interface MatchPage { items: MatchSummary[]; nextCursor: number | null }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { TierIcon } from "../components/TierIcon";
 import { Link } from "react-router-dom";
@@ -5,13 +6,15 @@ import { useUi } from "../lib/store";
 import { shrink, wilson, sampleBadge } from "@apex/stats-core";
 import { Skeleton, StatCard, ProgressRing } from "../components/ui";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
-import { MatchFilterChips, MatchRowBody, QueueFilterChips } from "../components/MatchRow";
+import { MatchFilterChips, QueueFilterChips } from "../components/MatchRow";
+import { ExpandableMatchRow } from "../components/MatchDetail";
 import { isQueueFilter } from "@apex/schema";
 import { useMatches, usePool, useSummoner } from "../lib/api";
 import { useChampName } from "../lib/ddragon";
 
 export function Home() {
   const me = useUi((s) => s.myRiotId), queue = ((q) => (isQueueFilter(q) ? q : "all"))(useUi((s) => s.queueFilter)), setUi = useUi((s) => s.patch), mf = useUi((s) => s.matchFilter), sum = useSummoner(me), games = useMatches(me, 10, queue, mf), pool = usePool(me), champName = useChampName();
+  const [open, setOpen] = useState<string | null>(null);
   const poolChamps = (pool.data ?? []).map((p) => ({ id: p.champion, name: champName(p.champion) })).sort((a, b) => a.name.localeCompare(b.name));
   const ms = games.data ?? [];
   const wins = ms.filter((m) => m.win).length;
@@ -47,11 +50,7 @@ export function Home() {
     <motion.ul className="space-y-2" initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }}>
       {games.isError && <li className="text-sm text-bad">{(games.error as Error).message}</li>}
       {games.isLoading && [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)}
-      {ms.map((m) => (
-        <motion.li key={m.id} variants={{ h: { opacity: 0, y: 8 }, s: { opacity: 1, y: 0 } }} whileHover={{ x: 3 }}
-          className={`glass rounded-lg min-h-[4.25rem] py-2 px-4 flex items-center border-l-2 ${m.win ? "border-l-good" : "border-l-bad"}`}>
-          <MatchRowBody m={m} />
-        </motion.li>))}
+      {ms.map((m) => <ExpandableMatchRow key={m.id} m={m} riotId={me} open={open === m.id} onToggle={() => setOpen(open === m.id ? null : m.id)} variants={{ h: { opacity: 0, y: 8 }, s: { opacity: 1, y: 0 } }} />)}
       {games.isSuccess && ms.length === 0 && <li className="text-sm text-muted">No games in this queue{mf.champion || mf.role ? " for this champion/role" : ""} in your recent history.</li>}
     </motion.ul>
   </>);

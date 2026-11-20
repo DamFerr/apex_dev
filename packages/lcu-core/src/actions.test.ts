@@ -11,6 +11,19 @@ describe("draft state: your own actions", () => {
   it("someone else's turn is not yours", () => expect(st({ pickTurn: 3 }).myActions).toEqual({ pick: null, pickLive: false, ban: null }));
 });
 
+describe("ban phase only", () => {
+  const inPhase = (phase: string, sim: Parameters<typeof buildSession>[0]) => { const b = buildSession(sim); return reduce(initialDraft, { type: "session", session: { ...b, timer: { ...b.timer, phase } } }); };
+  const sim = { bans: [[], []] as number[][], hover: {}, locked: {}, banTurn: 2, pickWaiting: 2 };
+  it("planning (hover your champion): an unfinished ban is not live, so no ban suggestions or buttons", () => {
+    const d = inPhase("PLANNING", sim);
+    expect(d.banning).toBe(false); expect(d.myActions.ban).toBeNull();
+    expect(d.myActions.pick).toBe(97); // hovering your pick still works
+    expect(planAction(d, "ban", "hover", 103)).toMatchObject({ ok: false });
+  });
+  it("ban phase: live", () => { const d = inPhase("BAN_PICK", sim); expect(d.banning).toBe(true); expect(d.myActions.ban).toBe(99); });
+  it("after the bans (finalization): a leftover ban action is not live", () => { const d = inPhase("FINALIZATION", sim); expect(d.banning).toBe(false); expect(d.myActions.ban).toBeNull(); });
+});
+
 describe("planAction: the phases", () => {
   it("pre-ban / ban phase: hover your pick, but you cannot lock it in yet", () => {
     const d = st({ pickWaiting: 2 });

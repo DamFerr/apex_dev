@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import type { Slot } from "@apex/lcu-core";
-import { createRealData, evaluate, resolve, teamComp } from "@apex/draft-engine";
+import { createRealData, evaluate, resolve, teamComp, teamScaling } from "@apex/draft-engine";
 import { ChampIcon } from "../components/ChampIcon";
 import { spring } from "../components/ui";
 import { useDraftStats } from "../lib/api";
@@ -67,13 +67,17 @@ export function DraftBoard({ layout = "wide" }: { layout?: "wide" | "stacked" | 
 export function DraftInsights({ d, slots, active, children }: { d: DraftData; slots: Slot[]; active: boolean; children?: ReactNode }) {
   const { data, champsQ, statsQ, stats, source } = d, picks = useLockedPicks(slots);
   const ev = useMemo(() => (data && active ? evaluate(picks.ally, picks.enemy, data) : null), [data, active, picks]);
-  const comps = useMemo(() => (data && active ? { ally: teamComp(resolve(picks.ally, data), (c, r) => data.profile?.(c, r), data.tags), enemy: teamComp(resolve(picks.enemy, data), (c, r) => data.profile?.(c, r), data.tags) } : null), [data, active, picks]);
+  const comps = useMemo(() => {
+    if (!data || !active) return null;
+    const a = resolve(picks.ally, data), e = resolve(picks.enemy, data), sc = (c: number, r: Parameters<NonNullable<typeof data.scaling>>[1]) => data.scaling?.(c, r);
+    return { ally: teamComp(a, (c, r) => data.profile?.(c, r), data.tags), enemy: teamComp(e, (c, r) => data.profile?.(c, r), data.tags), allyScaling: teamScaling(a, sc), enemyScaling: teamScaling(e, sc) };
+  }, [data, active, picks]);
   return (<>
     {champsQ.isError && <div className="glass rounded-lg p-6 text-sm text-muted">Champion data from Riot’s Data Dragon couldn’t be loaded (offline?), so there is no win probability or suggestions.</div>}
     {!data && !champsQ.isError && <div role="status" className="glass rounded-lg p-6 text-sm text-muted">{statsQ.isError ? (statsQ.error as Error).message : statsQ.isLoading ? "Loading collected statistics…" : "No collected games for these filters yet, so there are no suggestions. The collector gathers them in the background; check its progress in Settings."}</div>}
     {ev && <WinProbability ev={ev} source={source} games={stats?.games ?? 0} />}
     {children}
-    {comps && comps.ally.picks + comps.enemy.picks > 0 && <CompAnalysis ally={comps.ally} enemy={comps.enemy} />}
+    {comps && comps.ally.picks + comps.enemy.picks > 0 && <CompAnalysis ally={comps.ally} enemy={comps.enemy} allyScaling={comps.allyScaling} enemyScaling={comps.enemyScaling} />}
   </>);
 }
 

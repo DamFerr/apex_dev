@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compPenalties, compTerms, evaluate, guessRoles, matchupTerms, recommend, strengthTerm, synergyTerms, type DraftData, type Pick } from "./index";
+import { SCALING_MAX, SCALING_WEIGHT, compPenalties, compTerms, evaluate, guessRoles, matchupTerms, recommend, scalingTerms, strengthTerm, synergyTerms, type DraftData, type Pick } from "./index";
 
 /** Deterministic test fixture (not shipped): class-vs-class edges plus hash noise, so the engine has structure to work on. */
 function rand(seed: number) { let s = seed | 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -83,4 +83,35 @@ describe("layers", () => {
     expect(compPenalties([P(1), P(7)], data)).toEqual({ "Damage balance": 0, Frontline: 0, "Crowd control": 0 });
   });
   it("uses the shared band function", () => expect(evaluate(A, E, data).band).toBeCloseTo(0.02 + (0.1 * 4) / 10, 12));
+});
+
+describe("scaling term (E.2d)", () => {
+  // Champions 1..3 scale late (+0.02), 4..6 early (-0.02), everything else has no measured score. (Differences of 0.04 x 1.5 stay under the cap.)
+  const score = (c: number) => (c >= 1 && c <= 3 ? 0.02 : c >= 4 && c <= 6 ? -0.02 : null);
+  const withScaling: DraftData = { ...data, scaling: (c) => { const s = score(c); return s === null ? null : { score: s, games: 100 }; } };
+  const late = [P(1, "TOP"), P(2, "MID"), P(3, "ADC")], early = [P(4, "TOP"), P(5, "MID"), P(6, "ADC")];
+  it("is absent when the data has no scaling", () => { expect(scalingTerms(late, early, data)).toEqual([]); expect(evaluate(late, early, data).factors.some((f) => f.label === "Scaling")).toBe(false); });
+  it("favours the team that scales better, by the weighted difference of the team means", () => {
+    const z = scalingTerms(late, early, withScaling)[0].z;
+    expect(z).toBeCloseTo(SCALING_WEIGHT * 0.04, 12); // mean +0.02 minus mean -0.02
+    expect(z).toBeGreaterThan(0);
+  });
+  it("is antisymmetric and the win probabilities of the two sides still add to 1", () => {
+    expect(scalingTerms(early, late, withScaling)[0].z).toBeCloseTo(-scalingTerms(late, early, withScaling)[0].z, 12);
+    expect(evaluate(late, early, withScaling).winProb + evaluate(early, late, withScaling).winProb).toBeCloseTo(1, 9);
+  });
+  it("is capped at SCALING_MAX in both directions", () => {
+    const extreme: DraftData = { ...data, scaling: (c) => ({ score: c <= 3 ? 0.4 : -0.4, games: 100 }) };
+    expect(scalingTerms(late, early, extreme)[0].z).toBe(SCALING_MAX);
+    expect(scalingTerms(early, late, extreme)[0].z).toBe(-SCALING_MAX);
+  });
+  it("counts a pick without a measured score as neutral (the team mean is over all picks)", () => {
+    const half = scalingTerms([P(1, "TOP"), P(10, "MID")], [P(11, "TOP"), P(12, "MID")], withScaling)[0].z;
+    expect(half).toBeCloseTo(SCALING_WEIGHT * 0.01, 12); // 0.02 / 2 picks, enemy has none
+  });
+  it("adds nothing when neither team has a measured pick, and shows up as a factor otherwise", () => {
+    expect(evaluate([P(10, "TOP")], [P(11, "TOP")], withScaling).factors.some((f) => f.label === "Scaling")).toBe(false);
+    const f = evaluate(late, early, withScaling).factors.find((x) => x.label === "Scaling");
+    expect(f?.kind).toBe("comp"); expect(f!.pp).toBeGreaterThan(0); expect(Math.abs(f!.pp)).toBeLessThanOrEqual(SCALING_MAX * 25 + 1e-9);
+  });
 });

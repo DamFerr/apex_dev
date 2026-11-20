@@ -25,6 +25,13 @@ export const PERSONAL_PRIOR = 15;
 export const SCALING_MIN_GAMES = 20;
 /** Virtual games pulling each bucket's win rate toward the champion's rate in that role. */
 export const SCALING_PRIOR = 30;
+/**
+ * E.2d, scaling in the win probability. A team's scaling is the mean score of its picks (a pick without a measured score counts 0 = neutral);
+ * the term is `SCALING_WEIGHT` times your team's minus the enemy's, capped at +-`SCALING_MAX` log-odds (about 2 pp near an even game).
+ * Small on purpose: the scores are correlations (long games are also won by stronger teams), and the weight is hand-set, not learned.
+ */
+export const SCALING_WEIGHT = 1.5;
+export const SCALING_MAX = 0.08;
 
 // ---- Layer D: your champion pool ----------------------------------------------------------------------------------
 /** Mastery counts three times as much as your recent games (owner request): it is long-term comfort, recent games are a small sample. */

@@ -79,8 +79,8 @@ export function Draft() {
       <Toggle checked={personalize} onChange={setPersonalize} label="Use my champion pool" disabled={poolMissing !== null} hint={poolMissing ?? "Favours champions you have mastery on and play in this role. Mastery counts more than recent games."} />
       <Toggle checked={spells} onChange={setSpells} label="Also set summoner spells" />
       <Toggle checked={items} onChange={setItems} label="Also import item sets" />
-      <Toggle checked={autoImport} onChange={setAutoImport} label="Auto-import on lock-in" hint="Imports as soon as you lock in. Off by default." />
-      {isTauri && <Toggle checked={clickActions} onChange={setClickActions} label="Click suggestions in the League client" hint="Adds buttons to the suggestions that act on YOUR own turn: Hover your pick before and during the bans, Ban on your ban turn, Lock in on your pick turn (Ban and Lock in ask you to confirm). One click = one action, nothing happens automatically. Off by default." />}
+      <Toggle checked={autoImport} onChange={setAutoImport} label="Auto-import on lock-in" hint="Imports as soon as you lock in." />
+      {isTauri && <Toggle checked={clickActions} onChange={setClickActions} label="Click suggestions in the League client" hint="Adds buttons to the suggestions that act on YOUR own turn: Hover your pick before and during the bans, Ban on your ban turn, Lock in on your pick turn (Ban and Lock in ask you to confirm). One click = one action, nothing happens automatically." />}
       <div className="ml-auto flex items-center gap-3">
         {draft.active && <span className="inline-flex items-center gap-1.5 text-xs tabular-nums text-muted" title="Time left in this phase"><Timer size={14} aria-hidden />{draft.secondsLeft}s</span>}
         <Button variant="ghost" onClick={() => void applyCompact(!compact)}>{compact ? <Maximize2 size={14} aria-hidden /> : <Minimize2 size={14} aria-hidden />}{compact ? "Full view" : "Compact view"}</Button>

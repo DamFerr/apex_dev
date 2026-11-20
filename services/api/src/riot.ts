@@ -6,7 +6,7 @@ const REGION: Record<string, string> = { euw1: "europe", eun1: "europe", tr1: "e
 export const PLATFORM_IDS = Object.keys(REGION);
 export const regionOf = (platform: string) => REGION[platform] ?? (() => { throw new HttpError(400, `Unknown platform "${platform}"`); })();
 
-export interface RiotParticipant { puuid: string; champLevel?: number; riotIdGameName?: string; summonerName?: string; championName: string; teamId: number; teamPosition: string; win: boolean;
+export interface RiotParticipant { puuid: string; champLevel?: number; riotIdGameName?: string; riotIdTagline?: string; summonerName?: string; championName: string; teamId: number; teamPosition: string; win: boolean;
   kills: number; deaths: number; assists: number; totalMinionsKilled: number; neutralMinionsKilled: number; totalDamageDealtToChampions: number; goldEarned: number; visionScore: number;
   physicalDamageDealtToChampions?: number; magicDamageDealtToChampions?: number; trueDamageDealtToChampions?: number; totalDamageTaken?: number; timeCCingOthers?: number;
   championId?: number; individualPosition?: string; item0?: number; item1?: number; item2?: number; item3?: number; item4?: number; item5?: number; item6?: number;

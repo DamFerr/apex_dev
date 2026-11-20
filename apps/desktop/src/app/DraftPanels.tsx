@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { RoleIcon } from "../components/RoleIcon";
-import type { BanSuggestion, Evaluation, Factor, Recommendation, TeamComp } from "@apex/draft-engine";
+import type { BanSuggestion, Evaluation, Factor, Recommendation, TeamComp, TeamScaling } from "@apex/draft-engine";
 import { ChampIcon } from "../components/ChampIcon";
 import { LowBadge } from "../components/StatRows";
 import { AnimatedNumber, spring } from "../components/ui";
@@ -121,8 +121,37 @@ function Versus({ label, ally, enemy, unit, digits = 0 }: { label: string; ally:
   );
 }
 
+/** A team average of this many points (late minus early win rate) fills half of a scaling bar. */
+const SCALING_BAR_FULL = 0.05;
+const signed = (x: number) => `${x < 0 ? "−" : "+"}${Math.abs(x * 100).toFixed(1)}`;
+
+/**
+ * Scaling of both teams: late (over 33 min) minus early (under 25 min) win rate of each pick in its role, averaged over the team, in points.
+ * Bars grow from the centre: left = early game, right = late game. A correlation (long games are also won by stronger teams), so it says so.
+ * LOW DATA follows the thinner team. Only drawn when at least one pick has a measured score.
+ */
+function ScalingRow({ ally, enemy }: { ally: TeamScaling; enemy: TeamScaling }) {
+  const measured = [ally, enemy].filter((t) => t.measuredPicks > 0);
+  if (measured.length === 0) return null;
+  const detail = `Scaling is the late (over 33 min) minus early (under 25 min) win rate of each pick in its role, averaged over the team's picks; a pick without enough games counts 0. Based on ${ally.games.toLocaleString()} games for your team and ${enemy.games.toLocaleString()} for the enemy. A correlation, not a cause: long games are also won by stronger teams.`;
+  return (
+    <div className="text-sm md:col-span-2" title={detail}>
+      <div className="flex justify-between mb-1.5"><span className="font-medium">Scaling<span className="ml-2 text-xs text-muted">correlation</span><LowBadge games={Math.min(...measured.map((t) => t.games))} /></span>
+        <span className="text-muted tabular-nums">you {signed(ally.score)} · enemy {signed(enemy.score)} pts · {ally.games.toLocaleString()} / {enemy.games.toLocaleString()} games</span></div>
+      <div className="grid gap-1" role="img" aria-label={`Scaling, late minus early win rate in points: your team ${signed(ally.score)}, enemy team ${signed(enemy.score)}`}>
+        {([[ally.score, "bg-accent"], [enemy.score, "bg-bad"]] as const).map(([v, c], i) => (
+          <div key={i} className="relative h-2 rounded-full bg-raised/70 overflow-hidden">
+            <div className="absolute inset-y-0 left-1/2 w-px bg-text/30" />
+            <motion.div className={`absolute inset-y-0 w-1/2 ${v >= 0 ? "left-1/2 origin-left" : "right-1/2 origin-right"} ${c}`} initial={false} animate={{ scaleX: Math.min(1, Math.abs(v) / SCALING_BAR_FULL) }} transition={spring} />
+          </div>))}
+      </div>
+      <span className="sr-only">{detail}</span>
+    </div>
+  );
+}
+
 /** Team composition from the locked picks: damage split (measured from collected games, class estimate otherwise), tankiness and CC. */
-export function CompAnalysis({ ally, enemy }: { ally: TeamComp; enemy: TeamComp }) {
+export function CompAnalysis({ ally, enemy, allyScaling, enemyScaling }: { ally: TeamComp; enemy: TeamComp; allyScaling?: TeamScaling; enemyScaling?: TeamScaling }) {
   const both = ally.measured && enemy.measured && ally.takenPerMin != null && enemy.takenPerMin != null && ally.ccPerMin != null && enemy.ccPerMin != null;
   const skewed = ([["Your team", ally], ["Enemy team", enemy]] as const).filter(([, c]) => c.picks >= 3 && Math.max(c.ad, c.ap) >= 0.75)
     .map(([n, c]) => `${n} is ${pct(Math.max(c.ad, c.ap))} ${c.ad >= c.ap ? "physical" : "magic"} damage.`);
@@ -133,6 +162,7 @@ export function CompAnalysis({ ally, enemy }: { ally: TeamComp; enemy: TeamComp 
       <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
         <DamageBar c={ally} label="Your team" /><DamageBar c={enemy} label="Enemy team" />
         {both && <><Versus label="Damage taken" ally={ally.takenPerMin!} enemy={enemy.takenPerMin!} unit="/min" /><Versus label="Crowd control time" ally={ally.ccPerMin!} enemy={enemy.ccPerMin!} unit="s/min" digits={1} /></>}
+        {allyScaling && enemyScaling && <ScalingRow ally={allyScaling} enemy={enemyScaling} />}
       </div>
       {skewed.length > 0 && <p className="mt-5 text-sm text-gold" role="status">{skewed.join(" ")} One resistance item goes a long way against it.</p>}
       <p className="mt-3 text-sm text-muted">{estimated
