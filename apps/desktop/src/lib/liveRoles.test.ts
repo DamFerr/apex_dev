@@ -16,6 +16,20 @@ describe("assignRoles", () => {
   it("gives no roles when the team is not five (ARAM, custom)", () => expect(assignRoles([c(["MID"]), c(["TOP"])])).toEqual([null, null]));
 });
 
+describe("assignRoles with summoner spells", () => {
+  const EXHAUST = 3, HEAL = 7, TP = 12, FLASH = 4, IGNITE = 14;
+  const cs = (roles: RoleCandidate["roles"], spells: number[], smite = false): RoleCandidate => ({ roles, smite, spells });
+  // Illustrative pools (Yone mid/top, Yasuo mid/bot/top/support, Shen top/support). Without spells the best fit is Yone top, Shen support, Yasuo bot.
+  const red = (sp: number[][]) => assignRoles([cs(["MID", "TOP", "ADC"], sp[0]), cs(["JUNGLE"], [11, FLASH], true), cs(["MID"], sp[2]), cs(["MID", "ADC", "TOP", "SUPPORT"], sp[3]), cs(["TOP", "SUPPORT"], sp[4])]);
+  it("without spells the pooled roles give the usual fit", () => expect(red([[], [], [], [], []])).toEqual(["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]));
+  it("lets Heal and Exhaust move an off-meta flex pick to bot and support", () =>
+    expect(red([[HEAL, FLASH], [], [FLASH, IGNITE], [EXHAUST, FLASH], [FLASH, IGNITE]])).toEqual(["ADC", "JUNGLE", "MID", "SUPPORT", "TOP"]));
+  it("does not override a clear champion fit with a weak spell", () =>
+    expect(assignRoles([cs(["TOP"], [FLASH, IGNITE]), cs(["JUNGLE"], [11, FLASH], true), cs(["MID"], [FLASH, IGNITE]), cs(["ADC"], [FLASH, IGNITE]), cs(["SUPPORT"], [FLASH, IGNITE])])).toEqual(["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]));
+  it("gives the same result without spells as before (spells optional)", () =>
+    expect(assignRoles([c(["MID", "TOP"]), c(["MID"]), c(["JUNGLE"], true), c(["ADC"]), c(["SUPPORT"])])).toEqual(["TOP", "MID", "JUNGLE", "ADC", "SUPPORT"]));
+});
+
 describe("sortByRole", () => {
   it("orders top, jungle, mid, bot, support", () => {
     const team = [{ n: "sup", r: "SUPPORT" }, { n: "mid", r: "MID" }, { n: "top", r: "TOP" }, { n: "adc", r: "ADC" }, { n: "jg", r: "JUNGLE" }] as const;

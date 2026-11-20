@@ -80,7 +80,7 @@ export function LiveGameView({ id, watch = false, refresh = false }: { id: strin
     const key = new Map((champs ?? []).map((c) => [c.id, c.key]));
     for (const side of ["blue", "red"] as const) {
       const team = g.players.filter((p) => p.team === side);
-      assignRoles(team.map((p) => ({ roles: data && key.has(p.champion) ? data.roles(key.get(p.champion)!) : [], smite: p.jungle }))).forEach((r, i) => out.set(team[i], r));
+      assignRoles(team.map((p) => ({ roles: data && key.has(p.champion) ? data.roles(key.get(p.champion)!) : [], smite: p.jungle, spells: p.spells }))).forEach((r, i) => out.set(team[i], r));
     }
     return out;
   }, [g, champs, data]);

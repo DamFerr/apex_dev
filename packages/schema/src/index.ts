@@ -191,6 +191,8 @@ export interface ApexApi {
   getRecentMatches(riotId: string, limit?: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchSummary[]>;
   /** Teammates seen twice over the latest games of one queue group (default 50, the backend's maximum). */
   getOverview(riotId: string, limit?: number, queue?: QueueFilter): Promise<PlayerOverview>;
+  /** Skill radar of the latest games in one role (default: the most played) against the collected Ranked Solo average; `queue` default all. */
+  getRadar(riotId: string, queue?: QueueFilter, role?: Role): Promise<PlayerRadar>;
   /** `queue`: only games of that queue group (default all). */
   /** `filter`: only games on that champion (Data Dragon id, as in `MatchSummary.champion`) and/or in that role. */
   getMatchPage(riotId: string, cursor: number, limit: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchPage>;
