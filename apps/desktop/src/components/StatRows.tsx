@@ -10,8 +10,10 @@ export function rate(wins: number, games: number) {
   const [lo, hi] = wilson(wins, games);
   return { adj: shrink(wins, games, 0.5, 50), raw: games ? wins / games : 0, lo, hi, badge: sampleBadge(games) };
 }
+/** The LOW DATA chip itself, for callers that decide "low" by their own rule (see `LowBadge` for the usual games rule). */
+export const LowChip = () => <span className="ml-2 rounded-full bg-gold/15 text-gold text-[10px] font-semibold tracking-wide px-2 py-0.5">LOW DATA</span>;
 export function LowBadge({ games }: { games: number }) {
-  return sampleBadge(games) === "low" ? <span className="ml-2 rounded-full bg-gold/15 text-gold text-[10px] font-semibold tracking-wide px-2 py-0.5">LOW DATA</span> : null;
+  return sampleBadge(games) === "low" ? <LowChip /> : null;
 }
 
 /**

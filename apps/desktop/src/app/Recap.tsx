@@ -1,29 +1,19 @@
-import { perfGrade, performanceScore, type PerfGrade } from "@apex/stats-core";
 import { RoleIcon } from "../components/RoleIcon";
 import { LoadoutIcons } from "../components/LoadoutIcons";
 import { motion } from "framer-motion";
 import { Link, useParams } from "react-router-dom";
 import type { PostGameRecap, RecapMetric } from "@apex/schema";
 import { ChampIcon } from "../components/ChampIcon";
-import { pct } from "../components/StatRows";
+import { LowChip, pct } from "../components/StatRows";
 import { ProgressRing, Skeleton, spring } from "../components/ui";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
 import { useRecap } from "../lib/api";
 import { useUi } from "../lib/store";
+import { BASIS_LABEL, gradeSummary, gradesOf } from "../lib/recapGrade";
 
 const fmt = (m: RecapMetric, v: number) => (m.id === "kda" ? v.toFixed(2) : m.id === "cs" ? v.toFixed(1) : Math.round(v).toLocaleString());
 /** Percent difference of you vs a reference average (positive = better than the reference). */
 const delta = (you: number, avg: number | null) => (avg && avg > 0 ? (you / avg - 1) * 100 : null);
-
-/** Score against collected rank averages when there are enough games, otherwise against your own recent games, otherwise none. */
-export function scoreOf(r: PostGameRecap): { score: number; grade: PerfGrade; basis: "rank" | "you" } | null {
-  for (const basis of ["rank", "you"] as const) {
-    const ratios = r.metrics.flatMap((m) => { const ref = basis === "rank" ? m.vsRank : m.vsYou; return ref && ref > 0 ? [m.you / ref] : []; });
-    const score = performanceScore(ratios);
-    if (score !== null) return { score, grade: perfGrade(score), basis };
-  }
-  return null;
-}
 
 const Delta = ({ d, label }: { d: number | null; label: string }) => d === null ? <span className="text-muted">{label}: n/a</span>
   : <span className={d >= 0 ? "text-good" : "text-bad"}>{label}: {d >= 0 ? "+" : ""}{d.toFixed(0)}%</span>;
@@ -43,7 +33,7 @@ function MetricCard({ m }: { m: RecapMetric }) {
 
 /** The recap itself (result, four metrics, grade). Shown on the Recap page and in the game-end popup (`inDialog` drops the page-only link). */
 export function RecapView({ r, id, inDialog = false }: { r: PostGameRecap; id: string; inDialog?: boolean }) {
-  const s = scoreOf(r);
+  const grades = gradesOf(r), top = grades[0];
   return (<>
       <div className={`glass rounded-lg p-5 flex items-center gap-5 border-l-4 ${r.win ? "border-l-good" : "border-l-bad"}`}>
         <ChampIcon id={r.champion} name={r.championName} size={64} />
@@ -54,16 +44,21 @@ export function RecapView({ r, id, inDialog = false }: { r: PostGameRecap; id: s
           <div className="mt-2"><LoadoutIcons loadout={r.loadout} size={26} /></div>
         </div>
         <div className="text-xs text-muted text-right"><div>Kill participation <span className="text-text tabular-nums">{pct(r.killParticipation, 0)}</span></div><div>Team damage share <span className="text-text tabular-nums">{pct(r.damageShare, 0)}</span></div></div>
-        {s && <div className="flex items-center gap-3" title="Average of your four stats against the comparison average, 50 = exactly average">
-          <ProgressRing value={s.score} size={84} label="Performance score" text={s.grade} />
-          <div><div className="font-display text-xl font-semibold">Grade {s.grade}</div><div className="text-xs text-muted">{s.score}/100 vs {s.basis === "rank" ? "rank averages" : "your recent games"}</div></div>
+        {top && <div className="flex items-center gap-3" title={gradeSummary(top)}>
+          <ProgressRing value={top.score} size={84} label="Performance score" text={top.letter} />
+          <div className="space-y-1">
+            {grades.map((g, i) => <div key={g.basis} title={gradeSummary(g)} className={i === 0 ? "" : "text-sm"}>
+              <span className={`font-display font-semibold ${i === 0 ? "text-xl" : "text-[1rem]"}`}>{i === 0 ? `Grade ${g.letter}` : g.letter}</span>
+              <span className="text-xs text-muted ml-2 tabular-nums">{g.score}/100 vs {BASIS_LABEL[g.basis]} · {g.games} {g.games === 1 ? "game" : "games"}</span>{g.low && <LowChip />}
+              <span className="sr-only">{gradeSummary(g)}</span></div>)}
+          </div>
         </div>}
       </div>
       <div className="grid grid-cols-4 gap-4 mt-4">{r.metrics.map((m) => <MetricCard key={m.id} m={m} />)}</div>
       <p className="text-xs text-muted mt-4 max-w-2xl">
         {r.baseline ? `Rank comparison: ${r.baseline.label}, ${r.baseline.games.toLocaleString()} collected games.` : "No rank comparison yet: not enough collected games for this champion and role."}{" "}
         {r.personal ? `Your comparison: ${r.personal.games} other recent games in this role.` : "Your comparison needs at least 3 other recent games in this role."}{" "}
-        {!s && "No grade without a comparison. "}Numbers are shown, never guessed.
+        {!top && "No grade without a comparison. "}Numbers are shown, never guessed.
       </p>
       {!inDialog && <p className="text-xs text-muted mt-2"><Link to={`/profile/${encodeURIComponent(id)}`} className="focus-ring underline rounded hover:text-text">Back to profile</Link></p>}
   </>);

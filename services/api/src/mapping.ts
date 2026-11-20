@@ -1,6 +1,7 @@
 import { extraItems } from "./participantItems";
 import type { Loadout, LiveGame, PostGameRecap, RecapMetric, MasteryEntry, MatchDetail, MatchSummary, Participant, RankInfo, Role, Summoner, Tier } from "@apex/schema";
 import { canonicalChampionId } from "./champions";
+import { gradeAgainst, LOW_OWN_GAMES, LOW_RANK_GAMES } from "./grade";
 import { HttpError, type LeagueEntry, type RiotActiveGame, type RiotMastery, type RiotMatch, type RiotParticipant } from "./riot";
 
 const ROLES: Record<string, Role> = { TOP: "TOP", JUNGLE: "JUNGLE", MIDDLE: "MID", BOTTOM: "ADC", UTILITY: "SUPPORT" };
@@ -82,12 +83,14 @@ export function toRecap(m: RiotMatch, puuid: string, o: { names: Map<string, str
   const dur = m.info.gameDuration, all = m.info.participants.map((p) => perGame(p, dur)), mine = perGame(me, dur), team = m.info.participants.filter((p) => p.teamId === me.teamId);
   const teamKills = team.reduce((s, p) => s + p.kills, 0), teamDamage = team.reduce((s, p) => s + p.totalDamageDealtToChampions, 0);
   const personal = o.personal.length >= 3 ? o.personal : null;
+  const metrics = METRICS.map(({ id, label, unit }) => ({ id, label, unit, you: mine[id], vsRank: o.baseline ? o.baseline.avg[id] : null, vsYou: personal ? mean(personal.map((g) => g[id])) : null,
+    lobbyRank: 1 + all.filter((g) => g[id] > mine[id]).length }));
   return {
     matchId: m.metadata.matchId, queue: queueName(m.info.queueId), win: me.win, durationSec: dur, playedAt: new Date(endTime(m)).toISOString(),
     champion: canonicalChampionId(me.championName), championName: o.names.get(canonicalChampionId(me.championName)) ?? canonicalChampionId(me.championName), role: ROLES[me.teamPosition] ?? null, kills: me.kills, deaths: me.deaths, assists: me.assists,
     killParticipation: teamKills > 0 ? (me.kills + me.assists) / teamKills : 0, damageShare: teamDamage > 0 ? me.totalDamageDealtToChampions / teamDamage : 0, loadout: toLoadout(me),
-    metrics: METRICS.map(({ id, label, unit }) => ({ id, label, unit, you: mine[id], vsRank: o.baseline ? o.baseline.avg[id] : null, vsYou: personal ? mean(personal.map((g) => g[id])) : null,
-      lobbyRank: 1 + all.filter((g) => g[id] > mine[id]).length })),
+    metrics,
     baseline: o.baseline ? { label: o.baseline.label, games: o.baseline.games } : null, personal: personal ? { games: personal.length } : null,
+    grade: { vsRank: o.baseline ? gradeAgainst(metrics, "vsRank", o.baseline.games, LOW_RANK_GAMES) : null, vsYou: personal ? gradeAgainst(metrics, "vsYou", personal.length, LOW_OWN_GAMES) : null },
   };
 }

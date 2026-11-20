@@ -8,6 +8,8 @@ import { LowBadge, pct, signed } from "../components/StatRows";
 import { Chip, Skeleton, spring } from "../components/ui";
 import { usePatchTrends } from "../lib/api";
 import { Link } from "react-router-dom";
+import { ExternalLink } from "../components/ExternalLink";
+import { patchNotesUrl } from "../lib/patchNotes";
 
 type Sort = "rising" | "falling" | "pick" | "ban";
 const COLLAPSED = 15, SORTS: [Sort, string][] = [["rising", "Rising"], ["falling", "Falling"], ["pick", "Pick rate change"], ["ban", "Ban rate change"]];
@@ -30,6 +32,7 @@ export function PatchChanges({ role }: { role: Role }) {
     return [...list].sort((a, b) => key(a) - key(b) || a.r.id.localeCompare(b.r.id));
   }, [rows, sort, clearOnly]);
   const visible = all ? shown : shown.slice(0, COLLAPSED);
+  const notes = { cur: patchNotesUrl(data?.patch), prev: patchNotesUrl(data?.previous) };
 
   if (isLoading) return <div className="space-y-2"><Skeleton className="h-10" /><Skeleton className="h-64" /></div>;
   if (isError) return <div role="alert" className="glass rounded-lg p-8 text-sm text-bad text-center">{(error as Error).message}</div>;
@@ -37,6 +40,11 @@ export function PatchChanges({ role }: { role: Role }) {
   return (<section className="space-y-4" aria-label="Patch changes">
     <p className="text-sm text-muted">Patch <span className="text-text font-medium">{data.patch}</span> compared with <span className="text-text font-medium">{data.previous}</span>. Win-rate changes are adjusted for small samples and coloured only when
       their 95% range excludes 0; they need {MIN_DELTA_GAMES}+ games in both patches{hidden > 0 ? ` (${hidden} ${hidden === 1 ? "champion has" : "champions have"} fewer and ${hidden === 1 ? "is" : "are"} left out)` : ""}. A change can come from who plays the champion, not only from the balance changes. The patch filter does not apply here, region and rank do.</p>
+    {(notes.cur || notes.prev) && <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted" aria-label="Official patch notes">
+      <span>Riot's official patch notes:</span>
+      {notes.cur && <ExternalLink href={notes.cur}>Patch {data.patch}</ExternalLink>}
+      {notes.prev && <ExternalLink href={notes.prev}>Patch {data.previous}</ExternalLink>}
+    </p>}
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Sort patch changes">
       {SORTS.map(([k, label]) => <Chip key={k} active={sort === k} onClick={() => { setSort(k); setAll(false); }}>{label}</Chip>)}
       <span className="mx-1 h-4 w-px bg-line/10" aria-hidden />

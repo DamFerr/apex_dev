@@ -245,9 +245,9 @@ Compliance (`docs/COMPLIANCE.md` row 3): writes only your rune page, spells and 
 - [x] **E.4** Ban panel in the Draft screen using E.3. ALREADY DONE: `Draft.tsx` + `BanSuggestions` in `DraftPanels.tsx`, ban phase only (owner request 2).
 - [x] **E.5** API: lane diffs (gold/CS/XP at 10/15/20) per matchup from timeline games. DONE Nov 20 2026: new nullable `participants.lane`, `extractTimeline` reads `participantFrames`, `store.laneDiffs`, optional `RelationLine.lane` on matchups (`LaneDiff[]`). Games stored before this have no lane data until re-fetched.
 - [x] **E.6** UI: lane-diff columns in the matchup table. DONE Nov 20 2026 (file is `apps/desktop/src/app/RelationsPanel.tsx`, not `components/`): Gold/CS/XP switch, 10/15/20 min columns, pure `lib/laneDiff.ts`.
-- [ ] **E.7** API: per-game performance grade vs your own average and rank average. Files: `services/api/src/*`, test.
-- [ ] **E.8** UI: grade on the Recap screen.
-- [ ] **E.9** Patch changes tab: link to the official patch notes (check Riot's current URL pattern, do not hard-code from memory).
+- [x] **E.7** API: per-game performance grade vs your own average and rank average. DONE Nov 20 2026: `PostGameRecap.grade` (`vsRank`, `vsYou`: `GameGrade` score 0..100, letter S/A/B/C/D, games, low, measures), pure `services/api/src/grade.ts`.
+- [x] **E.8** UI: grade on the Recap screen. DONE Nov 20 2026: the Recap already had one client-side grade (repo vs plan); it now shows rank AND own-games grades with games and LOW DATA (`lib/recapGrade.ts`), and the backend grade (E.7) uses the same stats-core `performanceScore`/`perfGrade` scale.
+- [x] **E.9** Patch changes tab: link to the official patch notes. DONE Nov 20 2026: URL pattern verified against Riot's pages for 26.12/26.16/26.21/26.22 (`lib/patchNotes.ts`), `components/ExternalLink.tsx` (new tab + Copy link). Backlog: `tauri-plugin-opener` so links open the system browser for sure (Rust, Cargo.toml, capability, lockfiles: needs owner OK).
 - [ ] **E.10** Overlay works when Apex starts mid-game: read the locked champion from the gameflow session (Rust + `lcu-core`).
 - [ ] **E.11** Overlay hotkey via the global-shortcut plugin.
 

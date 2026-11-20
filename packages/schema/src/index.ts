@@ -143,11 +143,16 @@ export interface RecapMetric {
   /** Average of the player's own other recent games in this role. null = fewer than 3. */ vsYou: number | null;
   /** 1 = best of the ten players in this game. */ lobbyRank: number;
 }
+/** Grade letters, best first (the stats-core `perfGrade` scale). */
+export type GradeLetter = "S" | "A" | "B" | "C" | "D";
+/** How one game compares with a reference average over KDA, CS, damage and gold per minute. `score` 0..100 (50 = equal to the reference), `games` = games behind the reference, `low` = few of them (show LOW DATA), `measures` = how many of the four had a reference. An estimate of how the numbers compare, not of who deserved to win. */
+export interface GameGrade { score: number; letter: GradeLetter; games: number; low: boolean; measures: number }
 export interface PostGameRecap {
   matchId: string; queue: string; win: boolean; durationSec: number; playedAt: string;
   champion: string; championName: string; role: Role | null; kills: number; deaths: number; assists: number;
   killParticipation: number; damageShare: number; loadout: Loadout; metrics: RecapMetric[];
   baseline: { label: string; games: number } | null; personal: { games: number } | null;
+  /** Optional: older backends omit it. Each is null without a usable reference. */ grade?: { vsRank: GameGrade | null; vsYou: GameGrade | null };
 }
 
 /** Live game scouting (Spectator-v5): the ten players and champions, summoner spells and runes Riot's spectator data lists, plus public rank data. Never in-game state. */
