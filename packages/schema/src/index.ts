@@ -112,6 +112,22 @@ export interface PlayedWithEntry { name: string; riotId?: string; games: number;
 /** `GET /v1/players/:riotId/overview`: the same latest games as the profile sidebar (`games`) and the teammates seen in 2+ of them. */
 export interface PlayerOverview { games: number; playedWith: PlayedWithEntry[] }
 
+/** The five radar axes (same ids as stats-core `RadarAxisId`; the schema package has no dependency on stats-core, so they are repeated here). */
+export type PlayerRadarAxisId = "fighting" | "farming" | "damage" | "economy" | "vision";
+/** One scored axis: `value` is the player's number (KDA, or per minute), `reference` the rank average it was compared with, `score` 0..100 (50 = equal to the reference), `letter` the shared S..D scale. */
+export interface PlayerRadarAxis { id: PlayerRadarAxisId; value: number; reference: number; score: number; letter: GradeLetter }
+/**
+ * `GET /v1/players/:riotId/radar`: the player's latest games in ONE role against the average of collected Ranked Solo games in the same role
+ * (same rank tier when there are enough, else all ranks). `axes` lists only axes that have a reference (vision has none yet: the collector does not store it).
+ * `reference` is null when too few collected games exist: then `axes` is empty and `overall` null. `low`: under 10 of the player's games (show LOW DATA).
+ * It compares numbers with an average; it does not say who deserved to win.
+ */
+export interface PlayerRadar {
+  role: Role | null; games: number; low: boolean;
+  axes: PlayerRadarAxis[]; overall: number | null; best: PlayerRadarAxisId | null; worst: PlayerRadarAxisId | null;
+  reference: { label: string; games: number; tier: string | null } | null;
+}
+
 /** Collected statistics for the draft engine: pairs are [champion, champion, games, winsOfFirst], first id alphabetically first. */
 /** Sums over the collected games of one champion that carry damage-type data: what the team composition analysis averages. */
 export interface CompProfileRow { id: string; /** Role these games were played in; absent (older backends, fixtures) or null = all roles / unknown. */ role?: string | null; games: number; phys: number; magic: number; trueDmg: number; taken: number; cc: number; seconds: number;

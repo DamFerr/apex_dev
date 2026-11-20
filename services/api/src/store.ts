@@ -271,6 +271,20 @@ export function makeStore(db: DatabaseSync) {
       return { games: r.games, kda: r.kda ?? 0, cs: r.cs ?? 0, damage: r.damage ?? 0, gold: r.gold ?? 0 };
     },
     /** One row per collected game of this champion (optionally in one role): its rune page, spells and final items. Input for computeBuild. */
+    /**
+     * Reference for the skill radar: ONE ratio per measure over all comparable collected games (same role, optionally same rank bracket),
+     * totals over totals, the same way the radar computes the player's own numbers (KDA = (kills + assists) / max(1, deaths), the rest per minute).
+     * `averages` above averages per-game ratios instead, which is not comparable. Games without stored stats and remakes are ignored. Zeros when there are no games.
+     */
+    radarReference(a: { role: string; bracket?: string }): { games: number; kda: number; cs: number; damage: number; gold: number } {
+      const cond = ["p.role = ?", "p.kills IS NOT NULL", "m.duration >= 300"], args: (string | number)[] = [a.role];
+      if (a.bracket) { cond.push("m.bracket = ?"); args.push(a.bracket); }
+      const r = db.prepare(`SELECT COUNT(*) games, SUM(p.kills + p.assists) ka, SUM(p.deaths) d, SUM(p.cs) cs, SUM(p.damage) dmg, SUM(p.gold) gold, SUM(m.duration) secs
+        FROM participants p JOIN matches m ON m.id = p.match_id WHERE ${cond.join(" AND ")}`).get(...args) as { games: number; ka: number | null; d: number | null; cs: number | null; dmg: number | null; gold: number | null; secs: number | null };
+      if (!r.games || !r.secs) return { games: 0, kda: 0, cs: 0, damage: 0, gold: 0 };
+      const perMin = (n: number | null) => ((n ?? 0) * 60) / r.secs!;
+      return { games: r.games, kda: (r.ka ?? 0) / Math.max(1, r.d ?? 0), cs: perMin(r.cs), damage: perMin(r.dmg), gold: perMin(r.gold) };
+    },
     buildRows(champion: string, f: Filter, role?: Role): { keystone: number | null; perks: string | null; items: string; spell1: number | null; spell2: number | null; win: number; skills: string | null; start: string | null; buys: string | null; duration: number }[] {
       const w = filt(f);
       return q(`SELECT p.keystone, p.perks, p.items, p.spell1, p.spell2, p.win, p.skills, p.start, p.buys, m.duration FROM participants p JOIN matches m ON m.id = p.match_id WHERE p.champion = ?${role ? " AND p.role = ?" : ""}${w.sql}`, champion, ...(role ? [role] : []), ...w.args);

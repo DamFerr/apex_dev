@@ -6,6 +6,7 @@ import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
 import type { Store } from "./store";
 import { toOverview } from "./overview";
+import { pickReference, toPlayerRadar } from "./radar";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
@@ -13,7 +14,7 @@ import { computeBuild, isFinished, itemWpas } from "./build";
 import { canonicalChampionId } from "./champions";
 import { ACCOUNT_PREFIX, searchStoredPlayers, type StoredPlayer } from "./players";
 import type { Filter } from "./store";
-import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary, type PlayerOverview } from "@apex/schema";
+import { isQueueFilter, matchesQueueFilter, riotQueueOf, type MatchSummary, type PlayerOverview, type PlayerRadar, type QueueFilter } from "@apex/schema";
 
 export interface Deps { riot: RiotApi; cache: Cache; dd: () => Promise<DD>; store: Store; collector: Collector; defaultPlatform: string; hasKey?: boolean; now?: () => number }
 const ROLE_IDS = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"] as const;
@@ -138,18 +139,39 @@ export async function buildApp(deps: Deps) {
   /**
    * Profile overview over the player's latest games of one queue group (`?queue=`, default all; `?limit=` up to 50): teammates seen in 2+ games. Uses the same id pages and cached matches as the match history, so the window matches the sidebar; at most `OVERVIEW_SCAN_MAX` ids are read.
    */
-  app.get<{ Params: { riotId: string }; Querystring: { queue?: string; limit?: string } }>("/v1/players/:riotId/overview", async (req): Promise<PlayerOverview> => {
-    const filter = req.query.queue ?? "all"; if (!isQueueFilter(filter)) throw new HttpError(400, "Unknown queue filter");
-    const limit = Math.min(OVERVIEW_MAX_GAMES, Math.max(1, Number(req.query.limit ?? OVERVIEW_MAX_GAMES) || OVERVIEW_MAX_GAMES));
-    const acct = await identity(req.params.riotId), region = regionOf(await homePlatform(acct.puuid)), riotQueue = riotQueueOf(filter), games: RiotMatch[] = [];
+  /** The player's latest cached matches of one queue group, newest first (the window the overview and the radar share); reads at most `OVERVIEW_SCAN_MAX` ids, and only loads the matches still needed. */
+  const latestGames = async (puuid: string, region: string, filter: QueueFilter, limit: number): Promise<RiotMatch[]> => {
+    const riotQueue = riotQueueOf(filter), games: RiotMatch[] = [];
     let at = 0, more = true;
     while (more && games.length < limit && at < OVERVIEW_SCAN_MAX) {
-      const from = at, ids = await cached<string[]>(`ids:${acct.puuid}:${riotQueue ?? "all"}:${from}:${QUEUE_SCAN_PAGE}`, 2 * MIN, () => riot.matchIds(acct.puuid, region, from, QUEUE_SCAN_PAGE, riotQueue));
+      const from = at, ids = await cached<string[]>(`ids:${puuid}:${riotQueue ?? "all"}:${from}:${QUEUE_SCAN_PAGE}`, 2 * MIN, () => riot.matchIds(puuid, region, from, QUEUE_SCAN_PAGE, riotQueue));
       const take = ids.slice(0, limit - games.length);   // only the matches still needed are loaded
       for (const m of await Promise.all(take.map((id) => matchOf(id, region)))) if (matchesQueueFilter(filter, m.info.queueId)) games.push(m);
       at += take.length; more = ids.length === QUEUE_SCAN_PAGE;
     }
-    return toOverview(games, acct.puuid);
+    return games;
+  };
+  const gameLimit = (raw?: string) => Math.min(OVERVIEW_MAX_GAMES, Math.max(1, Number(raw ?? OVERVIEW_MAX_GAMES) || OVERVIEW_MAX_GAMES));
+
+  /**
+   * Profile overview over the player's latest games of one queue group (`?queue=`, default all; `?limit=` up to 50): teammates seen in 2+ games. Uses the same id pages and cached matches as the match history, so the window matches the sidebar; at most `OVERVIEW_SCAN_MAX` ids are read.
+   */
+  app.get<{ Params: { riotId: string }; Querystring: { queue?: string; limit?: string } }>("/v1/players/:riotId/overview", async (req): Promise<PlayerOverview> => {
+    const filter = req.query.queue ?? "all"; if (!isQueueFilter(filter)) throw new HttpError(400, "Unknown queue filter");
+    const acct = await identity(req.params.riotId), region = regionOf(await homePlatform(acct.puuid));
+    return toOverview(await latestGames(acct.puuid, region, filter, gameLimit(req.query.limit)), acct.puuid);
+  });
+
+  /**
+   * Skill radar (R.2): the player's latest games (`?queue=`, default all, up to 50) in ONE role (`?role=`, default the most played) against the average of collected
+   * Ranked Solo games of that role: the player's rank tier when there are 30+ such games, else all ranks. Vision has no reference yet and is skipped.
+   */
+  app.get<{ Params: { riotId: string }; Querystring: { queue?: string; role?: string } }>("/v1/players/:riotId/radar", async (req): Promise<PlayerRadar> => {
+    const filter = req.query.queue ?? "all"; if (!isQueueFilter(filter)) throw new HttpError(400, "Unknown queue filter");
+    if (req.query.role && !roleOfQuery(req.query.role)) throw new HttpError(400, "Unknown role (TOP, JUNGLE, MID, ADC or SUPPORT)");
+    const acct = await identity(req.params.riotId), platform = await homePlatform(acct.puuid), games = await latestGames(acct.puuid, regionOf(platform), filter, OVERVIEW_MAX_GAMES);
+    const tier = (await cached(`league:${platform}:${acct.puuid}`, 10 * MIN, () => riot.league(acct.puuid, platform)).catch(() => [])).find((e) => e.queueType === "RANKED_SOLO_5x5")?.tier;
+    return toPlayerRadar(games, acct.puuid, roleOfQuery(req.query.role), (role) => pickReference(role, tier, (bracket) => store.radarReference({ role, ...(bracket ? { bracket } : {}) })));
   });
 
   app.get<{ Params: { id: string }; Querystring: { riotId?: string } }>("/v1/matches/:id", async (req) => {
