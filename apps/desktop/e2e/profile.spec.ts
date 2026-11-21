@@ -83,7 +83,8 @@ test("a match row is built around the champion icon: level, result, time ago, K/
   await page.route("**/v1/players/**/matches**", (r) => r.fulfill({ json: { items: [row(), row({ id: "EUW1_2", win: false, level: 12, kills: 0, deaths: 4, assists: 1, queue: "ARAM", queueId: 450, playedAt: new Date(Date.now() - 3 * 86400_000).toISOString() })], nextCursor: null } }));
   await page.goto("/#/profile");
   const first = page.locator("li button[aria-expanded]").first();
-  await expect(first.getByText("17", { exact: true })).toBeVisible();                  // champion level on the icon
+  // The champion icon (a link to the champion page) sits beside the expand button, not inside it, because a link cannot live in a button.
+  await expect(page.locator("li:has(> div > button[aria-expanded])").first().getByText("17", { exact: true })).toBeVisible(); // champion level on the icon
   await expect(first.getByText("Win", { exact: true })).toBeVisible();                 // the word stays next to the colour strip
   await expect(first.getByText("2h", { exact: true })).toBeVisible();                  // short time ago
   await expect(first.getByText("5/2/9")).toBeVisible();

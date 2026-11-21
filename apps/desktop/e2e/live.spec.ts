@@ -1,7 +1,7 @@
 import { expect, test, collectErrors, expectContentVisible } from "./helpers";
 
 
-test("shows both teams, marks you, bans, the jungler, ranks and the hot streak", async ({ page }) => {
+test("shows both teams, marks you, bans, ranks and the hot streak, and no role icons (the order is only an estimate)", async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto("/#/live");
   await expectContentVisible(page);
@@ -9,7 +9,8 @@ test("shows both teams, marks you, bans, the jungler, ranks and the hot streak",
   await expect(blue.getByRole("listitem")).toHaveCount(5);
   await expect(page.getByRole("region", { name: "Red team" }).getByRole("listitem")).toHaveCount(5);
   await expect(page.getByText("you", { exact: true })).toHaveCount(1);
-  await expect(page.getByRole("img", { name: "Jungle", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: /^(Top|Jungle|Mid|ADC|Support)$/ })).toHaveCount(0); // roles are not claimed: the cards are only ordered by the estimate
+  await expect(page.getByText(/^(MAIN|OFF)$/)).toHaveCount(0);
   await expect(page.getByRole("group", { name: /team bans/ }).first()).toBeVisible();
   await expect(page.getByLabel("Game time")).toContainText("6:12");
   await expect(blue.getByText("Emerald II").first()).toBeVisible();
