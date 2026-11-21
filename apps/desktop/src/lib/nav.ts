@@ -1,7 +1,7 @@
 import { RIOT_ID_RE } from "./riotId";
 import { isFavourite } from "./recentFavs";
 import { normalizeSearch, searchChampions, type Searchable } from "./searchMatch";
-import { Home, Swords, Shield, BarChart3, User, Settings, type LucideIcon } from "lucide-react";
+import { Home, Swords, Shield, BarChart3, Trophy, User, Settings, type LucideIcon } from "lucide-react";
 export interface NavItem { path: string; label: string; icon: LucideIcon }
 /** Only screens that exist are listed. The live game is a tab of Draft (yours) and of Profile (anyone's); `/live` stays as the scout page. */
 export const NAV: NavItem[] = [
@@ -9,6 +9,7 @@ export const NAV: NavItem[] = [
   { path: "/draft", label: "Draft", icon: Swords },
   { path: "/champions", label: "Champions", icon: Shield },
   { path: "/tierlist", label: "Tier List", icon: BarChart3 },
+  { path: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { path: "/profile", label: "Profile", icon: User },
 ];
 export const SETTINGS_ITEM: NavItem = { path: "/settings", label: "Settings", icon: Settings };
