@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { relationStat } from "@apex/stats-core";
 import type { RelationLine, Role } from "@apex/schema";
-import { ChampIcon } from "../components/ChampIcon";
+import { ChampLink, ChampIconLink } from "../components/ChampLink";
 import { RoleIcon } from "../components/RoleIcon";
 import { Tabs } from "../components/Tabs";
 import { LowBadge, pct, WinRateCell } from "../components/StatRows";
@@ -63,7 +63,7 @@ export function RelationsPanel({ id, roles }: { id: string; roles: Role[] }) {
         <motion.tbody key={`${role}-${kind}-${sort}-${all}`} initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.02 } } }}>
           {shown.map(({ l, s }) => { const w = Math.min(100, (Math.abs(s.delta) / BAR_FULL_PP) * 100), good = s.delta >= 0.5, bad = s.delta <= -0.5; return (
             <motion.tr key={`${l.champion}-${l.role}`} variants={{ h: { opacity: 0, y: 6 }, s: { opacity: 1, y: 0 } }} transition={spring} className="h-9 border-t border-line/5">
-              <td className="whitespace-nowrap"><span className="inline-flex items-center gap-2 align-middle"><ChampIcon id={l.champion} name={l.name} size={26} /><span>{l.name}</span>
+              <td className="whitespace-nowrap"><span className="inline-flex items-center gap-2 align-middle"><ChampIconLink id={l.champion} name={l.name} size={26} /><ChampLink id={l.champion} name={l.name} />
                 {kind === "synergy" && <span className="inline-flex items-center gap-1 text-xs text-muted"><RoleIcon role={l.role} size={14} decorative />{l.role}</span>}</span><LowBadge games={l.games} /></td>
               <td className="text-right tabular-nums text-muted">{l.games.toLocaleString()}</td>
               <td className="text-right"><WinRateCell value={s.observed} raw={s.raw} lo={s.lo} hi={s.hi} note={`expected ${pct(s.expected)}`} /></td>

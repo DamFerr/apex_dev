@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import type { Slot } from "@apex/lcu-core";
 import { createRealData, evaluate, resolve, teamComp, teamScaling } from "@apex/draft-engine";
-import { ChampIcon } from "../components/ChampIcon";
+import { ChampLink, ChampIconLink } from "../components/ChampLink";
 import { spring } from "../components/ui";
 import { useDraftStats } from "../lib/api";
 import { useDdChampions } from "../lib/ddragon";
@@ -43,8 +43,8 @@ export function SlotCard({ s, dense }: { s: Slot; dense?: boolean }) {
     <motion.div layout transition={spring} animate={{ scale: s.locked ? 1 : 0.98 }}
       aria-label={`${s.team === "ally" ? "Your team" : "Enemy team"} ${s.role ?? "slot"}: ${id ? champName(id) : "empty"}`}
       className={`glass rounded-lg w-full flex items-center text-left border ${dense ? "h-12 px-2 gap-2" : "h-[4.5rem] px-4 gap-4"} ${s.locked ? "border-accent/60 shadow-glow" : "border-line/10"} ${s.isLocal ? "ring-1 ring-gold/60" : ""}`}>
-      <span className={`shrink-0 ${s.locked || !id ? "" : "opacity-50"}`}>{key ? <ChampIcon id={key} name={champName(id)} size={size} /> : <span className={`block rounded-md bg-raised/70 ${dense ? "size-8" : "size-12"}`} />}</span>
-      <span className="min-w-0"><span className={`block font-medium truncate ${dense ? "text-sm" : "text-[1rem]"}`}>{id ? champName(id) : "Picking…"}</span>
+      <span className={`shrink-0 ${s.locked || !id ? "" : "opacity-50"}`}>{key ? <ChampIconLink id={key} name={champName(id)} size={size} /> : <span className={`block rounded-md bg-raised/70 ${dense ? "size-8" : "size-12"}`} />}</span>
+      <span className="min-w-0"><span className={`block font-medium truncate ${dense ? "text-sm" : "text-[1rem]"}`}>{key ? <ChampLink id={key} name={champName(id)} /> : id ? champName(id) : "Picking…"}</span>
         <span className="block text-xs text-muted truncate">{s.role ?? "—"}{s.isLocal ? " · you" : ""}{!s.locked && id ? " · hovering" : ""}</span></span>
       {s.locked && !dense && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring} className="ml-auto text-xs font-semibold text-accent">LOCKED</motion.span>}
     </motion.div>
@@ -57,7 +57,7 @@ export function DraftBoard({ layout = "wide" }: { layout?: "wide" | "stacked" | 
   const team = (t: Slot["team"]) => draft.slots.filter((x) => x.team === t);
   return (<div>
     <div className={`flex flex-wrap mb-4 text-sm text-muted ${dense ? "gap-x-4 gap-y-2" : "gap-8"}`}>{(["ally", "enemy"] as const).map((t) => <div key={t} className="flex items-center gap-2.5">{t === "ally" ? "Your bans" : "Enemy bans"}
-      {draft.bans[t].map((b) => champId(b) && <ChampIcon key={b} id={champId(b)!} name={champName(b)} size={dense ? 24 : 32} />)}</div>)}</div>
+      {draft.bans[t].map((b) => champId(b) && <ChampIconLink key={b} id={champId(b)!} name={champName(b)} size={dense ? 24 : 32} alone />)}</div>)}</div>
     <div className={`grid ${layout === "stacked" ? "grid-cols-1 gap-4" : dense ? "grid-cols-2 gap-3" : "grid-cols-2 gap-8"}`}>{(["ally", "enemy"] as const).map((t) => <div key={t} className={dense ? "space-y-2" : "space-y-3"}>
       <div className={`font-display font-semibold ${dense ? "text-sm" : "text-lg"}`}>{t === "ally" ? "Your team" : "Enemy team"}</div>{team(t).map((s) => <SlotCard key={s.cellId} s={s} dense={dense} />)}</div>)}</div>
   </div>);

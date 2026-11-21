@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Download } from "lucide-react";
 import type { Role } from "@apex/schema";
 import { spellPairsOf } from "@apex/lcu-core";
-import { ChampIcon } from "../components/ChampIcon";
+import { ChampLink, ChampIconLink } from "../components/ChampLink";
 import { Button } from "../components/ui";
 import { useChampionBuild } from "../lib/api";
 import { champIndex } from "../lib/ddragon";
@@ -54,8 +54,8 @@ export function PickSetupPage() {
   return (<div className="space-y-4">
     <Link to="/draft" className="focus-ring inline-flex items-center gap-1 text-sm text-muted hover:text-text rounded-md"><ArrowLeft size={14} /> Draft</Link>
     <div className="glass rounded-lg p-5 flex flex-wrap items-center gap-3" aria-label="Pick setup">
-      <ChampIcon id={id} name={name} size={40} />
-      <h1 className="font-display text-xl font-semibold mr-auto">{name}{role ? ` · ${role}` : ""}</h1>
+      <ChampIconLink id={id} name={name} size={40} />
+      <h1 className="font-display text-xl font-semibold mr-auto"><ChampLink id={id} name={name} />{role ? ` · ${role}` : ""}</h1>
       {done && <span role="status" aria-label="Imported" title="Written to the League client. Every change you make here is written again by itself." className="inline-flex items-center gap-1 text-sm font-medium text-good"><Check size={14} aria-hidden />Imported</span>}
       {isTauri && <Button disabled={!canWrite} title={!connected ? "Connect to the League client first" : 'Writes the chosen rune page and summoner spells, plus the item set(s), named "Apex: <champion>". Changes are also written by themselves during champ select.'}
         onClick={() => key !== undefined && void runImport(key, role ?? null, sel)}><Download size={14} aria-hidden />{done ? "Import again" : "Import"}</Button>}

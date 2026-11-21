@@ -6,9 +6,9 @@ import type { MatchSummary } from "@apex/schema";
 import { api, useScope } from "../lib/api";
 import { useChampName } from "../lib/ddragon";
 import { profilePath } from "../lib/nav";
-import { ChampIcon } from "./ChampIcon";
+import { ChampLink, ChampIconLink } from "./ChampLink";
 import { LoadoutIcons } from "./LoadoutIcons";
-import { MatchRowBody } from "./MatchRow";
+import { MatchRowBody, MatchRowIcon } from "./MatchRow";
 import { Skeleton } from "./ui";
 
 function Detail({ id, riotId }: { id: string; riotId: string }) {
@@ -27,7 +27,7 @@ function Detail({ id, riotId }: { id: string; riotId: string }) {
           <thead className="text-muted"><tr><th className="text-left font-normal">Player</th><th className="text-left font-normal">Loadout</th><th className="font-normal">KDA</th><th className="font-normal">CS</th><th className="text-left font-normal pl-3">Damage</th></tr></thead>
           <tbody>{q.data.participants.filter((p) => p.team === team).map((p) => (
             <tr key={p.name} className={`h-8 ${p.isYou ? "text-gold" : ""}`}>
-              <td><span className="inline-flex items-center gap-2"><ChampIcon id={p.champion} name={champName(p.champion)} size={24} /><span>{p.riotId && !p.isYou ? <Link to={profilePath(p.riotId)} className="focus-ring rounded hover:underline" title={`Open ${p.riotId}`}>{p.name}</Link> : p.name} <span className="text-muted">{champName(p.champion)}</span></span></span></td>
+              <td><span className="inline-flex items-center gap-2"><ChampIconLink id={p.champion} name={champName(p.champion)} size={24} /><span>{p.riotId && !p.isYou ? <Link to={profilePath(p.riotId)} className="focus-ring rounded hover:underline" title={`Open ${p.riotId}`}>{p.name}</Link> : p.name} <ChampLink id={p.champion} name={champName(p.champion)} className="text-muted" /></span></span></td>
               <td className="pr-3"><LoadoutIcons loadout={p.loadout} size={22} /></td>
               <td className="text-center tabular-nums">{p.kills}/{p.deaths}/{p.assists}</td>
               <td className="text-center tabular-nums">{p.cs}</td>
@@ -43,10 +43,12 @@ function Detail({ id, riotId }: { id: string; riotId: string }) {
 export function ExpandableMatchRow({ m, open, onToggle, riotId, variants }: { m: MatchSummary; open: boolean; onToggle: () => void; riotId: string; variants?: Variants }) {
   return (
     <motion.li variants={variants} className="glass rounded-lg overflow-hidden">
-      <button aria-expanded={open} onClick={onToggle}
-        className={`focus-ring w-full min-h-[4.25rem] py-2 px-4 flex items-center border-l-2 text-left ${m.win ? "border-l-good" : "border-l-bad"}`}>
-        <MatchRowBody m={m} trailing={<motion.span animate={{ rotate: open ? 180 : 0 }}><ChevronDown size={16} className="text-muted" /></motion.span>} />
-      </button>
+      <div className={`flex items-center gap-4 px-4 border-l-2 ${m.win ? "border-l-good" : "border-l-bad"}`}>
+        <MatchRowIcon m={m} />
+        <button aria-expanded={open} onClick={onToggle} className="focus-ring flex-1 min-w-0 min-h-[4.25rem] py-2 flex items-center text-left">
+          <MatchRowBody m={m} trailing={<motion.span animate={{ rotate: open ? 180 : 0 }}><ChevronDown size={16} className="text-muted" /></motion.span>} />
+        </button>
+      </div>
       <AnimatePresence initial={false}>
         {open && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.2 }} className="overflow-hidden"><Detail id={m.id} riotId={riotId} />

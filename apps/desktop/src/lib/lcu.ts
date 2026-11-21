@@ -8,6 +8,7 @@ import type { PickSetup } from "./pickSetup";
 import { isTauri } from "./tauri";
 import { summarizeImport, wroteAnything, type ImportOutcome, type ImportStep } from "./importSummary";
 import { toast } from "./toast";
+import { nextAllyRoles, type AllyRoles } from "./teamRoles";
 import { initialDraft, needsPickResume, nextPick, parseLcuMessage, pickFromGameflowSession, reduce, shouldImport, CHAMPION_KEYS, type DraftState, type GameflowSession, type LcuEvent, type Me, type OverlayPick } from "@apex/lcu-core";
 
 /** Address of the local League client simulator (packages/lcu-mock). Only used by the browser dev preview, never in the desktop app. */
@@ -19,6 +20,7 @@ export const champName = (key: number) => champIndex.get(key)?.name ?? (CHAMPION
 interface DraftStore {
   draft: DraftState; /** The champion (key) an import last wrote in this draft, or null: the setup page shows "Imported" for it. Cleared when a new draft starts. */ imported: number | null; /** The champion you locked, kept through the loading screen and the game (the draft itself is reset when champ select ends). */ overlayPick: OverlayPick | null; autoImport: boolean; spells: boolean; setSpells: (v: boolean) => void; items: boolean; setItems: (v: boolean) => void;
   /** On by default (owner decision, Nov 20 2026; the toggle on the Draft page turns it off): suggestion cards get Hover / Ban / Lock in buttons that act on your own champ select action, one click = one action. */ clickActions: boolean; setClickActions: (v: boolean) => void;
+  /** Your allies' assigned roles (champion key to role) from the last champ select, kept into the game so Live Game shows your team's real roles. */ allyRoles: AllyRoles;
   setAutoImport: (v: boolean) => void; dispatch: (e: LcuEvent) => void;
 }
 /** What to write and how. `build`: the build the setup page already shows (skips fetching it again). `only`: just these parts (default all). `quiet`: no success toast (errors still show). */
@@ -61,11 +63,11 @@ async function resumePick() {
   } catch { /* client busy or session not readable: the overlay simply stays hidden */ }
 }
 export const useDraft = create<DraftStore>((set, get) => ({
-  draft: initialDraft, imported: null, overlayPick: null, autoImport: true, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }),
+  draft: initialDraft, allyRoles: {}, imported: null, overlayPick: null, autoImport: true, spells: true, setSpells: (spells) => set({ spells }), items: true, setItems: (items) => set({ items }),
   setAutoImport: (autoImport) => set({ autoImport }), clickActions: true, setClickActions: (clickActions) => set({ clickActions }),
   dispatch: (e) => {
     const prev = get().draft, next = reduce(prev, e), imp = shouldImport(prev, next, { autoImport: get().autoImport });
-    set({ draft: next, overlayPick: nextPick(get().overlayPick, next), ...(next.active && !prev.active ? { imported: null } : {}) });
+    set({ draft: next, allyRoles: nextAllyRoles(get().allyRoles, prev.active, next), overlayPick: nextPick(get().overlayPick, next), ...(next.active && !prev.active ? { imported: null } : {}) });
     if (needsPickResume(get().overlayPick, next)) { if (isTauri && !resumeTried) { resumeTried = true; void resumePick(); } }
     else if (next.gameflow !== "GameStart" && next.gameflow !== "InProgress" && next.gameflow !== "Reconnect") resumeTried = false;
     if (!imp) return;

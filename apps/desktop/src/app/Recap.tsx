@@ -3,7 +3,7 @@ import { LoadoutIcons } from "../components/LoadoutIcons";
 import { motion } from "framer-motion";
 import { Link, useParams } from "react-router-dom";
 import type { PostGameRecap, RecapMetric } from "@apex/schema";
-import { ChampIcon } from "../components/ChampIcon";
+import { ChampLink, ChampIconLink } from "../components/ChampLink";
 import { LowChip, pct } from "../components/StatRows";
 import { ProgressRing, Skeleton, spring } from "../components/ui";
 import { RiotIdPrompt } from "../components/RiotIdPrompt";
@@ -36,10 +36,10 @@ export function RecapView({ r, id, inDialog = false }: { r: PostGameRecap; id: s
   const grades = gradesOf(r), top = grades[0];
   return (<>
       <div className={`glass rounded-lg p-5 flex items-center gap-5 border-l-4 ${r.win ? "border-l-good" : "border-l-bad"}`}>
-        <ChampIcon id={r.champion} name={r.championName} size={64} />
+        <ChampIconLink id={r.champion} name={r.championName} size={64} />
         <div className="flex-1 min-w-0">
           <div className={`font-display text-2xl font-semibold ${r.win ? "text-good" : "text-bad"}`}>{r.win ? "Victory" : "Defeat"}</div>
-          <div className="text-sm">{r.championName}{r.role && <> · <span className="inline-flex items-center gap-1 align-middle"><RoleIcon role={r.role} size={14} decorative />{r.role}</span></>} · <span className="tabular-nums" aria-label="Score">{r.kills}/{r.deaths}/{r.assists}</span></div>
+          <div className="text-sm"><ChampLink id={r.champion} name={r.championName} />{r.role && <> · <span className="inline-flex items-center gap-1 align-middle"><RoleIcon role={r.role} size={14} decorative />{r.role}</span></>} · <span className="tabular-nums" aria-label="Score">{r.kills}/{r.deaths}/{r.assists}</span></div>
           <div className="text-xs text-muted">{r.queue} · {Math.round(r.durationSec / 60)} min · {new Date(r.playedAt).toLocaleString()}</div>
           <div className="mt-2"><LoadoutIcons loadout={r.loadout} size={26} /></div>
         </div>

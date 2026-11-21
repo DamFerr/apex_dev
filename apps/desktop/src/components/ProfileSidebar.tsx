@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { QUEUE_FILTERS, type QueueFilter, type Role } from "@apex/schema";
-import { ChampIcon } from "./ChampIcon";
+import { ChampLink, ChampIconLink } from "./ChampLink";
 import { ROLE_LABEL, RoleIcon } from "./RoleIcon";
 import { SkillRadarChart } from "./SkillRadar";
 import { WinRateCell, LowChip, rate } from "./StatRows";
@@ -90,8 +90,8 @@ function PoolChips({ id }: { id: string }) {
         <ul className="flex flex-wrap gap-1.5">
           {p.dusty.map((d) => (
             <li key={d.champion} className="flex items-center gap-1.5 rounded-full bg-white/5 pl-0.5 pr-2 py-0.5 text-xs" title={`${d.points.toLocaleString("en-US")} mastery points`}>
-              <ChampIcon id={d.champion} name={champName(d.champion)} size={20} />
-              <span>{champName(d.champion)}</span><span className="text-muted tabular-nums">{kPoints(d.points)}</span>
+              <ChampIconLink id={d.champion} name={champName(d.champion)} size={20} />
+              <ChampLink id={d.champion} name={champName(d.champion)} /><span className="text-muted tabular-nums">{kPoints(d.points)}</span>
             </li>))}
         </ul>
       </div>}
@@ -122,9 +122,9 @@ export function ProfileSidebar({ id, queue, stacked = false }: { id: string; que
             {champs.map((c) => {
               const name = champName(c.champion), kda = kdaOf(c.kills, c.deaths, c.assists), cs = csPerMin(c.cs, c.seconds);
               return (<li key={c.champion} className="flex items-center gap-3 min-h-12">
-                <ChampIcon id={c.champion} name={name} size={36} />
+                <ChampIconLink id={c.champion} name={name} size={36} />
                 <div className="min-w-0 flex-1 leading-tight">
-                  <div className="text-sm font-medium truncate">{name}</div>
+                  <div className="text-sm font-medium truncate"><ChampLink id={c.champion} name={name} /></div>
                   <div className="text-xs text-muted tabular-nums" title={`${(c.kills / c.games).toFixed(1)} / ${(c.deaths / c.games).toFixed(1)} / ${(c.assists / c.games).toFixed(1)} per game, ${c.games} games`}>
                     {kda === null ? "Perfect" : kda.toFixed(1)} KDA · {cs.toFixed(1)} CS/min</div>
                 </div>

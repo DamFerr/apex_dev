@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { timeAgo } from "@apex/stats-core";
 import type { MatchFilter, MatchSummary, QueueFilter, Role } from "@apex/schema";
 import { QUEUE_FILTERS } from "@apex/schema";
-import { ChampIcon } from "./ChampIcon";
+import { ChampIconLink } from "./ChampLink";
 import { LoadoutIcons } from "./LoadoutIcons";
 import { ROLE_LABEL, RoleIcon } from "./RoleIcon";
 import { Chip } from "./ui";
@@ -13,13 +13,18 @@ import { useChampName } from "../lib/ddragon";
  * role, loadout icons (spells, keystone, items), queue and length. The coloured strip on the left is the result (and the word Win/Loss is kept
  * next to it, so colour is never the only signal). `trailing` is the expand arrow on Profile.
  */
+export function MatchRowIcon({ m }: { m: MatchSummary }) {
+  const name = useChampName()(m.champion);
+  return (<span className="relative shrink-0" title={`${name}${m.level ? `, level ${m.level}` : ""}`}>
+    <ChampIconLink id={m.champion} name={name} size={40} alone />
+    {m.level ? <span aria-hidden className="pointer-events-none absolute -right-1 -bottom-1 rounded bg-base border border-line/30 text-[10px] leading-4 px-1 tabular-nums">{m.level}</span> : null}
+  </span>);
+}
+
+/** The row without its champion icon (that sits outside the expand button, because a link cannot live inside a button). */
 export function MatchRowBody({ m, trailing }: { m: MatchSummary; trailing?: ReactNode }) {
   const champName = useChampName(), name = champName(m.champion), kda = m.deaths === 0 ? "Perfect" : ((m.kills + m.assists) / m.deaths).toFixed(2);
   return (<div className="flex items-center gap-4 w-full">
-    <span className="relative shrink-0" title={`${name}${m.level ? `, level ${m.level}` : ""}`}>
-      <ChampIcon id={m.champion} name={name} size={40} />
-      {m.level ? <span aria-hidden className="absolute -right-1 -bottom-1 rounded bg-base border border-line/30 text-[10px] leading-4 px-1 tabular-nums">{m.level}</span> : null}
-    </span>
     <span className="w-32 min-w-0 leading-tight">
       <span className="block font-medium truncate">{name}</span>
       <span className="block text-xs text-muted"><span className={`font-medium ${m.win ? "text-good" : "text-bad"}`}>{m.win ? "Win" : "Loss"}</span> · <time dateTime={m.playedAt} title={new Date(m.playedAt).toLocaleString()}>{timeAgo(m.playedAt)}</time></span>

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { RoleIcon } from "../components/RoleIcon";
 import type { BanSuggestion, Evaluation, Factor, Recommendation, TeamComp, TeamScaling } from "@apex/draft-engine";
-import { ChampIcon } from "../components/ChampIcon";
+import { ChampLink, ChampIconLink } from "../components/ChampLink";
 import { LowBadge } from "../components/StatRows";
 import { AnimatedNumber, spring } from "../components/ui";
 import { champId, champName } from "../lib/lcu";
@@ -57,8 +57,8 @@ export function Recommendations({ recs, role, source, onHover, onLock }: { recs:
             <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center gap-5 min-h-14 py-1.5 px-2">
               <span className="w-5 text-sm text-muted">{i + 1}</span>
-              {id && <ChampIcon id={id} name={champName(r.champion)} size={44} />}
-              <span className="w-40 shrink-0 text-[1rem] font-medium truncate">{champName(r.champion)}</span>
+              {id && <ChampIconLink id={id} name={champName(r.champion)} size={44} />}
+              <span className="w-40 shrink-0 text-[1rem] font-medium truncate">{id ? <ChampLink id={id} name={champName(r.champion)} /> : champName(r.champion)}</span>
               <span className="tabular-nums font-display text-xl w-20 shrink-0">{(r.winProb * 100).toFixed(1)}%</span>
               {r.games !== undefined && <span className="tabular-nums text-xs text-muted w-28 shrink-0 whitespace-nowrap" title={`Collected games of ${champName(r.champion)} in ${role} behind this suggestion`}>{r.games.toLocaleString()} games<LowBadge games={r.games} /></span>}
               <span className={`tabular-nums text-sm w-16 shrink-0 ${r.deltaPP >= 0 ? "text-good" : "text-bad"}`}>{sign(r.deltaPP)}</span>
@@ -81,8 +81,8 @@ export function BanSuggestions({ bans, role, source, pool, onHover, onBan }: { b
         {bans.map((b, i) => (
           <motion.li key={b.champion} layout transition={spring} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-5 min-h-14 px-2">
             <span className="w-5 text-sm text-muted">{i + 1}</span>
-            {champId(b.champion) && <ChampIcon id={champId(b.champion)!} name={champName(b.champion)} size={44} />}
-            <span className="w-40 shrink-0 text-[1rem] font-medium truncate">{champName(b.champion)}</span>
+            {champId(b.champion) && <ChampIconLink id={champId(b.champion)!} name={champName(b.champion)} size={44} />}
+            <span className="w-40 shrink-0 text-[1rem] font-medium truncate">{champId(b.champion) ? <ChampLink id={champId(b.champion)!} name={champName(b.champion)} /> : champName(b.champion)}</span>
             <span className="text-sm text-muted flex-1 min-w-0">{b.against ? `Beats your ${champName(b.against)}` : "Strong in general"}</span>
             {(onHover || onBan) && <span className="ml-auto flex items-center gap-2">{onHover && <ActButton label="Hover" hint={`Show ${champName(b.champion)} in your ban slot in the League client`} onAct={() => onHover(b.champion)} />}{onBan && <ActButton label="Ban" confirm hint={`Ban ${champName(b.champion)} in the League client`} onAct={() => onBan(b.champion)} />}</span>}
           </motion.li>))}

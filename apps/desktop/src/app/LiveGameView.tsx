@@ -4,34 +4,39 @@ import { Ban, RefreshCw } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { LiveGame as Game, LivePlayer, Role } from "@apex/schema";
-import { ChampIcon } from "../components/ChampIcon";
+import { ChampLink, ChampIconLink } from "../components/ChampLink";
 import { GameIcon } from "../components/GameIcon";
 import { ROLE_LABEL, RoleIcon } from "../components/RoleIcon";
 import { LowBadge, pct, rate, wrClass } from "../components/StatRows";
 import { Button, Skeleton, spring } from "../components/ui";
 import { useLiveGame, useLiveRoleHistory } from "../lib/api";
-import { assignRoles, sortByRole } from "../lib/liveRoles";
+import { champId, useDraft } from "../lib/lcu";
+import { assignRoles, roleFit, sortByRole, type RoleFit } from "../lib/liveRoles";
+import { exactTeamRoles } from "../lib/teamRoles";
 import { tierName } from "../lib/platforms";
 import { useDraftData } from "./DraftContext";
 
 const rankText = (r: LivePlayer["rank"]) => (!r ? "Unranked" : ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(r.tier) ? `${tierName(r.tier)} ${r.lp} LP` : `${tierName(r.tier)} ${r.division}`);
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-function PlayerCard({ p, role }: { p: LivePlayer; role: Role | null }) {
+function PlayerCard({ p, role, fit, assigned }: { p: LivePlayer; role: Role | null; fit: RoleFit; assigned: boolean }) {
   const season = p.rank ? rate(p.rank.wins, p.rank.wins + p.rank.losses) : null, champ = p.champGames > 0 ? rate(p.champWins, p.champGames) : null;
   const name = p.riotId.split("#")[0];
   return (
     <motion.li variants={{ h: { opacity: 0, y: 8 }, s: { opacity: 1, y: 0 } }} whileHover={{ y: -2 }} transition={spring}
       className={`glass rounded-lg p-3 flex items-center gap-3 ${p.isYou ? "ring-1 ring-gold/60" : ""}`} aria-label={`${p.riotId} playing ${p.championName}`}>
-      <ChampIcon id={p.champion} name={p.championName} size={44} />
-      {role && <span className="shrink-0" title={`${ROLE_LABEL[role]} (estimated: the spectator data has no role field, Apex fits it from Smite and the champion's usual roles)`}><RoleIcon role={role} size={22} /></span>}
+      <ChampIconLink id={p.champion} name={p.championName} size={44} />
+      {role && <span className="shrink-0 flex flex-col items-center gap-0.5 w-9" title={`${ROLE_LABEL[role]} ${assigned ? "(assigned in champ select)" : "(estimated: the spectator data has no role field, Apex fits it from Smite, the champion's usual roles and the player's recent games)"}${fit === "main" ? ". Their most played role in recent games." : fit === "off" ? ". Not their most played role in recent games." : ""}`}>
+        <RoleIcon role={role} size={22} />
+        {fit && <span className={`text-[10px] font-semibold leading-none tracking-wide ${fit === "main" ? "text-good" : "text-gold"}`}>{fit === "main" ? "MAIN" : "OFF"}</span>}
+      </span>}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-sm">
           {p.riotId.includes("#") ? <Link to={`/profile/${encodeURIComponent(p.riotId)}`} className="focus-ring rounded truncate font-medium hover:underline">{name}</Link> : <span className="truncate text-muted">{p.riotId}</span>}
           {p.isYou && <span className="sr-only">you</span>}
           {p.hotStreak && <span className="rounded-full bg-good/15 text-good text-[10px] font-semibold tracking-wide px-2 py-0.5" title="Riot marks this player as on a win streak">HOT STREAK</span>}
         </div>
-        <div className="text-xs text-muted truncate">{p.championName}</div>
+        <div className="text-xs text-muted truncate"><ChampLink id={p.champion} name={p.championName} /></div>
         {/* The player's own slot order (D, F), exactly as the spectator data reports it: not rearranged to put Flash first. */}
         {(p.spells.length > 0 || p.keystone !== null) && <div className="flex items-center gap-0.5 mt-1">
           {p.spells.length > 0 && <div className="flex gap-0.5" role="group" aria-label="Summoner spells">{p.spells.map((id, i) => <GameIcon key={i} kind="spell" id={id} size={20} />)}</div>}
@@ -39,7 +44,7 @@ function PlayerCard({ p, role }: { p: LivePlayer; role: Role | null }) {
           {p.keystone !== null && <div className="flex items-center gap-0.5 ml-1.5" role="group" aria-label="Runes"><GameIcon kind="rune" id={p.keystone} size={20} />{p.secondaryStyle !== null && <GameIcon kind="rune" id={p.secondaryStyle} size={16} className="opacity-70" />}</div>}
         </div>}
       </div>
-      <div className="flex items-center justify-end gap-2 text-right text-xs shrink-0 w-44">
+      <div className="flex items-center justify-end gap-2 text-right text-xs shrink-0 w-48 whitespace-nowrap">
         {p.rank && <TierIcon tier={p.rank.tier} division={p.rank.division} size={28} />}<div>
         <div className="font-medium text-sm">{rankText(p.rank)}</div>
         <div className="text-muted tabular-nums" title={season ? `Raw ${pct(season.raw)} over ${p.rank!.wins + p.rank!.losses} ranked games. Adjusted for sample size.` : undefined}>
@@ -52,15 +57,15 @@ function PlayerCard({ p, role }: { p: LivePlayer; role: Role | null }) {
     </motion.li>);
 }
 
-function Team({ game, side, roles }: { game: Game; side: "blue" | "red"; roles: Map<LivePlayer, Role | null> }) {
+function Team({ game, side, roles, fits, assigned }: { game: Game; side: "blue" | "red"; roles: Map<LivePlayer, Role | null>; fits: Map<LivePlayer, RoleFit>; assigned: Set<LivePlayer> }) {
   const players = sortByRole(game.players.filter((p) => p.team === side), (p) => roles.get(p) ?? null), bans = game.bans.filter((b) => b.team === side);
   return (
     <section aria-label={`${side === "blue" ? "Blue" : "Red"} team`}>
       <h2 className={`font-display text-lg font-semibold mb-2 ${side === "blue" ? "text-accent" : "text-bad"}`}>{side === "blue" ? "Blue team" : "Red team"}</h2>
-      <motion.ul initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }} className="grid gap-2">{players.map((p, i) => <PlayerCard key={`${p.riotId}-${i}`} p={p} role={roles.get(p) ?? null} />)}</motion.ul>
+      <motion.ul initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.04 } } }} className="grid gap-2">{players.map((p, i) => <PlayerCard key={`${p.riotId}-${i}`} p={p} role={roles.get(p) ?? null} fit={fits.get(p) ?? null} assigned={assigned.has(p)} />)}</motion.ul>
       {bans.length > 0 && <div className="flex items-center gap-1.5 mt-3" role="group" aria-label={`${side === "blue" ? "Blue" : "Red"} team bans`}>
         <Ban size={14} className="text-muted mr-0.5" aria-hidden />
-        {bans.map((b, i) => <span key={`${b.champion}-${i}`} title={`Banned: ${b.championName}`} className="opacity-80"><ChampIcon id={b.champion} name={b.championName} size={28} /></span>)}
+        {bans.map((b, i) => <span key={`${b.champion}-${i}`} title={`Banned: ${b.championName}`} className="opacity-80"><ChampIconLink id={b.champion} name={b.championName} size={28} alone /></span>)}
       </div>}
     </section>);
 }
@@ -76,17 +81,26 @@ export function LiveGameView({ id, watch = false, refresh = false }: { id: strin
   // Estimated roles per team, only on Summoner's Rift (CLASSIC). Needs the collected games for the champions' usual roles; without them only Smite shows the jungler.
   // The players' own role history arrives later (slow); until then (or if it fails) the estimate uses champions and spells only.
   const rh = useLiveRoleHistory(id, !!g?.inGame && g.mode === "CLASSIC");
-  const roles = useMemo(() => {
+  // Your own team's real roles, remembered from champ select, replace the estimate when all five are known (you queued through the client, then the game started).
+  const allyRoles = useDraft((s) => s.allyRoles);
+  const { roles, assigned } = useMemo(() => {
     const hist = new Map((rh.data?.players ?? []).map((x) => [x.riotId, x]));
-    const out = new Map<LivePlayer, Role | null>();
-    if (!g?.inGame || g.mode !== "CLASSIC") return out;
+    const out = new Map<LivePlayer, Role | null>(), exactSet = new Set<LivePlayer>();
+    if (!g?.inGame || g.mode !== "CLASSIC") return { roles: out, assigned: exactSet };
     const key = new Map((champs ?? []).map((c) => [c.id, c.key]));
     for (const side of ["blue", "red"] as const) {
       const team = g.players.filter((p) => p.team === side);
-      assignRoles(team.map((p) => ({ roles: data && key.has(p.champion) ? data.roles(key.get(p.champion)!) : [], smite: p.jungle, spells: p.spells, history: hist.get(p.riotId) }))).forEach((r, i) => out.set(team[i], r));
+      const exact = team.some((p) => p.isYou) ? exactTeamRoles(team, allyRoles, champId) : null;
+      (exact ?? assignRoles(team.map((p) => ({ roles: data && key.has(p.champion) ? data.roles(key.get(p.champion)!) : [], smite: p.jungle, spells: p.spells, history: hist.get(p.riotId) })))).forEach((r, i) => out.set(team[i], r));
+      if (exact) team.forEach((p) => exactSet.add(p));
     }
-    return out;
-  }, [g, champs, data, rh.data]);
+    return { roles: out, assigned: exactSet };
+  }, [g, champs, data, rh.data, allyRoles]);
+  // MAIN / OFF under the role icon: is the estimated role the one this player usually plays? Only with enough role history.
+  const fits = useMemo(() => {
+    const hist = new Map((rh.data?.players ?? []).map((x) => [x.riotId, x]));
+    return new Map([...roles].map(([p, r]) => [p, r ? roleFit(r, hist.get(p.riotId)) : null] as const));
+  }, [roles, rh.data]);
   useEffect(() => {
     if (!watch || !id || g?.inGame) return;
     const t = setInterval(() => void refetch(), 20_000);
@@ -100,7 +114,7 @@ export function LiveGameView({ id, watch = false, refresh = false }: { id: strin
       <div className="text-muted">{watch ? "Your game is starting. Riot's spectator data appears a minute or two after the start, and this page checks again by itself." : "Spectator data appears a minute or two after a game starts. Press Refresh, or scout another Riot ID."}</div></div>}
     {g?.inGame && <>
       <div className="flex items-center gap-3 text-sm text-muted mb-4"><span className="rounded-full bg-good/15 text-good text-xs font-semibold tracking-wide px-2 py-0.5">LIVE</span><span>{g.queue}</span><span aria-label="Game time" className="tabular-nums">{mmss(g.lengthSec)} in</span><span>updates every 30 s</span>{g.mode === "CLASSIC" && <span title="Roles are estimated from spells, champions and each player's last games (match history), which loads after the game">roles: {rh.isError ? "history failed" : rh.isLoading ? "checking history…" : `history for ${(rh.data?.players ?? []).filter((x) => x.games >= 2).length} players`}</span>}</div>
-      <div className="grid grid-cols-2 gap-6"><Team game={g} side="blue" roles={roles} /><Team game={g} side="red" roles={roles} /></div>
+      <div className="grid grid-cols-2 gap-6"><Team game={g} side="blue" roles={roles} fits={fits} assigned={assigned} /><Team game={g} side="red" roles={roles} fits={fits} assigned={assigned} /></div>
     </>}
   </>);
 }
