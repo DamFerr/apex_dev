@@ -30,3 +30,17 @@ describe("getCutoffs", () => {
   it("asks the ladder cut-offs route of the platform", async () =>
     expect(await urlOf((a) => a.getCutoffs("euw1"))).toBe("http://127.0.0.1:8787/v1/ladder/euw1/cutoffs?"));
 });
+
+describe("getLadder", () => {
+  it("sends no params for the defaults", async () =>
+    expect(await urlOf((a) => a.getLadder("euw1"))).toBe("http://127.0.0.1:8787/v1/ladder/euw1?"));
+  it("sends queue, tiers, offset and limit when given (offset 0 is left out)", async () => {
+    expect(await urlOf((a) => a.getLadder("na1", { queue: "flex", tiers: ["CHALLENGER", "MASTER"], offset: 50, limit: 25 }))).toBe("http://127.0.0.1:8787/v1/ladder/na1?queue=flex&tier=CHALLENGER%2CMASTER&offset=50&limit=25");
+    expect(await urlOf((a) => a.getLadder("kr", { queue: "solo", tiers: [], offset: 0 }))).toBe("http://127.0.0.1:8787/v1/ladder/kr?queue=solo");
+  });
+});
+
+describe("getLadderPlayer", () => {
+  it("asks the row route with the puuid encoded", async () =>
+    expect(await urlOf((a) => a.getLadderPlayer("euw1", "ab-_c"))).toBe("http://127.0.0.1:8787/v1/ladder/euw1/players/ab-_c?"));
+});

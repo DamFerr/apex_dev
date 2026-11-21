@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { ApexApi, MatchFilter, QueueFilter, Role } from "@apex/schema";
+import type { ApexApi, LadderQueue, LadderTier, MatchFilter, QueueFilter, Role } from "@apex/schema";
 import { createHttpApi } from "./http";
 import { useUi } from "../store";
 import { normalizeSearch } from "../searchMatch";
@@ -23,6 +23,12 @@ export const useRadar = (id: string, queue: QueueFilter = "all", role?: Role) =>
 /** Today's Master+ cut-offs for the platform; only asked for when `enabled` (a Master+ player), cached for 30 minutes (the backend caches an hour). */
 export const useCutoffs = (platform: string | undefined, enabled = true) =>
   useQuery({ queryKey: [useScope(), "cutoffs", platform], queryFn: () => api.getCutoffs(platform!), enabled: !!platform && enabled, staleTime: 30 * 60_000 });
+/** One page of the leaderboard (the backend caches the lists for 10 minutes). The old page stays on screen while the next one loads, so changing a filter does not flash. */
+export const useLadder = (platform: string, queue: LadderQueue, tiers: readonly LadderTier[], offset = 0, limit = 50) =>
+  useQuery({ queryKey: [useScope(), "ladder", platform, queue, tiers.join(","), offset, limit], queryFn: () => api.getLadder(platform, { queue, tiers, offset, limit }), staleTime: 5 * 60_000, placeholderData: keepPreviousData });
+/** Name and top 3 champions of one leaderboard row; `enabled` lets the page ask only for rows that are on screen. No retry: the backend already answers a failed half as empty, and every retry would cost Riot calls. */
+export const useLadderPlayer = (platform: string, puuid: string, enabled = true) =>
+  useQuery({ queryKey: [useScope(), "ladderPlayer", platform, puuid], queryFn: () => api.getLadderPlayer(platform, puuid), enabled: enabled && !!puuid, retry: false, staleTime: 6 * 60 * 60_000 });
 export const useChampions = (role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "champions", role ?? "all", f], queryFn: () => api.getChampions(role, f) }); };
 export const useChampion = (id: string) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "champion", id, f], queryFn: () => api.getChampion(id, f) }); };
 export const useChampionBuild = (id: string, role?: Role) => { const f = useFilter(); return useQuery({ queryKey: [useScope(), "build", id, role ?? "any", f], queryFn: () => api.getChampionBuild(id, role, f) }); };

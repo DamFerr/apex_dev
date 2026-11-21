@@ -215,6 +215,10 @@ export interface ApexApi {
   getRadar(riotId: string, queue?: QueueFilter, role?: Role): Promise<PlayerRadar>;
   /** Today's Master+ cut-offs on a platform (e.g. "euw1", as `Summoner.platform`), for the Master+ LP ring. */
   getCutoffs(platform: string): Promise<ApexCutoffs>;
+  /** Leaderboard tab: one page of the Master+ ladder of a platform (queue default solo, tiers default all three, limit default 50, at most 100). */
+  getLadder(platform: string, opts?: { queue?: LadderQueue; tiers?: readonly LadderTier[]; offset?: number; limit?: number }): Promise<LadderPage>;
+  /** Name and top 3 champions of one leaderboard row. Two Riot calls on the backend (cached), so ask per visible row. */
+  getLadderPlayer(platform: string, puuid: string): Promise<LadderPlayer>;
   /** `queue`: only games of that queue group (default all). */
   /** `filter`: only games on that champion (Data Dragon id, as in `MatchSummary.champion`) and/or in that role. */
   getMatchPage(riotId: string, cursor: number, limit: number, queue?: QueueFilter, filter?: MatchFilter): Promise<MatchPage>;
