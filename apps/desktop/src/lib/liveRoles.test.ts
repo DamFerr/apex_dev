@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignRoles, roleFit, sortByRole, type RoleCandidate } from "./liveRoles";
+import { assignRoles, sortByRole, type RoleCandidate } from "./liveRoles";
 
 const c = (roles: RoleCandidate["roles"], smite = false): RoleCandidate => ({ roles, smite });
 
@@ -59,23 +59,5 @@ describe("sortByRole", () => {
   it("does not change the input array", () => {
     const team = [{ r: "MID" }, { r: "TOP" }] as const; sortByRole(team, (p) => p.r);
     expect(team.map((p) => p.r)).toEqual(["MID", "TOP"]);
-  });
-});
-
-describe("roleFit", () => {
-  const hist = { games: 10, roles: { MID: 6, TOP: 3 } as Partial<Record<"MID" | "TOP", number>> };
-  it("is main for the most played role and off for any other", () => {
-    expect(roleFit("MID", hist)).toBe("main");
-    expect(roleFit("TOP", hist)).toBe("off");
-    expect(roleFit("SUPPORT", hist)).toBe("off");
-  });
-  it("counts a tie for the most played role as main", () => {
-    expect(roleFit("MID", { games: 6, roles: { MID: 3, TOP: 3 } })).toBe("main");
-    expect(roleFit("TOP", { games: 6, roles: { MID: 3, TOP: 3 } })).toBe("main");
-  });
-  it("says nothing without enough history or without any recorded role", () => {
-    expect(roleFit("MID", undefined)).toBeNull();
-    expect(roleFit("MID", { games: 1, roles: { MID: 1 } })).toBeNull();
-    expect(roleFit("MID", { games: 8, roles: {} })).toBeNull();
   });
 });

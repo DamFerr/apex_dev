@@ -75,14 +75,3 @@ export function sortByRole<T>(players: readonly T[], roleOf: (p: T) => Role | nu
   const rank = (p: T) => { const r = roleOf(p); return r ? ALL.indexOf(r) : ALL.length; };
   return players.map((p, i) => ({ p, i, k: rank(p) })).sort((a, b) => a.k - b.k || a.i - b.i).map((x) => x.p);
 }
-
-/** How well an estimated role fits what the player really plays: "main" = their most played role in the recent games, "off" = any other role, null = not enough history to say. */
-export type RoleFit = "main" | "off" | null;
-
-/** Ties for the most played role count as main. Needs HISTORY_MIN games with a recorded role, like the role fit itself. */
-export function roleFit(role: Role, history?: RoleCandidate["history"]): RoleFit {
-  if (!history || history.games < HISTORY_MIN) return null;
-  const counts = ALL.map((r) => history.roles[r] ?? 0), top = Math.max(...counts);
-  if (top === 0) return null; // the games had no role (ARAM and so on)
-  return (history.roles[role] ?? 0) === top ? "main" : "off";
-}
