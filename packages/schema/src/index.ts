@@ -18,6 +18,13 @@ export interface RankHistory { snapshots: RankSnapshot[] }
  * a cut-off and still show the lower tier until then. `at` = when Apex read them (cached for an hour).
  */
 export interface ApexCutoffs { platform: string; grandmaster: number | null; challenger: number | null; at: string }
+/** Ladder tab (L.1): Master+ players of one platform and queue, ranked by LP. `rank` is the place on the whole Master+ ladder, not inside the tier filter. */
+export type LadderTier = "CHALLENGER" | "GRANDMASTER" | "MASTER";
+export type LadderQueue = "solo" | "flex";
+export interface LadderRow { rank: number; puuid: string; tier: LadderTier; lp: number; wins: number; losses: number; hotStreak: boolean }
+export interface LadderPage { platform: string; queue: LadderQueue; /** Rows that match the tier filter (all pages). */ total: number; offset: number; entries: LadderRow[]; at: string }
+/** What a ladder row needs on top of the list: the Riot ID (null if Riot did not answer) and the three champions with the highest mastery points (all time, not this season). */
+export interface LadderPlayer { puuid: string; riotId: string | null; champions: MasteryEntry[] }
 /** Optional champion / role narrowing of a match list (the backend checks both on each loaded match). */
 export interface MatchFilter { champion?: string; role?: Role }
 export interface MatchSummary {

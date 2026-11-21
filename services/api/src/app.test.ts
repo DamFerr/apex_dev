@@ -120,6 +120,23 @@ describe("API", () => {
     const d = (await get("/v1/matches/EUW1_3?riotId=Test%23EUW")).json();
     expect(d.participants).toHaveLength(10); expect(d.participants.filter((p: { isYou: boolean }) => p.isYou)).toHaveLength(1);
   });
+  it("serves the Master+ ladder by LP, filters by tier, pages, and caches the lists", async () => {
+    const all = (await get("/v1/ladder/euw1")).json();
+    expect(all).toMatchObject({ platform: "euw1", queue: "solo", total: 9, offset: 0 });
+    expect(all.entries.map((r: { rank: number; lp: number; tier: string }) => [r.rank, r.lp, r.tier]).slice(0, 4)).toEqual([[1, 1200, "CHALLENGER"], [2, 900, "CHALLENGER"], [3, 700, "CHALLENGER"], [4, 650, "GRANDMASTER"]]);
+    expect(all.entries[0]).toMatchObject({ puuid: "p-C2", wins: 12, losses: 5, hotStreak: false });
+    const mg = (await get("/v1/ladder/euw1?tier=MASTER,GRANDMASTER&offset=2&limit=3")).json();
+    expect(mg.total).toBe(6); expect(mg.entries.map((r: { rank: number }) => r.rank)).toEqual([6, 7, 8]);
+    expect(riot.calls.apexLeague).toBe(3); // one fetch of the three lists, the other two requests came from the cache
+    expect((await get("/v1/ladder/euw1?queue=flex")).json().queue).toBe("flex"); expect(riot.calls["apexLeague:flex"]).toBe(3);
+    expect((await get("/v1/ladder/mars")).statusCode).toBe(400);
+  });
+  it("returns the name and top 3 champions of a ladder row, and survives a failed name", async () => {
+    expect((await get("/v1/ladder/euw1/players/p-C0")).json()).toEqual({ puuid: "p-C0", riotId: "Name-p-C0#EUW", champions: [{ champion: "Ahri", name: "Ahri", level: 10, points: 250000 }] });
+    expect((await get("/v1/ladder/euw1/players/p-C1")).json()).toMatchObject({ riotId: null, champions: [{ champion: "Ahri" }] });
+    await get("/v1/ladder/euw1/players/p-C0"); expect(riot.calls.accountByPuuid).toBe(2); // p-C0 came from the cache the second time
+    expect((await get("/v1/ladder/euw1/players/bad%20id")).statusCode).toBe(400);
+  });
   it("returns mastery with champion names", async () => {
     expect((await get("/v1/players/Test%23EUW/mastery")).json()).toEqual([{ champion: "Ahri", name: "Ahri", level: 10, points: 250000 }]);
   });

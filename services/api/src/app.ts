@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import type { LiveRoleHistory, ChampionLengths, ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, ApexCutoffs, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
+import type { LadderPage, LadderPlayer, LadderQueue, LadderRow, MasteryEntry, LiveRoleHistory, ChampionLengths, ChampionPatches, PatchPoint, PatchTrends, PatchTrendRow, ChampionBuild, ChampionDetail, ChampionRelations, RelationLine, ChampionList, FilterOptions, LiveResult, PostGameRecap, ApexCutoffs, PoolEntry, ChampionSummary, MatchPage, RankHistory, Role, StatLine, Summoner } from "@apex/schema";
 import type { Cache } from "./db";
 import type { DD } from "./ddragon";
 import type { Collector } from "./collector";
@@ -10,6 +10,7 @@ import { pickReference, toPlayerRadar } from "./radar";
 import { HISTORY_GAMES, roleCounts } from "./liveRoleHistory";
 import { toLiveGame, toRecap, toMastery, toMatchDetail, toMatchSummary, toSummoner, perGame, roleOf, type PerGame } from "./mapping";
 import { apexCutoffs } from "./cutoffs";
+import { RIOT_QUEUE, buildLadder, pageLadder, parseTiers } from "./ladder";
 import { HttpError, PLATFORM_IDS, regionOf, type LeagueEntry, type RiotActiveGame, type RiotApi, type RiotMatch } from "./riot";
 import { TIERS } from "./collector";
 import { computeBuild, isFinished, itemWpas } from "./build";
@@ -360,6 +361,38 @@ export async function buildApp(deps: Deps) {
       const [master, grandmaster, challenger] = await Promise.all([riot.apexLeague(platform, "MASTER"), riot.apexLeague(platform, "GRANDMASTER"), riot.apexLeague(platform, "CHALLENGER")]);
       return apexCutoffs(platform, { master, grandmaster, challenger }, new Date(now()).toISOString());
     });
+  });
+  /**
+   * Ladder tab (L.1): the Master+ players of a platform and queue (`?queue=solo|flex`), ranked by LP, filtered by tier (`?tier=CHALLENGER,MASTER`), one page at a time
+   * (`?offset=`, `?limit=` 1 to 100, default 50). Three Riot calls per platform and queue, cached for 10 minutes. The rows have no names and champions yet:
+   * the client asks for those per visible row (next route), so a page never costs 100 Riot calls at once.
+   */
+  app.get<{ Params: { platform: string }; Querystring: { queue?: string; tier?: string; offset?: string; limit?: string } }>("/v1/ladder/:platform", async (req): Promise<LadderPage> => {
+    const platform = req.params.platform.toLowerCase();
+    if (!PLATFORM_IDS.includes(platform)) throw new HttpError(400, "Unknown platform");
+    const queue: LadderQueue = req.query.queue === "flex" ? "flex" : "solo";
+    const offset = Math.max(0, Math.floor(Number(req.query.offset)) || 0), limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit)) || 50));
+    const ladder = await cached<{ rows: LadderRow[]; at: string }>(`ladder:v1:${platform}:${queue}`, 10 * MIN, async () => {
+      const q = RIOT_QUEUE[queue], [master, grandmaster, challenger] = await Promise.all([riot.apexLeague(platform, "MASTER", q), riot.apexLeague(platform, "GRANDMASTER", q), riot.apexLeague(platform, "CHALLENGER", q)]);
+      if ([master, grandmaster, challenger].some((l) => l.entries.length > 0) && ![master, grandmaster, challenger].some((l) => l.entries.some((e) => e.puuid))) throw new HttpError(502, "Riot's ladder list has no player ids");
+      return { rows: buildLadder(platform, queue, { master, grandmaster, challenger }), at: new Date(now()).toISOString() };
+    });
+    return { platform, queue, offset, ...pageLadder(ladder.rows, parseTiers(req.query.tier), offset, limit), at: ladder.at };
+  });
+  /**
+   * Name and top 3 champions of one ladder row (L.1). Two Riot calls (account by puuid, cached 7 days; mastery, cached 6 hours and shared with the profile), so the
+   * client asks per visible row. A failed half comes back empty (null name / no champions) instead of failing the row. Champions are the highest mastery points
+   * (all time): Riot has no "most played this season" without reading every player's matches.
+   */
+  app.get<{ Params: { platform: string; puuid: string } }>("/v1/ladder/:platform/players/:puuid", async (req): Promise<LadderPlayer> => {
+    const platform = req.params.platform.toLowerCase(), { puuid } = req.params;
+    if (!PLATFORM_IDS.includes(platform)) throw new HttpError(400, "Unknown platform");
+    if (!/^[\w-]{1,100}$/.test(puuid)) throw new HttpError(400, "Bad player id");
+    const [riotId, champions] = await Promise.all([
+      cached<string>(`acctp:${puuid}`, 7 * DAY, async () => { const a = await riot.accountByPuuid(puuid, regionOf(platform)); return `${a.gameName}#${a.tagLine}`; }).catch(() => null),
+      cached(`mastery:${platform}:${puuid}`, 6 * 60 * MIN, () => riot.mastery(puuid, platform, 8)).then(async (l) => toMastery(l, (await dd()).champs).slice(0, 3)).catch(() => [] as MasteryEntry[]),
+    ]);
+    return { puuid, riotId, champions };
   });
   /** Your own recent champion pool (last 20 games, split by role) plus your top 30 mastery champions, for personalised draft suggestions. */
   app.get<{ Params: { riotId: string } }>("/v1/players/:riotId/pool", async (req): Promise<PoolEntry[]> => {
